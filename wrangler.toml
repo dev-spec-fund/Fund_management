@@ -1,0 +1,31 @@
+name = "fund-management-bot"
+main = "index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Free tier: no cron, no durable objects, no queues — pure request/response
+# with ctx.waitUntil() used to push work past the 50ms CPU-time cap.
+
+[observability]
+enabled = true
+
+# ----------------------------------------------------------------------------
+# D1 Database binding — run `wrangler d1 create fund-management-db` first,
+# then paste the returned database_id below.
+# ----------------------------------------------------------------------------
+[[d1_databases]]
+binding             = "DB"
+database_name       = "fund-management-db"
+database_id         = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir       = "migrations"
+
+# ----------------------------------------------------------------------------
+# Secrets (do NOT put real values here — set via `wrangler secret put <NAME>`)
+#   wrangler secret put BOT_TOKEN
+#   wrangler secret put ADMIN_ID
+#   wrangler secret put OCR_API_KEY
+#
+# BOT_TOKEN   -> Telegram bot token from @BotFather
+# ADMIN_ID    -> Telegram numeric chat id of the fund administrator
+# OCR_API_KEY -> Free API key from https://ocr.space/ocrapi
+# ----------------------------------------------------------------------------
