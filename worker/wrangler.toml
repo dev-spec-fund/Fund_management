@@ -22,4 +22,4 @@ binding = "AI"
 FUND_TIMEZONE = "Indian/Maldives"
 
 [triggers]
-crons = ["0 20 * * *"] # runs 20:00 UTC daily = 00:00 Maldives time (UTC+5)
+crons = ["0 19 * * *"] # runs 19:00 UTC daily = 00:00 Maldives time (UTC+5)
