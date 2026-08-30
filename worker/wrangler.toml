@@ -1,0 +1,24 @@
+name = "kys-fund-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Free tier: Workers (100k req/day), D1 (5GB), R2 (10GB), Workers AI (limited free quota)
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kys-fund-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[ai]
+binding = "AI"
+
+# Secrets (set via `wrangler secret put <NAME>`, do NOT put real values here):
+#   TELEGRAM_BOT_TOKEN   - from @BotFather
+#   TELEGRAM_WEBHOOK_SECRET - random string, used to verify webhook calls
+#   ADMIN_TELEGRAM_IDS   - comma-separated Telegram user IDs seeded as owner admin(s)
+
+[vars]
+FUND_TIMEZONE = "Indian/Maldives"
+
+[triggers]
+crons = ["0 20 * * *"] # runs 20:00 UTC daily = 00:00 Maldives time (UTC+5)
