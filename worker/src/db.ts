@@ -12,12 +12,12 @@ export async function generateMemberCode(env: Env): Promise<string> {
   return `M${String(next).padStart(4, "0")}`;
 }
 
-/** Generates the next human-readable transaction code for a given kind: 'C' (contribution), 'D' (donation), 'E' (expense). */
+/** Generates the next transaction reference: C0000001 (contribution), D0000001 (donation), E0000001 (expense). */
 export async function generateTxnId(env: Env, kind: "C" | "D" | "E"): Promise<string> {
   const table = kind === "C" ? "contributions" : kind === "D" ? "donations" : "expenses";
   const row = await env.DB.prepare(`SELECT COUNT(*) as n FROM ${table}`).first<{ n: number }>();
   const next = (row?.n ?? 0) + 1;
-  return `TXN-${kind}${String(next).padStart(6, "0")}`;
+  return `${kind}${String(next).padStart(7, "0")}`;
 }
 
 export async function getAdminByTelegramId(env: Env, telegramId: string): Promise<Admin | null> {
