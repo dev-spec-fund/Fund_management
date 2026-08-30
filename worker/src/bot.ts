@@ -2,7 +2,7 @@ import type { Env } from "./types";
 import { sendMessage, answerCallback, editMessageText, slipReference, ocrSlip, downloadTelegramFile } from "./telegram";
 import { currentMonth, getAdminByTelegramId, logAudit, ensureMemberLinked, generateTxnId } from "./db";
 
-const MINI_APP_URL = "https://kys-fund.pages.dev"; // replace with your deployed Mini App URL
+const MINI_APP_URL = "https://fund-management.pages.de"; // replace with your deployed Mini App URL
 
 /** Parses a caption like "250 BLAZ104172570689 2026-08 note here" */
 function parseCaption(caption: string): { amount: number | null; ref: string | null; month: string | null; note: string | null } {
