@@ -7,7 +7,7 @@ compatibility_date = "2024-11-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "kys-fund-db"
-database_id = "5c27d56b-f712-4e74-8d2d-7d88113faff8"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 
 [ai]
 binding = "AI"

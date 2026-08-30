@@ -31,32 +31,41 @@ kys-fund/
 
 ## 2. Deploy the Worker (backend + bot)
 
+You can do all of this from the **Cloudflare dashboard in a browser** — no
+terminal required.
+
+1. **Workers & Pages** → **Create** → **Import a repository** → connect
+   GitHub, pick this repo, set root directory to `worker`, deploy.
+2. **D1** → **Create database** → name it `kys-fund-db`. Copy its
+   **Database ID** into `worker/wrangler.toml` (`database_id = "..."`), then
+   redeploy the Worker so the binding takes effect.
+3. Open the new database → **Console** tab. `schema.sql` is written so each
+   statement can run on its own — copy and run them **one at a time** (the
+   dashboard console doesn't support multi-statement scripts). There's
+   nothing fancy in there — just `CREATE TABLE` and a few `INSERT OR IGNORE`
+   lines — so pasting them one by one only takes a couple of minutes.
+4. Back in your Worker → **Settings** → **Variables** → add secrets:
+   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` (any random string you make up).
+
+If you do have terminal access instead, the equivalent CLI flow is:
+
 ```bash
 cd worker
 npm install
 wrangler login
-
-# Create the D1 database and paste the resulting database_id into wrangler.toml
-wrangler d1 create kys-fund-db
-
-# Load the schema
-npm run db:init:remote
-
-# Set secrets (you'll be prompted to paste each value)
+wrangler d1 create kys-fund-db          # paste database_id into wrangler.toml
+wrangler d1 execute kys-fund-db --remote --file=./schema.sql
 wrangler secret put TELEGRAM_BOT_TOKEN
-wrangler secret put TELEGRAM_WEBHOOK_SECRET   # any random string you make up
-
-# Deploy
-npm run deploy
+wrangler secret put TELEGRAM_WEBHOOK_SECRET
+wrangler deploy
 ```
-
-Note the Worker URL printed at the end, e.g. `https://kys-fund-worker.<you>.workers.dev`.
 
 ### Seed yourself as the owner admin
 
-```bash
-wrangler d1 execute kys-fund-db --remote --command \
-  "INSERT INTO admins (telegram_id, name, role) VALUES ('<YOUR_TELEGRAM_ID>', '<YOUR_NAME>', 'owner');"
+In the D1 Console tab, run (with your own Telegram ID and name):
+
+```sql
+INSERT INTO admins (telegram_id, name, role) VALUES ('<YOUR_TELEGRAM_ID>', '<YOUR_NAME>', 'owner');
 ```
 
 ### Register the Telegram webhook
@@ -102,12 +111,12 @@ Now members can open the app directly from the bot's menu button, or via the
 ## 5. Add members
 
 Each person needs a row in the `members` table before they can submit
-payments. Add them via the Mini App (Members → Add member) once you're set
-up as the owner admin, or directly:
+payments. Add them via the Mini App (Members → Add member, once you're set
+up as the owner admin) — this is the easiest way, since it auto-generates
+their member code. If you need to add one directly in the D1 Console instead:
 
-```bash
-wrangler d1 execute kys-fund-db --remote --command \
-  "INSERT INTO members (name, phone, monthly_amount) VALUES ('Ahmed Shifau', '777-1234', 250);"
+```sql
+INSERT INTO members (member_code, name, phone, monthly_amount) VALUES ('M0001', 'Ahmed Shifau', '777-1234', 250);
 ```
 
 When that member sends their first slip photo (or types `/start`) to the

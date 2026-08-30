@@ -5,6 +5,21 @@ export function currentMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/** Generates the next human-readable member code, e.g. M0001, M0002. */
+export async function generateMemberCode(env: Env): Promise<string> {
+  const row = await env.DB.prepare("SELECT COUNT(*) as n FROM members").first<{ n: number }>();
+  const next = (row?.n ?? 0) + 1;
+  return `M${String(next).padStart(4, "0")}`;
+}
+
+/** Generates the next human-readable transaction code for a given kind: 'C' (contribution), 'D' (donation), 'E' (expense). */
+export async function generateTxnId(env: Env, kind: "C" | "D" | "E"): Promise<string> {
+  const table = kind === "C" ? "contributions" : kind === "D" ? "donations" : "expenses";
+  const row = await env.DB.prepare(`SELECT COUNT(*) as n FROM ${table}`).first<{ n: number }>();
+  const next = (row?.n ?? 0) + 1;
+  return `TXN-${kind}${String(next).padStart(6, "0")}`;
+}
+
 export async function getAdminByTelegramId(env: Env, telegramId: string): Promise<Admin | null> {
   const row = await env.DB.prepare("SELECT * FROM admins WHERE telegram_id = ?")
     .bind(telegramId)

@@ -1,8 +1,8 @@
 import type { Env } from "./types";
 import { sendMessage, answerCallback, editMessageText, slipReference, ocrSlip, downloadTelegramFile } from "./telegram";
-import { currentMonth, getAdminByTelegramId, logAudit, ensureMemberLinked } from "./db";
+import { currentMonth, getAdminByTelegramId, logAudit, ensureMemberLinked, generateTxnId } from "./db";
 
-const MINI_APP_URL = "https://fund-management.pages.dev"; // replace with your deployed Mini App URL
+const MINI_APP_URL = "https://kys-fund.pages.dev"; // replace with your deployed Mini App URL
 
 /** Parses a caption like "250 BLAZ104172570689 2026-08 note here" */
 function parseCaption(caption: string): { amount: number | null; ref: string | null; month: string | null; note: string | null } {
@@ -100,14 +100,13 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
     const ocr = file ? await ocrSlip(env, file.bytes) : { amount: null, ref: null, raw: "" };
     const receiptKey = slipReference(fileId);
 
+    const txnId = await generateTxnId(env, "E");
     await env.DB.prepare(
-      "INSERT INTO expenses (description, amount, receipt_file_id, logged_by) VALUES (?, ?, ?, ?)"
-    ).bind(description || "Expense", ocr.amount || 0, receiptKey, admin.id).run();
-    const lastId = (await env.DB.prepare("SELECT last_insert_rowid() as id").first<{ id: number }>())?.id;
-    const saved = await env.DB.prepare("SELECT txn_id FROM expenses WHERE id = ?").bind(lastId).first<{ txn_id: string }>();
+      "INSERT INTO expenses (txn_id, description, amount, receipt_file_id, logged_by) VALUES (?, ?, ?, ?, ?)"
+    ).bind(txnId, description || "Expense", ocr.amount || 0, receiptKey, admin.id).run();
 
-    await logAudit(env, admin.id, "log_expense", `${saved?.txn_id} — ${description} — MVR ${ocr.amount ?? "?"}`);
-    return sendMessage(env, chatId, `Expense logged (${saved?.txn_id}): ${description}${ocr.amount ? ` — MVR ${ocr.amount}` : " (amount unclear, edit in app)"}`);
+    await logAudit(env, admin.id, "log_expense", `${txnId} — ${description} — MVR ${ocr.amount ?? "?"}`);
+    return sendMessage(env, chatId, `Expense logged (${txnId}): ${description}${ocr.amount ? ` — MVR ${ocr.amount}` : " (amount unclear, edit in app)"}`);
   }
 
   // Otherwise: treat as a member contribution slip
@@ -144,17 +143,17 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
 
   const slipKey = slipReference(fileId);
 
+  const txnId = await generateTxnId(env, "C");
   const insertRes = await env.DB.prepare(
-    "INSERT INTO contributions (member_id, amount, month, ref_number, slip_file_id, ocr_raw) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(member.id, amount, month, ref, slipKey, ocr.raw).run();
+    "INSERT INTO contributions (txn_id, member_id, amount, month, ref_number, slip_file_id, ocr_raw) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).bind(txnId, member.id, amount, month, ref, slipKey, ocr.raw).run();
 
   const contributionId = insertRes.meta.last_row_id;
-  const saved = await env.DB.prepare("SELECT txn_id FROM contributions WHERE id = ?").bind(contributionId).first<{ txn_id: string }>();
 
-  await sendMessage(env, chatId, `Slip received (${saved?.txn_id}): MVR ${amount} for ${month}${ref ? ` (bank ref: ${ref})` : ""}. Waiting for admin approval.${dupWarning}`);
+  await sendMessage(env, chatId, `Slip received (${txnId}): MVR ${amount} for ${month}${ref ? ` (bank ref: ${ref})` : ""}. Waiting for admin approval.${dupWarning}`);
 
   await notifyAdmins(env,
-    `🧾 New slip from <b>${member.name}</b> (${member.member_code})\nTxn: ${saved?.txn_id}\nAmount: MVR ${amount}\nMonth: ${month}\nBank ref: ${ref || "not provided"}${dupWarning}`,
+    `🧾 New slip from <b>${member.name}</b> (${member.member_code})\nTxn: ${txnId}\nAmount: MVR ${amount}\nMonth: ${month}\nBank ref: ${ref || "not provided"}${dupWarning}`,
     {
       reply_markup: {
         inline_keyboard: [[

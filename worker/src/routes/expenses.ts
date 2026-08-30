@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../types";
 import { requireAdmin } from "../auth";
 import { logAudit } from "../db";
+import { generateTxnId } from "../db";
 
 export const expensesRoute = new Hono<{ Bindings: Env }>();
 
@@ -17,11 +18,12 @@ expensesRoute.get("/", requireAdmin, async (c) => {
 expensesRoute.post("/", requireAdmin, async (c) => {
   const admin = c.get("admin");
   const body = await c.req.json<{ description: string; category_id?: number; amount: number }>();
+  const txnId = await generateTxnId(c.env, "E");
   const res = await c.env.DB.prepare(
-    "INSERT INTO expenses (description, category_id, amount, logged_by) VALUES (?, ?, ?, ?)"
-  ).bind(body.description, body.category_id || null, body.amount, admin.id).run();
-  await logAudit(c.env, admin.id, "log_expense", `${body.description} — MVR ${body.amount}`);
-  return c.json({ id: res.meta.last_row_id }, 201);
+    "INSERT INTO expenses (txn_id, description, category_id, amount, logged_by) VALUES (?, ?, ?, ?, ?)"
+  ).bind(txnId, body.description, body.category_id || null, body.amount, admin.id).run();
+  await logAudit(c.env, admin.id, "log_expense", `${txnId} — ${body.description} — MVR ${body.amount}`);
+  return c.json({ id: res.meta.last_row_id, txn_id: txnId }, 201);
 });
 
 expensesRoute.patch("/:id", requireAdmin, async (c) => {

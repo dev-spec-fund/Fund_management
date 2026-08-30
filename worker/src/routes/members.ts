@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../types";
 import { requireAdmin } from "../auth";
 import { logAudit } from "../db";
+import { generateMemberCode } from "../db";
 
 export const membersRoute = new Hono<{ Bindings: Env }>();
 
@@ -23,11 +24,12 @@ membersRoute.get("/:id", requireAdmin, async (c) => {
 membersRoute.post("/", requireAdmin, async (c) => {
   const admin = c.get("admin");
   const body = await c.req.json<{ name: string; phone?: string; monthly_amount?: number }>();
+  const memberCode = await generateMemberCode(c.env);
   const res = await c.env.DB.prepare(
-    "INSERT INTO members (name, phone, monthly_amount) VALUES (?, ?, ?)"
-  ).bind(body.name, body.phone || null, body.monthly_amount || 250).run();
-  await logAudit(c.env, admin.id, "add_member", body.name);
-  return c.json({ id: res.meta.last_row_id }, 201);
+    "INSERT INTO members (member_code, name, phone, monthly_amount) VALUES (?, ?, ?, ?)"
+  ).bind(memberCode, body.name, body.phone || null, body.monthly_amount || 250).run();
+  await logAudit(c.env, admin.id, "add_member", `${memberCode} — ${body.name}`);
+  return c.json({ id: res.meta.last_row_id, member_code: memberCode }, 201);
 });
 
 membersRoute.patch("/:id", requireAdmin, async (c) => {
