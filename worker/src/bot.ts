@@ -1,8 +1,18 @@
 import type { Env } from "./types";
 import { sendMessage, answerCallback, editMessageText, slipReference, ocrSlip, downloadTelegramFile } from "./telegram";
-import { currentMonth, getAdminByTelegramId, logAudit, ensureMemberLinked, generateTxnId } from "./db";
+import {
+  currentMonth,
+  getAdminByTelegramId,
+  logAudit,
+  ensureMemberLinked,
+  generateTxnId,
+  generateMemberCode,
+  getSetting,
+  createMemberRegistrationRequest,
+  ensureMemberRegistrationTable,
+} from "./db";
 
-const MINI_APP_URL = "https://fund-management.pages.dev"; // replace with your deployed Mini App URL
+const MINI_APP_URL = "https://fund-management.pages.de"; // replace with your deployed Mini App URL
 
 /** Parses a caption like "250 BLAZ104172570689 2026-08 note here" */
 function parseCaption(caption: string): { amount: number | null; ref: string | null; month: string | null; note: string | null } {
@@ -42,11 +52,52 @@ async function handleMessage(env: Env, message: any) {
   const text: string = message.text || "";
 
   if (text === "/start") {
-    await ensureMemberLinked(env, telegramId, displayName);
-    return sendMessage(env, chatId,
-      `Welcome to the fund bot! 👋\n\nSend a photo of your bank transfer slip to submit your monthly contribution.\nCaption format: <code>amount ref_number [YYYY-MM] [note]</code>\n\nUse /mybalance to check your status, /history for past payments.`,
-      { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: MINI_APP_URL } }]] } }
-    );
+    const linkedId = await ensureMemberLinked(env, telegramId, displayName);
+
+    // Existing/previously registered member: continue normally.
+    if (linkedId) {
+      return sendMessage(env, chatId,
+        `Welcome to the fund bot! 👋\n\nSend a photo of your bank transfer slip to submit your monthly contribution.\nCaption format: <code>amount ref_number [YYYY-MM] [note]</code>\n\nUse /mybalance to check your status, /history for past payments.`,
+        { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: MINI_APP_URL } }]] } }
+      );
+    }
+
+    // Unknown Telegram user: create a registration request for admins to approve/reject.
+    const username = message.from.username ? String(message.from.username) : null;
+    const request = await createMemberRegistrationRequest(env, telegramId, displayName || "Telegram User", username);
+
+    if (request.status === "rejected") {
+      return sendMessage(env, chatId, "❌ Your membership registration request was rejected. Please contact an admin if you think this was a mistake.");
+    }
+
+    if (request.status === "approved") {
+      // Defensive fallback: approved request should already have created/linked a member.
+      const member = await env.DB.prepare("SELECT * FROM members WHERE telegram_id = ?").bind(telegramId).first<any>();
+      if (member) {
+        return sendMessage(env, chatId, `✅ You are registered as ${member.member_code}.`, {
+          reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: MINI_APP_URL } }]] },
+        });
+      }
+    }
+
+    if (request.created) {
+      const usernameLine = username ? `\nUsername: @${username}` : "";
+      await notifyAdmins(env,
+        `👤 <b>New member registration request</b>\n\nName: <b>${displayName || "Telegram User"}</b>${usernameLine}\nTelegram ID: <code>${telegramId}</code>\n\nRegister this user as a fund member?`,
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "✅ Approve & Register", callback_data: `member_approve:${request.id}` },
+              { text: "❌ Reject", callback_data: `member_reject:${request.id}` },
+            ]],
+          },
+        }
+      );
+    }
+
+    return sendMessage(env, chatId, request.created
+      ? "👋 Your registration request has been sent to the fund admin. You will be notified after it is approved or rejected."
+      : "⏳ Your membership registration request is still waiting for admin approval.");
   }
 
   if (text === "/mybalance") {
@@ -171,8 +222,55 @@ async function handleCallback(env: Env, callback: any) {
   if (!admin) return answerCallback(env, callback.id, "Admins only.");
 
   const [action, idStr] = callback.data.split(":");
-  const contributionId = Number(idStr);
+  const entityId = Number(idStr);
 
+  // New member registration approval/rejection.
+  if (action === "member_approve" || action === "member_reject") {
+    await ensureMemberRegistrationTable(env);
+    const request = await env.DB.prepare(
+      "SELECT * FROM member_registration_requests WHERE id = ?"
+    ).bind(entityId).first<any>();
+
+    if (!request) return answerCallback(env, callback.id, "Registration request not found.");
+    if (request.status !== "pending") {
+      return answerCallback(env, callback.id, `Already ${request.status}.`);
+    }
+
+    if (action === "member_reject") {
+      await env.DB.prepare(
+        "UPDATE member_registration_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ? AND status = 'pending'"
+      ).bind(admin.id, entityId).run();
+      await logAudit(env, admin.id, "reject_member_registration", `${request.name} (${request.telegram_id})`);
+      await sendMessage(env, request.telegram_id, "❌ Your membership registration request was rejected. Please contact an admin if you need more information.");
+      await editMessageText(env, callback.message.chat.id, callback.message.message_id, `${callback.message.text}\n\n❌ Rejected by ${admin.name}`);
+      return answerCallback(env, callback.id, "Registration rejected");
+    }
+
+    // Avoid duplicate members if the user became linked while the request was waiting.
+    let member = await env.DB.prepare("SELECT * FROM members WHERE telegram_id = ?").bind(request.telegram_id).first<any>();
+    if (!member) {
+      const memberCode = await generateMemberCode(env);
+      const defaultMonthly = Number(await getSetting(env, "default_monthly_amount")) || 250;
+      const insert = await env.DB.prepare(
+        "INSERT INTO members (member_code, telegram_id, name, monthly_amount) VALUES (?, ?, ?, ?)"
+      ).bind(memberCode, request.telegram_id, request.name, defaultMonthly).run();
+      member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(insert.meta.last_row_id).first<any>();
+    }
+
+    await env.DB.prepare(
+      "UPDATE member_registration_requests SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ? AND status = 'pending'"
+    ).bind(admin.id, entityId).run();
+    await logAudit(env, admin.id, "approve_member_registration", `${member.member_code} — ${member.name} (${request.telegram_id})`);
+
+    await sendMessage(env, request.telegram_id,
+      `✅ Your membership has been approved!\n\nMember ID: <b>${member.member_code}</b>\nName: ${member.name}\n\nYou can now submit contribution slips and use the Fund App.`,
+      { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: MINI_APP_URL } }]] } }
+    );
+    await editMessageText(env, callback.message.chat.id, callback.message.message_id, `${callback.message.text}\n\n✅ Approved by ${admin.name}\nMember ID: ${member.member_code}`);
+    return answerCallback(env, callback.id, `Registered as ${member.member_code}`);
+  }
+
+  const contributionId = entityId;
   const contribution = await env.DB.prepare("SELECT * FROM contributions WHERE id = ?").bind(contributionId).first<any>();
   if (!contribution) return answerCallback(env, callback.id, "Not found.");
 

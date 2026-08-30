@@ -64,3 +64,48 @@ export async function ensureMemberLinked(env: Env, telegramId: string, displayNa
   }
   return null; // admin must add them, or bot can prompt for name-matching
 }
+
+/** Ensures the member registration request table exists (also safe for existing D1 databases). */
+export async function ensureMemberRegistrationTable(env: Env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS member_registration_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      username TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+      reviewed_by INTEGER REFERENCES admins(id),
+      reviewed_at TEXT
+    )
+  `).run();
+}
+
+/** Creates a registration request for a new Telegram user without duplicating pending requests. */
+export async function createMemberRegistrationRequest(
+  env: Env,
+  telegramId: string,
+  displayName: string,
+  username?: string | null
+): Promise<{ id: number; status: string; created: boolean }> {
+  await ensureMemberRegistrationTable(env);
+
+  const existing = await env.DB.prepare(
+    "SELECT id, status FROM member_registration_requests WHERE telegram_id = ?"
+  ).bind(telegramId).first<{ id: number; status: string }>();
+
+  if (existing) {
+    // Keep the latest Telegram profile details, but don't spam admins with duplicate /start requests.
+    await env.DB.prepare(
+      "UPDATE member_registration_requests SET name = ?, username = ? WHERE id = ?"
+    ).bind(displayName, username || null, existing.id).run();
+    return { id: existing.id, status: existing.status, created: false };
+  }
+
+  const res = await env.DB.prepare(
+    "INSERT INTO member_registration_requests (telegram_id, name, username) VALUES (?, ?, ?)"
+  ).bind(telegramId, displayName, username || null).run();
+
+  return { id: Number(res.meta.last_row_id), status: "pending", created: true };
+}
+
