@@ -25,6 +25,18 @@ CREATE TABLE IF NOT EXISTS admins (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+
+CREATE TABLE IF NOT EXISTS member_registration_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  telegram_id TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  username TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+  reviewed_by INTEGER REFERENCES admins(id),
+  reviewed_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS contributions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   txn_id TEXT UNIQUE,
