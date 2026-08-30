@@ -18,6 +18,15 @@ export function sendMessage(env: Env, chatId: string | number, text: string, ext
   return tg(env, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML", ...extra });
 }
 
+
+export function sendPhoto(env: Env, chatId: string | number, photo: string, caption: string, extra: Record<string, unknown> = {}) {
+  return tg(env, "sendPhoto", { chat_id: chatId, photo, caption, parse_mode: "HTML", ...extra });
+}
+
+export function editMessageCaption(env: Env, chatId: string | number, messageId: number, caption: string, extra: Record<string, unknown> = {}) {
+  return tg(env, "editMessageCaption", { chat_id: chatId, message_id: messageId, caption, parse_mode: "HTML", ...extra });
+}
+
 export function answerCallback(env: Env, callbackQueryId: string, text?: string) {
   return tg(env, "answerCallbackQuery", { callback_query_id: callbackQueryId, text });
 }

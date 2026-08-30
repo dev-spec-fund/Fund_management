@@ -1,16 +1,16 @@
 import type { Env } from "./types";
 import { sendMessage } from "./telegram";
-import { currentMonth, getSetting } from "./db";
+import { currentDayOfMonth, currentMonth, getSetting } from "./db";
 
-/** Runs daily (see wrangler cron trigger). Sends reminders on the configured day of month. */
+/** Runs daily and evaluates reminder dates in FUND_TIMEZONE (Indian/Maldives by default). */
 export async function runScheduled(env: Env) {
   const reminderDay = await getSetting(env, "reminder_day");
   if (!reminderDay || reminderDay === "off") return;
 
-  const today = new Date();
-  if (String(today.getDate()) !== reminderDay) return;
+  const timeZone = env.FUND_TIMEZONE || "Indian/Maldives";
+  if (String(Number(currentDayOfMonth(timeZone))) !== String(Number(reminderDay))) return;
 
-  const month = currentMonth();
+  const month = currentMonth(timeZone);
   const unpaid = await env.DB.prepare(`
     SELECT m.* FROM members m
     WHERE m.active = 1
