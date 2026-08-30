@@ -35,8 +35,8 @@ export default function App() {
           <button key={t} onClick={() => setTab(t)}
             style={{
               background: "none", border: "none", cursor: "pointer",
-              color: tab === t ? "#F7F5EF" : "rgba(247,245,239,0.5)",
-              fontSize: 14, fontWeight: 500, paddingBottom: 6, whiteSpace: "nowrap",
+              color: tab === t ? "#1F3D2B" : "#7A8078",
+              fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap",
               borderBottom: tab === t ? "2px solid #C98A4B" : "2px solid transparent",
               textTransform: "capitalize",
             }}>{t}</button>
