@@ -47,26 +47,184 @@ export function slipReference(fileId: string): string {
   return fileId;
 }
 
-/** Uses Workers AI vision to read amount + reference number off a slip image. */
-export async function ocrSlip(env: Env, imageBytes: ArrayBuffer): Promise<{ amount: number | null; ref: string | null; raw: string }> {
-  const input = {
-    image: [...new Uint8Array(imageBytes)],
-    prompt:
-      "This is a bank transfer slip from a Maldivian bank (BML or MIB). " +
-      "Extract the transferred AMOUNT (numeric only, MVR) and the REFERENCE/TRANSACTION NUMBER. " +
-      'Reply strictly as JSON: {"amount": <number or null>, "ref": "<string or null>"}',
-    max_tokens: 256,
-  };
-  try {
-    const result: any = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf" as any, input as any);
-    const text = result?.description || result?.response || JSON.stringify(result);
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      const parsed = JSON.parse(match[0]);
-      return { amount: parsed.amount ?? null, ref: parsed.ref ?? null, raw: text };
+function cleanRef(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const ref = String(value)
+    .trim()
+    .replace(/^['"`]+|['"`,.;:]+$/g, "")
+    .replace(/\s+/g, "");
+
+  if (!ref || ref.toLowerCase() === "null" || ref.length < 4) return null;
+  return ref;
+}
+
+function cleanAmount(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const cleaned = String(value)
+    .replace(/MVR|Rf\.?|ރ\.?/gi, "")
+    .replace(/,/g, "")
+    .replace(/[^0-9.\-]/g, "")
+    .trim();
+  const amount = Number(cleaned);
+  return Number.isFinite(amount) && amount >= 0 ? amount : null;
+}
+
+function parseSlipText(text: string): { amount: number | null; ref: string | null } {
+  const normalized = text.replace(/\r/g, "\n");
+
+  // Prefer values explicitly labelled as a bank transaction/reference identifier.
+  const refPatterns = [
+    /(?:transaction\s*(?:id|reference|ref|number|no\.?|#)|bank\s*(?:reference|ref)|reference\s*(?:number|no\.?|#)?|ref\s*(?:number|no\.?|#)?)[\s:=#-]*([A-Z0-9][A-Z0-9\-_/]{3,})/i,
+    /(?:txn|trx)\s*(?:id|ref|no\.?|#)?[\s:=#-]*([A-Z0-9][A-Z0-9\-_/]{3,})/i,
+  ];
+
+  let ref: string | null = null;
+  for (const pattern of refPatterns) {
+    const match = normalized.match(pattern);
+    if (match?.[1]) {
+      ref = cleanRef(match[1]);
+      if (ref) break;
     }
-    return { amount: null, ref: null, raw: text };
-  } catch (err) {
-    return { amount: null, ref: null, raw: `OCR error: ${err}` };
   }
+
+  // Prefer transfer/paid/amount labels and avoid balances/account numbers.
+  const amountPatterns = [
+    /(?:transfer(?:red)?\s*amount|transaction\s*amount|amount\s*(?:paid|sent)?|paid\s*amount|total\s*amount)[\s:=\-]*(?:MVR|Rf\.?|ރ\.?\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)/i,
+    /(?:MVR|Rf\.?)\s*([0-9][0-9,]*(?:\.\d{1,2})?)/i,
+  ];
+
+  let amount: number | null = null;
+  for (const pattern of amountPatterns) {
+    const match = normalized.match(pattern);
+    if (match?.[1]) {
+      amount = cleanAmount(match[1]);
+      if (amount !== null) break;
+    }
+  }
+
+  return { amount, ref };
+}
+
+function parseModelJson(text: string): { amount: number | null; ref: string | null } {
+  const match = text.match(/\{[\s\S]*?\}/);
+  if (!match) return { amount: null, ref: null };
+
+  try {
+    const parsed: any = JSON.parse(match[0]);
+    const amount = cleanAmount(
+      parsed.amount ?? parsed.transfer_amount ?? parsed.transaction_amount ?? parsed.paid_amount
+    );
+    const ref = cleanRef(
+      parsed.ref ??
+        parsed.reference ??
+        parsed.reference_number ??
+        parsed.transaction_id ??
+        parsed.transaction_reference ??
+        parsed.transaction_number ??
+        parsed.txn_id ??
+        parsed.txn_ref
+    );
+    return { amount, ref };
+  } catch {
+    return { amount: null, ref: null };
+  }
+}
+
+/**
+ * Reads a bank slip and extracts the transferred amount + bank transaction reference.
+ *
+ * The image is first passed through Workers AI document/image conversion, which uses
+ * Cloudflare's current vision/OCR pipeline. We then parse labelled fields locally and
+ * use Gemma 4 only as a fallback normalizer when OCR text is available but ambiguous.
+ */
+export async function ocrSlip(
+  env: Env,
+  imageBytes: ArrayBuffer
+): Promise<{ amount: number | null; ref: string | null; raw: string }> {
+  let ocrText = "";
+
+  try {
+    const ai: any = env.AI as any;
+    const converted: any = await ai.toMarkdown(
+      {
+        name: "bank-slip.jpg",
+        blob: new Blob([imageBytes], { type: "image/jpeg" }),
+      },
+      {
+        conversionOptions: {
+          output: { format: "text" },
+          image: { descriptionLanguage: "en" },
+        },
+      }
+    );
+
+    const first = Array.isArray(converted) ? converted[0] : converted;
+    ocrText = first?.data || first?.text || "";
+
+    if (first?.format === "error") {
+      ocrText = `OCR conversion error: ${first?.error || "unknown error"}`;
+    }
+  } catch (err) {
+    ocrText = `OCR conversion error: ${String(err)}`;
+  }
+
+  const local = parseSlipText(ocrText);
+  if (local.amount !== null && local.ref) {
+    return { ...local, raw: ocrText };
+  }
+
+  // If OCR produced readable text but the labels/layout are unusual, ask a modern
+  // model to identify the correct fields. Explicitly reject account/card/phone IDs.
+  if (ocrText && !ocrText.startsWith("OCR conversion error:")) {
+    try {
+      const result: any = await env.AI.run(
+        "@cf/google/gemma-4-26b-a4b-it" as any,
+        {
+          messages: [
+            {
+              role: "system",
+              content:
+                "You extract payment data from OCR text. Return JSON only. Never invent missing values.",
+            },
+            {
+              role: "user",
+              content:
+                "The text below was read from a Maldivian bank transfer slip, usually BML or MIB. " +
+                "Find the TRANSFERRED AMOUNT in MVR and the BANK TRANSACTION REFERENCE. " +
+                "Reference labels may be Reference, Reference Number, Ref No, Transaction ID, " +
+                "Transaction Reference, Transaction No, TXN ID, or Bank Reference. " +
+                "Do NOT use account numbers, card numbers, phone numbers, dates, timestamps, " +
+                "customer IDs, beneficiary IDs, or the amount itself as the reference. " +
+                'Return exactly: {"amount": number|null, "ref": string|null}.\n\nOCR TEXT:\n' +
+                ocrText,
+            },
+          ],
+          max_completion_tokens: 120,
+          temperature: 0,
+          chat_template_kwargs: { enable_thinking: false },
+        } as any
+      );
+
+      const modelText =
+        result?.choices?.[0]?.message?.content ||
+        result?.response ||
+        result?.description ||
+        JSON.stringify(result);
+      const model = parseModelJson(modelText);
+
+      return {
+        amount: local.amount ?? model.amount,
+        ref: local.ref ?? model.ref,
+        raw: `${ocrText}\n\n[AI parse]\n${modelText}`,
+      };
+    } catch (err) {
+      return {
+        amount: local.amount,
+        ref: local.ref,
+        raw: `${ocrText}\n\nAI parse error: ${String(err)}`,
+      };
+    }
+  }
+
+  return { amount: local.amount, ref: local.ref, raw: ocrText };
 }
