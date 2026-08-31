@@ -184,6 +184,19 @@ async function ensureMeetingsSchema(env:any){
 }
 function meetingEsc(v:any){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+function meetingDisplayDateTime(dateValue:any,timeValue:any){
+  const date=String(dateValue||'');
+  const time=String(timeValue||'');
+  const dm=date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const tm=time.match(/^(\d{2}):(\d{2})$/);
+  if(!dm) return `${date}${time?` · ${time}`:''}`;
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const day=Number(dm[3]), month=months[Number(dm[2])-1]||dm[2], year=dm[1];
+  if(!tm) return `${day} ${month} ${year}`;
+  const h=Number(tm[1]), min=tm[2], suffix=h>=12?'PM':'AM', hour=h%12||12;
+  return `${day} ${month} ${year} · ${hour}:${min} ${suffix}`;
+}
+
 adminRoute.get('/meetings', requireAdmin, async c => {
   await ensureMeetingsSchema(c.env);
   const rows=await c.env.DB.prepare(`
@@ -270,7 +283,22 @@ adminRoute.patch('/meetings/:id', requireFinance, async c => {
   if(!/^\d{4}-\d{2}-\d{2}$/.test(meetingDate)) return c.json({error:'Meeting date is required'},400);
   if(!/^\d{2}:\d{2}$/.test(meetingTime)) return c.json({error:'Meeting time is required'},400);
 
-  const rescheduled=meetingDate!==before.meeting_date || meetingTime!==before.meeting_time;
+  const normalizedBefore={
+    title:String(before.title||''),
+    meeting_date:String(before.meeting_date||''),
+    meeting_time:String(before.meeting_time||''),
+    venue:before.venue||null,
+    agenda:before.agenda||null,
+    rsvp_deadline:before.rsvp_deadline||null
+  };
+  const next={title,meeting_date:meetingDate,meeting_time:meetingTime,venue,agenda,rsvp_deadline:deadline};
+  const changedFields=Object.keys(next).filter((key:any)=>String((next as any)[key]??'')!==String((normalizedBefore as any)[key]??''));
+  const rescheduled=changedFields.includes('meeting_date') || changedFields.includes('meeting_time');
+
+  if(changedFields.length===0){
+    return c.json({...before,changed:false,rescheduled:false,changed_fields:[],previous_date:before.meeting_date,previous_time:before.meeting_time});
+  }
+
   await c.env.DB.prepare(`
     UPDATE meetings
     SET title=?,meeting_date=?,meeting_time=?,venue=?,agenda=?,rsvp_deadline=?,updated_at=datetime('now')
@@ -278,16 +306,32 @@ adminRoute.patch('/meetings/:id', requireFinance, async c => {
   `).bind(title,meetingDate,meetingTime,venue,agenda,deadline,id).run();
 
   const after=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
-  await auditEntity(c.env,adminUser.id,rescheduled?'meeting_rescheduled':'meeting_updated','meeting',id,before,after);
-  return c.json({...after,rescheduled});
+  await auditEntity(c.env,adminUser.id,rescheduled?'meeting_rescheduled':'meeting_updated','meeting',id,before,{...after,changed_fields:changedFields});
+  return c.json({
+    ...after,
+    changed:true,
+    rescheduled,
+    changed_fields:changedFields,
+    previous_date:before.meeting_date,
+    previous_time:before.meeting_time
+  });
 });
 
 adminRoute.post('/meetings/:id/notify-update', requireFinance, async c => {
   const adminUser=c.get('admin')!;
   const id=Number(c.req.param('id'));
+  const body=await c.req.json().catch(()=>({})) as any;
   const m=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   if(!m) return c.json({error:'Meeting not found'},404);
   if(m.status==='cancelled') return c.json({error:'Meeting is cancelled'},409);
+
+  const rescheduled=Boolean(body.rescheduled);
+  const previousDate=String(body.previous_date||'');
+  const previousTime=String(body.previous_time||'');
+  const changedFields=Array.isArray(body.changed_fields)?body.changed_fields.map(String):[];
+  if(!rescheduled && changedFields.length===0){
+    return c.json({ok:true,sent:0,unlinked:0,failed:0,skipped:true,reason:'No meeting changes to notify'});
+  }
 
   const members=await c.env.DB.prepare("SELECT id,telegram_id FROM members WHERE active=1").all<any>();
   let sent=0,unlinked=0,failed=0;
@@ -296,9 +340,13 @@ adminRoute.post('/meetings/:id/notify-update', requireFinance, async c => {
     const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
     const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
     const agenda=m.agenda?`\n\n${meetingEsc(m.agenda)}`:'';
+    const heading=rescheduled?'📅 <b>Meeting rescheduled</b>':'🔄 <b>Meeting updated</b>';
+    const schedule=rescheduled && previousDate
+      ? `\nPrevious: ${meetingEsc(meetingDisplayDateTime(previousDate,previousTime))}\nNew: <b>${meetingEsc(meetingDisplayDateTime(m.meeting_date,m.meeting_time))}</b>`
+      : `\n${meetingEsc(meetingDisplayDateTime(m.meeting_date,m.meeting_time))}`;
     try{
       await sendMessage(c.env,member.telegram_id,
-        `🔄 <b>Meeting updated</b>\n\n<b>${meetingEsc(m.title)}</b>\nNew date/time: <b>${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}</b>${venue}${deadline}${agenda}\n\nYour previous RSVP is still recorded. You can change it below.`,
+        `${heading}\n\n<b>${meetingEsc(m.title)}</b>${schedule}${venue}${deadline}${agenda}\n\nYour previous RSVP is still recorded. You can change it below.`,
         {reply_markup:{inline_keyboard:[[
           {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
           {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
@@ -308,10 +356,9 @@ adminRoute.post('/meetings/:id/notify-update', requireFinance, async c => {
     }catch(e){failed++;await safeLogError(c.env,'meeting.update_notice',e,{meeting_id:id,member_id:member.id});}
   }
   await c.env.DB.prepare("UPDATE meetings SET last_notification_at=datetime('now') WHERE id=?").bind(id).run();
-  await auditEntity(c.env,adminUser.id,'meeting_update_notified','meeting',id,m,{sent,unlinked,failed});
-  return c.json({ok:true,sent,unlinked,failed});
+  await auditEntity(c.env,adminUser.id,rescheduled?'meeting_reschedule_notified':'meeting_update_notified','meeting',id,m,{sent,unlinked,failed,changed_fields:changedFields});
+  return c.json({ok:true,sent,unlinked,failed,rescheduled});
 });
-
 
 adminRoute.post('/meetings/:id/remind-pending', requireFinance, async c => {
   const adminUser=c.get('admin')!;
