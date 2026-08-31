@@ -63,7 +63,7 @@ function parseCaption(caption: string): {
 }
 
 async function notifyAdmins(env: Env, text: string, extra: Record<string, unknown> = {}) {
-  const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND role IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
+  const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
   for (const a of admins.results) await sendMessage(env, a.telegram_id, text, extra);
 }
 
@@ -73,7 +73,7 @@ async function notifyAdminsWithPhoto(
   caption: string,
   extra: Record<string, unknown> = {}
 ) {
-  const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND role IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
+  const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
   for (const a of admins.results) await sendPhoto(env, a.telegram_id, photoFileId, caption, extra);
 }
 
@@ -217,7 +217,7 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
     try { await requireOpenMonth(env, month); } catch (e:any) { return sendMessage(env, chatId, esc(e.message)); }
 
     const file = await downloadTelegramFile(env, fileId);
-    const ocr = file ? await ocrSlip(env, file.bytes) : { amount: null, ref: null, raw: "" };
+    const ocr = file ? await ocrSlip(env, file.bytes, file.mime) : { amount: null, ref: null, raw: "" };
     const amount = Number(ocr.amount || 0);
     if (amount <= 0) return sendMessage(env, chatId, "I couldn't read the expense amount. Please add/edit this expense in the Fund App.");
     const threshold = Number(await getSetting(env, "expense_approval_threshold")) || 5000;
@@ -238,7 +238,7 @@ Description: ${esc(description || "Expense")}
 Amount: <b>MVR ${amount}</b>
 Month: ${month}
 Logged by: ${esc(admin.name)}`;
-      const admins = await env.DB.prepare("SELECT telegram_id,id FROM admins WHERE id != ?").bind(admin.id).all<any>();
+      const admins = await env.DB.prepare("SELECT telegram_id,id FROM admins WHERE id != ? AND COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").bind(admin.id).all<any>();
       for (const a of admins.results) await sendPhoto(env, a.telegram_id, fileId, captionText, { reply_markup: { inline_keyboard: [[
         { text: "✅ Confirm expense", callback_data: `expapprove:${expenseId}` },
         { text: "❌ Reject expense", callback_data: `expreject:${expenseId}` },
@@ -254,7 +254,7 @@ Logged by: ${esc(admin.name)}`;
 
   const parsed = parseCaption(caption);
   const file = await downloadTelegramFile(env, fileId);
-  const ocr = file ? await ocrSlip(env, file.bytes) : { amount: null, ref: null, raw: "" };
+  const ocr = file ? await ocrSlip(env, file.bytes, file.mime) : { amount: null, ref: null, raw: "" };
   const amount = parsed.amount ?? ocr.amount;
   const ref = parsed.ref ?? ocr.ref;
   const month = parsed.month ?? currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");

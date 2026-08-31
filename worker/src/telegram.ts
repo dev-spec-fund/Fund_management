@@ -143,25 +143,83 @@ function parseModelJson(text: string): { amount: number | null; ref: string | nu
   }
 }
 
+/** Encodes a Worker ArrayBuffer as a base64 data URL without spreading a large array. */
+function imageDataUrl(imageBytes: ArrayBuffer, mime = "image/jpeg"): string {
+  const bytes = new Uint8Array(imageBytes);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+  }
+  return `data:${mime};base64,${btoa(binary)}`;
+}
+
 /**
- * Reads a bank slip and extracts the transferred amount + bank transaction reference.
+ * Reads a bank slip and extracts transferred amount, bank reference and visible text.
  *
- * The image is first passed through Workers AI document/image conversion, which uses
- * Cloudflare's current vision/OCR pipeline. We then parse labelled fields locally and
- * use Gemma 4 only as a fallback normalizer when OCR text is available but ambiguous.
+ * Primary path: send the actual image to a vision model and require structured JSON.
+ * Fallback: Cloudflare image-to-text conversion plus the local label parser.
  */
 export async function ocrSlip(
   env: Env,
-  imageBytes: ArrayBuffer
+  imageBytes: ArrayBuffer,
+  mime = "image/jpeg"
 ): Promise<{ amount: number | null; ref: string | null; raw: string }> {
-  let ocrText = "";
+  let visionRaw = "";
 
   try {
-    const ai: any = env.AI as any;
-    const converted: any = await ai.toMarkdown(
+    const result: any = await (env.AI as any).run(
+      "@cf/google/gemma-4-26b-a4b-it" as any,
       {
-        name: "bank-slip.jpg",
-        blob: new Blob([imageBytes], { type: "image/jpeg" }),
+        messages: [
+          {
+            role: "system",
+            content:
+              "You read bank transfer slip images accurately. Never invent text or values that are not visible. Return JSON only.",
+          },
+          {
+            role: "user",
+            content:
+              "Read this Maldivian bank transfer slip (commonly BML or MIB). Extract the transferred amount in MVR, the BANK transaction/reference number, the transaction date if visible, and a short transcription of important labels/values. Do not use account numbers, card numbers, phone numbers, customer IDs, beneficiary IDs, timestamps, or the amount itself as the reference. Return exactly JSON: {\"amount\":number|null,\"ref\":string|null,\"date\":\"YYYY-MM-DD\"|null,\"text\":string}.",
+          },
+        ],
+        image: imageDataUrl(imageBytes, mime),
+        max_tokens: 350,
+      } as any
+    );
+
+    visionRaw =
+      result?.choices?.[0]?.message?.content ||
+      result?.response ||
+      result?.result ||
+      result?.description ||
+      JSON.stringify(result);
+
+    const jsonMatch = String(visionRaw).match(/\{[\s\S]*?\}/);
+    if (jsonMatch) {
+      try {
+        const parsed: any = JSON.parse(jsonMatch[0]);
+        const amount = cleanAmount(parsed.amount);
+        const ref = cleanRef(parsed.ref ?? parsed.reference ?? parsed.transaction_reference ?? parsed.transaction_id);
+        const text = String(parsed.text || "").trim();
+        const date = typeof parsed.date === "string" ? parsed.date.trim() : "";
+        const raw = [text, date && `Transaction Date: ${date}`, `[Vision parse]\n${visionRaw}`].filter(Boolean).join("\n");
+        if (amount !== null || ref) return { amount, ref, raw };
+      } catch (err) {
+        await safeLogError(env, "ocr.vision.json", err, String(visionRaw).slice(0, 1000));
+      }
+    }
+  } catch (err) {
+    await safeLogError(env, "ocr.vision", err);
+  }
+
+  let ocrText = "";
+  try {
+    const extension = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+    const converted: any = await (env.AI as any).toMarkdown(
+      {
+        name: `bank-slip.${extension}`,
+        blob: new Blob([imageBytes], { type: mime }),
       },
       {
         conversionOptions: {
@@ -173,73 +231,19 @@ export async function ocrSlip(
 
     const first = Array.isArray(converted) ? converted[0] : converted;
     ocrText = first?.data || first?.text || "";
-
     if (first?.format === "error") {
-      ocrText = `OCR conversion error: ${first?.error || "unknown error"}`;
       await safeLogError(env, "ocr.convert", new Error(first?.error || "OCR conversion error"));
+      ocrText = "";
     }
   } catch (err) {
     await safeLogError(env, "ocr.convert", err);
-    ocrText = `OCR conversion error: ${String(err)}`;
   }
 
   const local = parseSlipText(ocrText);
-  if (local.amount !== null && local.ref) {
-    return { ...local, raw: ocrText };
-  }
-
-  // If OCR produced readable text but the labels/layout are unusual, ask a modern
-  // model to identify the correct fields. Explicitly reject account/card/phone IDs.
-  if (ocrText && !ocrText.startsWith("OCR conversion error:")) {
-    try {
-      const result: any = await env.AI.run(
-        "@cf/google/gemma-4-26b-a4b-it" as any,
-        {
-          messages: [
-            {
-              role: "system",
-              content:
-                "You extract payment data from OCR text. Return JSON only. Never invent missing values.",
-            },
-            {
-              role: "user",
-              content:
-                "The text below was read from a Maldivian bank transfer slip, usually BML or MIB. " +
-                "Find the TRANSFERRED AMOUNT in MVR and the BANK TRANSACTION REFERENCE. " +
-                "Reference labels may be Reference, Reference Number, Ref No, Transaction ID, " +
-                "Transaction Reference, Transaction No, TXN ID, or Bank Reference. " +
-                "Do NOT use account numbers, card numbers, phone numbers, dates, timestamps, " +
-                "customer IDs, beneficiary IDs, or the amount itself as the reference. " +
-                'Return exactly: {"amount": number|null, "ref": string|null}.\n\nOCR TEXT:\n' +
-                ocrText,
-            },
-          ],
-          max_completion_tokens: 120,
-          temperature: 0,
-          chat_template_kwargs: { enable_thinking: false },
-        } as any
-      );
-
-      const modelText =
-        result?.choices?.[0]?.message?.content ||
-        result?.response ||
-        result?.description ||
-        JSON.stringify(result);
-      const model = parseModelJson(modelText);
-
-      return {
-        amount: local.amount ?? model.amount,
-        ref: local.ref ?? model.ref,
-        raw: `${ocrText}\n\n[AI parse]\n${modelText}`,
-      };
-    } catch (err) {
-      return {
-        amount: local.amount,
-        ref: local.ref,
-        raw: `${ocrText}\n\nAI parse error: ${String(err)}`,
-      };
-    }
-  }
-
-  return { amount: local.amount, ref: local.ref, raw: ocrText };
+  return {
+    amount: local.amount,
+    ref: local.ref,
+    raw: [ocrText, visionRaw && `[Vision fallback raw]\n${visionRaw}`].filter(Boolean).join("\n\n"),
+  };
 }
+
