@@ -16,7 +16,12 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-button, input, textarea, select { font: inherit; }
+/* iOS Safari/Telegram WebView may not preserve inherited control typography.
+   Keep all interactive form controls on the app's UI font explicitly. */
+button, input, textarea, select {
+  font: inherit;
+  font-family: 'Inter', sans-serif !important;
+}
 button { -webkit-tap-highlight-color: transparent; }
 button:disabled { cursor: not-allowed !important; opacity: .55; }
 
