@@ -1875,7 +1875,17 @@ function Settings({ admin }) {
   if(settingsError && !Object.keys(settings||{}).length) return <div style={{...cardStyle,textAlign:"center"}}>
     <div className="sans" style={{fontSize:13,fontWeight:700,color:"#A6432F"}}>Settings could not load</div>
     <div className="sans" style={{fontSize:11,color:"#6B7268",marginTop:6}}>{settingsError}</div>
-    <button onClick={load} className="sans" style={{...primaryBtn,marginTop:12}}>Retry</button>
+    <button onClick={load} className="sans" style={{
+      marginTop:12,
+      border:"none",
+      borderRadius:9,
+      padding:"9px 14px",
+      background:"#1F3D2B",
+      color:"#F7F5EF",
+      fontSize:12,
+      fontWeight:700,
+      cursor:"pointer"
+    }}>Retry</button>
   </div>;
 
   const saveSetting=async(key,value)=>{
