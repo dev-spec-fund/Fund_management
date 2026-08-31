@@ -82,7 +82,7 @@ export default function App() {
     return () => timers.forEach(clearTimeout);
   }, [me, adminView, canFinance, tabs]);
 
-  if (loading) return <Shell><Center>Loading…</Center></Shell>;
+  if (loading) return <Shell><InitialAppSkeleton /></Shell>;
   if (error) return <Shell><Center>Couldn't connect: {error}</Center></Shell>;
 
   const openTab = (nextTab) => {
@@ -137,14 +137,56 @@ export default function App() {
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>
         {tabs.filter((page) => mountedTabs.has(page)).map((page) => (
-          <div key={`${mode}:${page}`} style={{ display: tab === page ? "block" : "none" }} aria-hidden={tab !== page}>
-            <Suspense fallback={tab === page ? <Center>Loading…</Center> : null}>
+          <div
+            key={`${mode}:${page}`}
+            className={`page-panel${tab === page ? " page-panel--active" : ""}`}
+            style={{ display: tab === page ? "block" : "none" }}
+            aria-hidden={tab !== page}
+          >
+            <Suspense fallback={tab === page ? <PageSkeleton /> : null}>
               {renderPage(page)}
             </Suspense>
           </div>
         ))}
       </div>
     </Shell>
+  );
+}
+
+
+function SkeletonBlock({ className = "", style }) {
+  return <div className={`skeleton-block ${className}`} style={style} aria-hidden="true" />;
+}
+
+function PageSkeleton() {
+  return (
+    <div className="page-skeleton" aria-label="Loading page" aria-busy="true">
+      <SkeletonBlock style={{ width: "42%", height: 22, marginBottom: 16 }} />
+      <SkeletonBlock style={{ width: "100%", height: 112, borderRadius: 16, marginBottom: 14 }} />
+      <div className="skeleton-grid">
+        <SkeletonBlock style={{ height: 92, borderRadius: 14 }} />
+        <SkeletonBlock style={{ height: 92, borderRadius: 14 }} />
+      </div>
+      <SkeletonBlock style={{ width: "100%", height: 72, borderRadius: 14, marginTop: 14 }} />
+      <SkeletonBlock style={{ width: "72%", height: 18, marginTop: 22, marginBottom: 12 }} />
+      <SkeletonBlock style={{ width: "100%", height: 86, borderRadius: 14 }} />
+    </div>
+  );
+}
+
+function InitialAppSkeleton() {
+  return (
+    <>
+      <div style={{ flexShrink: 0, padding: "14px 20px 0", maxWidth: 480, margin: "0 auto", width: "100%" }}>
+        <SkeletonBlock style={{ height: 42, borderRadius: 12 }} />
+      </div>
+      <div style={{ flexShrink: 0, display: "flex", gap: 18, padding: "18px 20px 0", maxWidth: 480, width: "100%", margin: "0 auto" }}>
+        {[64, 58, 70, 58].map((width, i) => <SkeletonBlock key={i} style={{ width, height: 18 }} />)}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: 20, width: "100%", maxWidth: 480, margin: "0 auto" }}>
+        <PageSkeleton />
+      </div>
+    </>
   );
 }
 

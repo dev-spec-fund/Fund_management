@@ -42,3 +42,48 @@ input:focus, textarea:focus, select:focus {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Perceived-speed polish: keep first load visually stable and make tab changes feel native. */
+.page-panel--active {
+  animation: page-enter 130ms ease-out both;
+}
+
+@keyframes page-enter {
+  from { opacity: 0.72; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-skeleton {
+  width: 100%;
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.skeleton-block {
+  position: relative;
+  overflow: hidden;
+  background: #E9E6DE;
+  border-radius: 8px;
+}
+
+.skeleton-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.52), transparent);
+  animation: skeleton-shimmer 1.15s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-panel--active { animation: none !important; }
+  .skeleton-block::after { animation: none !important; display: none; }
+}
