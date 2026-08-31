@@ -843,6 +843,8 @@ function Reports({ setTab }) {
   const maxVal = Math.max(1, ...trend.map((t) => Math.max(Number(t.income || 0), Number(t.expense || 0))));
   const members = summary.outstanding?.members || [];
   const allocatedContributions = Number(summary.allocatedContributions ?? summary.memberIncome ?? 0);
+  const advanceAllocated = Number(summary.advanceAllocated || 0);
+  const currentMonthAllocated = Math.max(0, allocatedContributions - advanceAllocated);
   const totalRequired = allocatedContributions + Number(summary.outstanding?.total || 0);
   const collectionPct = totalRequired > 0 ? Math.min(100, Math.round((allocatedContributions / totalRequired) * 100)) : 0;
   const activeCategories = (summary.byCategory || []).filter((c) => Number(c.spent || 0) > 0);
@@ -850,7 +852,9 @@ function Reports({ setTab }) {
   const exportCsv = () => {
     const rows = [
       ["Fund report", monthLabel],
-      ["Contributions", summary.memberIncome],
+      ["Contribution cash received", summary.memberIncome],
+      ["Allocated to contribution month", allocatedContributions],
+      ["Paid in advance", advanceAllocated],
       ["Donations", summary.donationIncome],
       ["Expenses", summary.expenses],
       ["Net change", summary.net],
@@ -898,11 +902,11 @@ function Reports({ setTab }) {
 
       <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>MONTHLY SUMMARY</div>
       <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 16, marginBottom: 14 }}>
-        <Row label="Contributions" value={`+ MVR ${fmt(summary.memberIncome)}`} color="#3A6B3E" />
+        <Row label="Contribution cash received" value={`+ MVR ${fmt(summary.memberIncome)}`} color="#3A6B3E" />
         <Row label="Donations" value={`+ MVR ${fmt(summary.donationIncome)}`} color="#3A6B3E" />
         <Row label="Expenses" value={`− MVR ${fmt(summary.expenses)}`} color="#A6432F" />
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, paddingTop: 9, borderTop: "1px solid #E9E4D8" }}>
-          <span className="sans" style={{ fontWeight: 700 }}>Net change</span>
+          <span className="sans" style={{ fontWeight: 700 }}>Net cash change</span>
           <span style={{ fontWeight: 700, color: Number(summary.net) >= 0 ? "#3A6B3E" : "#A6432F" }}>{Number(summary.net) >= 0 ? "+" : "−"} MVR {fmt(Math.abs(Number(summary.net || 0)))}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 9 }}>
@@ -911,15 +915,32 @@ function Reports({ setTab }) {
         </div>
       </div>
 
-      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>COLLECTION</div>
+      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>CONTRIBUTION COLLECTION</div>
       <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 14, marginBottom: 12 }}>
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 7 }}>
-          <span>MVR {fmt(allocatedContributions)} / MVR {fmt(totalRequired)}</span>
+          <span><b>MVR {fmt(allocatedContributions)}</b> / MVR {fmt(totalRequired)}</span>
           <strong>{collectionPct}%</strong>
         </div>
         <div style={{ height: 7, borderRadius: 99, background: "#E9E4D8", overflow: "hidden" }}>
           <div style={{ width: `${collectionPct}%`, height: "100%", background: "#3A6B3E", borderRadius: 99 }} />
         </div>
+        <div className="sans" style={{ marginTop: 11, paddingTop: 9, borderTop: "1px solid #F0EDE3", fontSize: 11 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", gap:10, marginBottom: advanceAllocated > 0 ? 6 : 0 }}>
+            <span style={{ color:"#6B7268" }}>Allocated to {monthLabel}</span>
+            <b>MVR {fmt(allocatedContributions)}</b>
+          </div>
+          {advanceAllocated > 0 && <div style={{ display:"flex", justifyContent:"space-between", gap:10, color:"#3A6B3E" }}>
+            <span>↳ Paid in advance</span>
+            <b>MVR {fmt(advanceAllocated)}</b>
+          </div>}
+          {currentMonthAllocated > 0 && advanceAllocated > 0 && <div style={{ display:"flex", justifyContent:"space-between", gap:10, color:"#8A9086", marginTop:5 }}>
+            <span>↳ From cash received this month</span>
+            <span>MVR {fmt(currentMonthAllocated)}</span>
+          </div>}
+        </div>
+      </div>
+      <div className="sans" style={{fontSize:10,color:"#8A9086",lineHeight:1.45,margin:"-4px 2px 12px"}}>
+        Advance allocations count toward collection only. The cash was already added to the fund when it was originally received, so it is not counted again here.
       </div>
 
       {(summary.outstanding?.total || 0) > 0 && (
@@ -930,7 +951,7 @@ function Reports({ setTab }) {
       )}
 
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>
-        <span>INCOME VS EXPENSES — 6 MONTHS</span>
+        <span>CASH INCOME VS EXPENSES — 6 MONTHS</span>
         <span style={{ display: "flex", gap: 8, fontSize: 10, fontWeight: 500 }}>
           <span>● Income</span><span style={{ color: "#A6432F" }}>● Expenses</span>
         </span>
