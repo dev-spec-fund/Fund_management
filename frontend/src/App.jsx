@@ -1,16 +1,31 @@
-import React, { Suspense, lazy, useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import { api } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
-const Members = lazy(() => import("./pages/Members"));
-const Reports = lazy(() => import("./pages/Reports"));
-const PendingApprovals = lazy(() => import("./pages/PendingApprovals"));
-const Meetings = lazy(() => import("./pages/Meetings"));
-const Settings = lazy(() => import("./pages/Settings"));
-const MyHistory = lazy(() => import("./pages/MemberViews").then((m) => ({ default: m.MyHistory })));
-const FundView = lazy(() => import("./pages/MemberViews").then((m) => ({ default: m.FundView })));
-const Activity = lazy(() => import("./pages/MemberViews").then((m) => ({ default: m.Activity })));
+
+const pageLoaders = {
+  members: () => import("./pages/Members"),
+  reports: () => import("./pages/Reports"),
+  pending: () => import("./pages/PendingApprovals"),
+  meetings: () => import("./pages/Meetings"),
+  settings: () => import("./pages/Settings"),
+  memberViews: () => import("./pages/MemberViews"),
+};
+
+const Members = lazy(pageLoaders.members);
+const Reports = lazy(pageLoaders.reports);
+const PendingApprovals = lazy(pageLoaders.pending);
+const Meetings = lazy(pageLoaders.meetings);
+const Settings = lazy(pageLoaders.settings);
+const MyHistory = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyHistory })));
+const FundView = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.FundView })));
+const Activity = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.Activity })));
+
+const loaderForTab = (tab) => {
+  if (["history", "fund", "activity"].includes(tab)) return pageLoaders.memberViews;
+  return pageLoaders[tab] || null;
+};
 
 export default function App() {
   const [me, setMe] = useState(null);
@@ -19,6 +34,16 @@ export default function App() {
   const [bootstrapSummary, setBootstrapSummary] = useState(null);
   const [tab, setTab] = useState("overview");
   const [mode, setMode] = useState("member");
+  const [mountedTabs, setMountedTabs] = useState(() => new Set(["overview"]));
+
+  const isAdmin = !!me?.admin;
+  const isMember = !!me?.member;
+  const adminView = isAdmin && mode === "admin";
+  const memberView = isMember && mode === "member";
+  const canFinance = adminView && ["owner", "super_admin", "treasurer"].includes(me?.admin?.role);
+  const tabs = useMemo(() => adminView
+    ? (canFinance ? ["overview", "pending", "members", "activity", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
+    : ["overview", "history", "fund", "activity"], [adminView, canFinance]);
 
   useEffect(() => {
     // Start the safe overview request immediately so it overlaps the /me round-trip.
@@ -29,18 +54,66 @@ export default function App() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!me) return undefined;
+
+    // Stage background mounting so Overview becomes interactive first. Hidden mounted
+    // pages run their normal data loaders and keep their state, making later tab taps instant.
+    const likelyNext = adminView
+      ? (canFinance ? ["pending", "members", "activity"] : ["members", "activity"])
+      : ["history", "fund", "activity"];
+    const secondary = adminView ? ["reports", "meetings"] : [];
+    const later = adminView ? ["settings"] : [];
+
+    const warm = (items) => {
+      items.filter((name) => tabs.includes(name)).forEach((name) => loaderForTab(name)?.());
+      setMountedTabs((current) => {
+        const next = new Set(current);
+        items.filter((name) => tabs.includes(name)).forEach((name) => next.add(name));
+        return next;
+      });
+    };
+
+    const timers = [
+      setTimeout(() => warm(likelyNext), 180),
+      setTimeout(() => warm(secondary), 700),
+      setTimeout(() => warm(later), 1400),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [me, adminView, canFinance, tabs]);
+
   if (loading) return <Shell><Center>Loading…</Center></Shell>;
   if (error) return <Shell><Center>Couldn't connect: {error}</Center></Shell>;
 
-  const isAdmin = !!me?.admin;
-  const isMember = !!me?.member;
-  const adminView = isAdmin && mode === "admin";
-  const memberView = isMember && mode === "member";
-  const canFinance = adminView && ["owner","super_admin","treasurer"].includes(me?.admin?.role);
-  const tabs = adminView
-    ? (canFinance ? ["overview", "pending", "members", "activity", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
-    : ["overview", "history", "fund", "activity"];
-  const changeMode = (nextMode) => { setMode(nextMode); setTab("overview"); };
+  const openTab = (nextTab) => {
+    setMountedTabs((current) => {
+      if (current.has(nextTab)) return current;
+      const next = new Set(current);
+      next.add(nextTab);
+      return next;
+    });
+    loaderForTab(nextTab)?.();
+    setTab(nextTab);
+  };
+
+  const changeMode = (nextMode) => {
+    setMode(nextMode);
+    setTab("overview");
+    setMountedTabs(new Set(["overview"]));
+  };
+
+  const renderPage = (page) => {
+    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} />;
+    if (page === "pending" && canFinance) return <PendingApprovals />;
+    if (page === "members" && adminView) return <Members isAdmin admin={me.admin} />;
+    if (page === "history" && memberView) return <MyHistory member={me.member} />;
+    if (page === "fund" && memberView) return <FundView />;
+    if (page === "activity") return <Activity isAdmin={adminView} canFinance={canFinance} />;
+    if (page === "reports" && adminView) return <Reports setTab={openTab} />;
+    if (page === "meetings" && adminView) return <Meetings />;
+    if (page === "settings" && adminView) return <Settings admin={me.admin} />;
+    return null;
+  };
 
   return (
     <Shell isAdmin={isAdmin} isMember={isMember} mode={mode} me={me}>
@@ -59,21 +132,17 @@ export default function App() {
       )}
       <div className="sans" style={{ flexShrink: 0, display: "flex", gap: 18, padding: "0 20px", marginTop: 18, overflowX: "auto" }}>
         {tabs.map((t) => (
-          <button key={t} onClick={() => setTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "#1F3D2B" : "#7A8078", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid #C98A4B" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
+          <button key={t} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "#1F3D2B" : "#7A8078", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid #C98A4B" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>
-        <Suspense fallback={<Center>Loading…</Center>}>
-          {tab === "overview" && <Overview isAdmin={adminView} canFinance={canFinance} setTab={setTab} bootstrapSummary={bootstrapSummary} />}
-          {tab === "pending" && canFinance && <PendingApprovals />}
-          {tab === "members" && adminView && <Members isAdmin admin={me.admin} />}
-          {tab === "history" && memberView && <MyHistory member={me.member} />}
-          {tab === "fund" && memberView && <FundView />}
-          {tab === "activity" && <Activity isAdmin={adminView} canFinance={canFinance} />}
-          {tab === "reports" && adminView && <Reports setTab={setTab} />}
-          {tab === "meetings" && adminView && <Meetings />}
-          {tab === "settings" && adminView && <Settings admin={me.admin} />}
-        </Suspense>
+        {tabs.filter((page) => mountedTabs.has(page)).map((page) => (
+          <div key={`${mode}:${page}`} style={{ display: tab === page ? "block" : "none" }} aria-hidden={tab !== page}>
+            <Suspense fallback={tab === page ? <Center>Loading…</Center> : null}>
+              {renderPage(page)}
+            </Suspense>
+          </div>
+        ))}
       </div>
     </Shell>
   );
@@ -86,7 +155,6 @@ function modeButton(active) {
 function Shell({ children, isAdmin, isMember, mode, me }) {
   return (
     <div style={{ fontFamily: "'Fraunces','Georgia',serif", background: "#F7F5EF", height: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column", color: "#1F2A22" }}>
-
       <div className="sans" style={{ flexShrink: 0, background: "#17212B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", fontSize: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}><ChevronLeft size={18} /><span style={{ fontWeight: 600 }}>Fund Bot</span></div>
         {me && <div style={{ opacity: 0.75, fontSize: 12 }}>{isAdmin && isMember ? (mode === "admin" ? "Admin View" : "My Account") : isAdmin ? "Admin" : "Member"}</div>}
