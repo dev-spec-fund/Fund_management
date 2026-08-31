@@ -41,6 +41,17 @@ settingsRoute.post("/admins", requireSuperAdmin, async(c)=>{
   await auditEntity(c.env,admin.id,"admin_created","admin",Number(r.meta.last_row_id),null,{telegram_id:tg,name,role}); return c.json({ok:true,id:r.meta.last_row_id},201);
 });
 
+
+settingsRoute.post("/admins/promote-member", requireSuperAdmin, async(c)=>{
+  const admin=c.get("admin")!; const b=await c.req.json<any>(); const memberId=Number(b.member_id); const role=b.role||"treasurer";
+  if(!["super_admin","treasurer","viewer"].includes(role))return c.json({error:"Invalid role"},400);
+  const member=await c.env.DB.prepare("SELECT id,name,telegram_id FROM members WHERE id=? AND COALESCE(active,1)=1").bind(memberId).first<any>();
+  if(!member)return c.json({error:"Active member not found"},404); if(!member.telegram_id)return c.json({error:"This member must link Telegram before being promoted"},409);
+  const existing=await c.env.DB.prepare("SELECT * FROM admins WHERE telegram_id=?").bind(member.telegram_id).first<any>();
+  if(existing){ await c.env.DB.prepare("UPDATE admins SET name=?,role=?,active=1,deactivated_at=NULL,deactivated_by=NULL WHERE id=?").bind(member.name,role,existing.id).run(); await auditEntity(c.env,admin.id,"member_promoted_to_admin","member",memberId,existing,{...existing,name:member.name,role,active:1}); return c.json({ok:true,id:existing.id}); }
+  const r=await c.env.DB.prepare("INSERT INTO admins(telegram_id,name,role,active) VALUES(?,?,?,1)").bind(member.telegram_id,member.name,role).run(); await auditEntity(c.env,admin.id,"member_promoted_to_admin","member",memberId,null,{admin_id:r.meta.last_row_id,role}); return c.json({ok:true,id:r.meta.last_row_id},201);
+});
+
 async function activeSuperCount(c:any, excludeId?:number){
   const q=excludeId?c.env.DB.prepare("SELECT COUNT(*) n FROM admins WHERE id!=? AND COALESCE(active,1)=1 AND role IN ('owner','super_admin')").bind(excludeId):c.env.DB.prepare("SELECT COUNT(*) n FROM admins WHERE COALESCE(active,1)=1 AND role IN ('owner','super_admin')");
   const row=await q.first<{n:number}>(); return Number(row?.n||0);

@@ -104,5 +104,20 @@ expensesRoute.delete("/:id", requireFinance, async(c)=>{
   await auditEntity(c.env,admin.id,"expense_voided","expense",id,before,after); return c.json({ok:true});
 });
 
-expensesRoute.get("/categories", requireAdmin, async(c)=>c.json((await c.env.DB.prepare("SELECT * FROM expense_categories ORDER BY name").all()).results));
+expensesRoute.get("/categories", requireAdmin, async(c)=>{ await ensureOperationalSchema(c.env); return c.json((await c.env.DB.prepare("SELECT *, COALESCE(active,1) active FROM expense_categories ORDER BY COALESCE(active,1) DESC, name").all()).results); });
 expensesRoute.post("/categories", requireFinance, async(c)=>{const admin=c.get("admin")!;const b=await c.req.json<any>();const name=boundedText(b.name,100,true);if(!name)return c.json({error:'Valid category name required'},400);await c.env.DB.prepare("INSERT OR IGNORE INTO expense_categories(name) VALUES(?)").bind(name).run();await auditEntity(c.env,admin.id,"expense_category_created","expense_category",name,null,{name});return c.json({ok:true},201);});
+
+expensesRoute.patch("/categories/:id", requireFinance, async(c)=>{
+  const admin=c.get("admin")!; const id=Number(c.req.param("id")); const b=await c.req.json<any>();
+  const before=await c.env.DB.prepare("SELECT * FROM expense_categories WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:"Category not found"},404);
+  const name=b.name===undefined?before.name:boundedText(b.name,100,true); if(!name)return c.json({error:"Valid category name required"},400);
+  const active=b.active===undefined?Number(before.active??1):(b.active?1:0);
+  try{await c.env.DB.prepare("UPDATE expense_categories SET name=?,active=? WHERE id=?").bind(name,active,id).run();}catch{return c.json({error:"A category with this name already exists"},409);}
+  const after=await c.env.DB.prepare("SELECT * FROM expense_categories WHERE id=?").bind(id).first<any>(); await auditEntity(c.env,admin.id,"expense_category_updated","expense_category",id,before,after); return c.json({ok:true});
+});
+expensesRoute.delete("/categories/:id", requireFinance, async(c)=>{
+  const admin=c.get("admin")!; const id=Number(c.req.param("id")); const before=await c.env.DB.prepare("SELECT * FROM expense_categories WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:"Category not found"},404);
+  const used=await c.env.DB.prepare("SELECT COUNT(*) n FROM expenses WHERE category_id=?").bind(id).first<any>();
+  if(Number(used?.n||0)>0){ await c.env.DB.prepare("UPDATE expense_categories SET active=0 WHERE id=?").bind(id).run(); await auditEntity(c.env,admin.id,"expense_category_deactivated","expense_category",id,before,{...before,active:0}); return c.json({ok:true,deactivated:true}); }
+  await c.env.DB.prepare("DELETE FROM expense_categories WHERE id=?").bind(id).run(); await auditEntity(c.env,admin.id,"expense_category_deleted","expense_category",id,before,null); return c.json({ok:true,deleted:true});
+});

@@ -82,6 +82,7 @@ export async function ensureOperationalSchema(env: Env) {
   await addColumn(env, "expenses", "voided_by", "INTEGER REFERENCES admins(id)");
   await addColumn(env, "expenses", "voided_at", "TEXT");
   await addColumn(env, "expenses", "void_reason", "TEXT");
+  await addColumn(env, "expense_categories", "active", "INTEGER NOT NULL DEFAULT 1");
 
   await env.DB.prepare("INSERT OR IGNORE INTO settings (key,value) VALUES ('expense_approval_threshold','5000')").run();
   await env.DB.prepare("INSERT OR IGNORE INTO settings (key,value) VALUES ('mini_app_url','https://fund-management.pages.dev')").run();

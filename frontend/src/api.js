@@ -45,6 +45,8 @@ export const api = {
     reject: (id) => request(`/api/expenses/${id}/reject`, { method: "POST" }),
     categories: () => request("/api/expenses/categories"),
     addCategory: (name) => request("/api/expenses/categories", { method: "POST", body: JSON.stringify({ name }) }),
+    updateCategory: (id, data) => request(`/api/expenses/categories/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    removeCategory: (id) => request(`/api/expenses/categories/${id}`, { method: "DELETE" }),
   },
 
   donations: {
@@ -66,6 +68,7 @@ export const api = {
     update: (data) => request("/api/settings", { method: "PATCH", body: JSON.stringify(data) }),
     admins: () => request("/api/settings/admins"),
     addAdmin: (data) => request("/api/settings/admins", { method: "POST", body: JSON.stringify(data) }),
+    promoteMember: (member_id, role) => request("/api/settings/admins/promote-member", { method: "POST", body: JSON.stringify({ member_id, role }) }),
     removeAdmin: (id) => request(`/api/settings/admins/${id}`, { method: "DELETE" }),
     updateAdmin: (id, data) => request(`/api/settings/admins/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     auditLog: () => request("/api/settings/audit-log"),

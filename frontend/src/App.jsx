@@ -1814,6 +1814,10 @@ function Settings({ admin }) {
   const [errors,setErrors]=useState([]);
   const [message,setMessage]=useState("");
   const [settingsSection,setSettingsSection]=useState("general");
+  const [categories,setCategories]=useState([]);
+  const [membersForAdmin,setMembersForAdmin]=useState([]);
+  const [promoteMemberId,setPromoteMemberId]=useState("");
+  const [promoteRole,setPromoteRole]=useState("treasurer");
 
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
   const superAdmin = role === "super_admin";
@@ -1824,6 +1828,8 @@ function Settings({ admin }) {
     api.settings.get().then(setSettings).catch(()=>{});
     api.settings.admins().then(setAdmins).catch(()=>{});
     api.settings.auditLog().then(setAudit).catch(()=>{});
+    api.expenses.categories().then(setCategories).catch(()=>{});
+    if(superAdmin) api.members.list().then(setMembersForAdmin).catch(()=>{});
     api.admin.health().then(setHealth).catch(()=>{});
     api.admin.monthClosures().then(setClosures).catch(()=>{});
     if(superAdmin) api.admin.errors().then(setErrors).catch(()=>{});
@@ -1875,6 +1881,27 @@ function Settings({ admin }) {
     </div>
 
     {settingsSection==="general" && <>
+      <SectionTitle>MEMBER CONTRIBUTIONS</SectionTitle>
+      <div style={cardStyle}>
+        <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:5}}>Default monthly contribution</div>
+        <div style={{display:"flex",alignItems:"center",border:"1px solid #D9D3C4",borderRadius:8,background:"#fff"}}>
+          <span className="sans" style={{paddingLeft:11,fontSize:12,color:"#8A9086"}}>MVR</span>
+          <input disabled={!superAdmin} type="number" value={settings.default_monthly_amount||250} onChange={e=>setSettings({...settings,default_monthly_amount:e.target.value})} onBlur={e=>superAdmin&&saveSetting("default_monthly_amount",e.target.value)} className="sans" style={{flex:1,border:0,outline:"none",padding:"9px 11px",fontSize:14,background:"transparent"}}/>
+        </div>
+        <div className="sans" style={{fontSize:10,color:"#9A9384",marginTop:6}}>Used automatically for new members. Existing member amounts are not changed.</div>
+      </div>
+
+      <SectionTitle>EXPENSE CATEGORIES</SectionTitle>
+      <div style={cardStyle}>
+        {categories.map(cat=><div key={cat.id} className="sans" style={{display:"flex",alignItems:"center",gap:7,padding:"8px 0",borderBottom:"1px solid #F0EDE3",opacity:Number(cat.active)===0?.55:1}}>
+          <span style={{flex:1,fontSize:12,fontWeight:600}}>{cat.name}{Number(cat.active)===0?" · Inactive":""}</span>
+          {financeAdmin&&<><button style={compactBtn} onClick={async()=>{const name=prompt("Category name",cat.name);if(!name||name===cat.name)return;try{await api.expenses.updateCategory(cat.id,{name});load()}catch(e){setMessage(e.message)}}}>Edit</button>
+          <button style={compactBtn} onClick={async()=>{try{await api.expenses.updateCategory(cat.id,{active:Number(cat.active)===0});load()}catch(e){setMessage(e.message)}}}>{Number(cat.active)===0?"Activate":"Deactivate"}</button>
+          <button style={{...compactBtn,color:"#A6432F"}} onClick={async()=>{if(!confirm(`Delete ${cat.name}? If it has historical expenses it will be deactivated instead.`))return;try{await api.expenses.removeCategory(cat.id);load()}catch(e){setMessage(e.message)}}}>Delete</button></>}
+        </div>)}
+        {financeAdmin&&<button style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=prompt("New expense category name");if(!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}>+ Add category</button>}
+      </div>
+
       <SectionTitle>PAYMENT REMINDERS</SectionTitle>
       <div style={cardStyle}>
         <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}}>
@@ -1954,6 +1981,17 @@ function Settings({ admin }) {
 
     {settingsSection==="admins" && <>
       <SectionTitle>ADMINS & ROLES</SectionTitle>
+      {superAdmin&&<div style={{...cardStyle,marginBottom:12}}>
+        <div className="sans" style={{fontSize:13,fontWeight:700,color:"#1F3D2B",marginBottom:4}}>Promote existing member</div>
+        <div className="sans" style={{fontSize:10,color:"#8A9086",marginBottom:9}}>The member keeps their member account and contribution obligations. Telegram must be linked.</div>
+        <select value={promoteMemberId} onChange={e=>setPromoteMemberId(e.target.value)} style={{width:"100%",border:"1px solid #D9D3C4",borderRadius:8,padding:9,background:"#fff",marginBottom:8}}>
+          <option value="">Select member…</option>{membersForAdmin.filter(m=>m.active!==0).map(m=><option key={m.id} value={m.id}>{m.name} · {m.member_code}{m.telegram_id?"":" · Telegram not linked"}</option>)}
+        </select>
+        <div style={{display:"flex",gap:8}}>
+          <select value={promoteRole} onChange={e=>setPromoteRole(e.target.value)} style={{flex:1,border:"1px solid #D9D3C4",borderRadius:8,padding:9,background:"#fff"}}><option value="super_admin">Super Admin</option><option value="treasurer">Treasurer</option><option value="viewer">Viewer</option></select>
+          <button disabled={!promoteMemberId} style={approveBtn} onClick={async()=>{const m=membersForAdmin.find(x=>String(x.id)===String(promoteMemberId));if(!confirm(`Promote ${m?.name||"this member"} to ${promoteRole.replace("_"," ")}?`))return;try{await api.settings.promoteMember(Number(promoteMemberId),promoteRole);setPromoteMemberId("");setMessage("Member promoted");load()}catch(e){setMessage(e.message)}}}>Promote</button>
+        </div>
+      </div>}
       <div style={cardStyle}>
         {admins.map(a=>{
           const displayRole=a.role==="owner"?"super_admin":a.role;

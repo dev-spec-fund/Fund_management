@@ -1,0 +1,1 @@
+ALTER TABLE expense_categories ADD COLUMN active INTEGER NOT NULL DEFAULT 1;
