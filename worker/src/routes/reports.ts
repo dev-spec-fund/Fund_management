@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import type { Env } from "../types";
+import type { AppEnv } from "../types";
 import { requireAdmin } from "../auth";
 
-export const reportsRoute = new Hono<{ Bindings: Env }>();
+export const reportsRoute = new Hono<AppEnv>();
 
 /** Combined activity feed: contributions (approved) + expenses + donations, newest first. */
 reportsRoute.get("/activity", async (c) => {
@@ -138,17 +138,32 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
 
 /** 6-month trend for charts. */
 reportsRoute.get("/trend", requireAdmin, async (c) => {
-  const rows = await c.env.DB.prepare(`
-    WITH months AS (
-      SELECT strftime('%Y-%m', date('now', '-' || n || ' months')) as month
-      FROM (SELECT 0 n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5)
-    )
-    SELECT
-      months.month,
-      COALESCE((SELECT SUM(amount) FROM contributions WHERE status='approved' AND month = months.month), 0) +
-      COALESCE((SELECT SUM(amount) FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = months.month), 0) as income,
-      COALESCE((SELECT SUM(amount) FROM expenses WHERE COALESCE(status,'approved')='approved' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = months.month), 0) as expense
-    FROM months ORDER BY months.month
-  `).all();
-  return c.json(rows.results);
+  const now = new Date();
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (5 - i), 1));
+    return d.toISOString().slice(0, 7);
+  });
+
+  const rows = [];
+  for (const month of months) {
+    const contributionTotal = await c.env.DB.prepare(
+      "SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month = ?"
+    ).bind(month).first<{ total: number }>();
+
+    const donationTotal = await c.env.DB.prepare(
+      "SELECT COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = ?"
+    ).bind(month).first<{ total: number }>();
+
+    const expenseTotal = await c.env.DB.prepare(
+      "SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = ?"
+    ).bind(month).first<{ total: number }>();
+
+    rows.push({
+      month,
+      income: Number(contributionTotal?.total || 0) + Number(donationTotal?.total || 0),
+      expense: Number(expenseTotal?.total || 0),
+    });
+  }
+
+  return c.json(rows);
 });

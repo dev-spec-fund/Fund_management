@@ -22,6 +22,14 @@ export type Member = {
 export type AdminRole = "owner" | "super_admin" | "treasurer" | "viewer";
 export type Admin = { id:number; telegram_id:string; name:string; role:AdminRole; };
 
+export type AppEnv = {
+  Bindings: Env;
+  Variables: {
+    telegramUser: any;
+    admin: Admin | null;
+  };
+};
+
 export type Contribution = {
   id:number; txn_id:string; member_id:number; amount:number; month:string;
   ref_number:string|null; bank_date:string|null; status:"pending"|"approved"|"rejected"|"voided";

@@ -1,7 +1,33 @@
 import type { Context, Next } from "hono";
-import type { Env } from "./types";
+import type { AppEnv } from "./types";
 import { getAdminByTelegramId } from "./db";
 import { adminCan } from "./ops";
+
+const LOCAL_DEV_TELEGRAM_ID = "999000";
+
+async function useLocalDevAuth(c: Context<AppEnv>, next: Next) {
+  await c.env.DB.prepare(`
+    INSERT INTO admins (telegram_id, name, role)
+    VALUES (?, 'Local Dev Admin', 'super_admin')
+    ON CONFLICT(telegram_id) DO UPDATE SET name = excluded.name, role = excluded.role
+  `).bind(LOCAL_DEV_TELEGRAM_ID).run();
+
+  await c.env.DB.prepare(`
+    INSERT OR IGNORE INTO members (member_code, telegram_id, name, phone, monthly_amount)
+    VALUES ('M0000', ?, 'Local Dev Member', '000', 250)
+  `).bind(LOCAL_DEV_TELEGRAM_ID).run();
+
+  const user = {
+    id: Number(LOCAL_DEV_TELEGRAM_ID),
+    first_name: "Local",
+    last_name: "Dev",
+    username: "local_dev",
+  };
+
+  c.set("telegramUser", user);
+  c.set("admin", await getAdminByTelegramId(c.env, LOCAL_DEV_TELEGRAM_ID));
+  await next();
+}
 
 /**
  * Verifies Telegram WebApp initData (HMAC-SHA256 per Telegram's spec) and
@@ -12,8 +38,11 @@ import { adminCan } from "./ops";
  * different treatment of that field, so we verify the current form first
  * (without `signature`) and retain a compatibility check that includes it.
  */
-export async function telegramAuth(c: Context<{ Bindings: Env }>, next: Next) {
+export async function telegramAuth(c: Context<AppEnv>, next: Next) {
   const initData = c.req.header("X-Telegram-Init-Data");
+  const hostname = new URL(c.req.url).hostname;
+  const localDevHost = hostname === "127.0.0.1" || hostname === "localhost";
+  if (!initData && localDevHost) return useLocalDevAuth(c, next);
   if (!initData) return c.json({ error: "Missing Telegram auth" }, 401);
 
   const params = new URLSearchParams(initData);
@@ -96,25 +125,25 @@ export async function telegramAuth(c: Context<{ Bindings: Env }>, next: Next) {
   await next();
 }
 
-export function requireAdmin(c: Context<any>, next: Next) {
+export function requireAdmin(c: Context<AppEnv>, next: Next) {
   const admin = c.get("admin");
   if (!admin) return c.json({ error: "Admin access required" }, 403);
   return next();
 }
 
-export function requireOwner(c: Context<any>, next: Next) {
+export function requireOwner(c: Context<AppEnv>, next: Next) {
   const admin = c.get("admin");
   if (!admin || (admin.role !== "owner" && admin.role !== "super_admin")) return c.json({ error: "Owner access required" }, 403);
   return next();
 }
 
-export function requireFinance(c: Context<any>, next: Next) {
+export function requireFinance(c: Context<AppEnv>, next: Next) {
   const admin = c.get("admin");
   if (!adminCan(admin, "finance")) return c.json({ error: "Treasurer or Super Admin access required" }, 403);
   return next();
 }
 
-export function requireSuperAdmin(c: Context<any>, next: Next) {
+export function requireSuperAdmin(c: Context<AppEnv>, next: Next) {
   const admin = c.get("admin");
   if (!adminCan(admin, "manage_admins")) return c.json({ error: "Super Admin access required" }, 403);
   return next();

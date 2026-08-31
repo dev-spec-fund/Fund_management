@@ -1,10 +1,10 @@
 import { Hono } from "hono";
-import type { Env } from "../types";
+import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance } from "../auth";
 import { generateTxnId, getSetting } from "../db";
 import { auditEntity, ensureOperationalSchema, requireOpenMonth } from "../ops";
 
-export const expensesRoute = new Hono<{ Bindings: Env }>();
+export const expensesRoute = new Hono<AppEnv>();
 
 expensesRoute.get("/", requireAdmin, async (c) => {
   await ensureOperationalSchema(c.env);
@@ -17,7 +17,7 @@ expensesRoute.get("/", requireAdmin, async (c) => {
 
 expensesRoute.post("/", requireFinance, async (c) => {
   await ensureOperationalSchema(c.env);
-  const admin=c.get("admin");
+  const admin=c.get("admin")!;
   const body=await c.req.json<{description:string;category_id?:number;amount:number;month?:string}>();
   if(!body.description?.trim()||!Number.isFinite(Number(body.amount))||Number(body.amount)<=0) return c.json({error:"Description and valid amount are required"},400);
   const month=body.month||new Date().toISOString().slice(0,7);
@@ -35,7 +35,7 @@ expensesRoute.post("/", requireFinance, async (c) => {
 });
 
 expensesRoute.post("/:id/approve", requireFinance, async(c)=>{
-  const admin=c.get("admin"); const id=Number(c.req.param("id"));
+  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
   if(!before) return c.json({error:"Not found"},404);
   if(before.status!=="pending") return c.json({error:`Already ${before.status}`},409);
@@ -48,7 +48,7 @@ expensesRoute.post("/:id/approve", requireFinance, async(c)=>{
 });
 
 expensesRoute.post("/:id/reject", requireFinance, async(c)=>{
-  const admin=c.get("admin"); const id=Number(c.req.param("id"));
+  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
   if(!before)return c.json({error:"Not found"},404);
   if(before.status!=="pending")return c.json({error:`Already ${before.status}`},409);
@@ -59,7 +59,7 @@ expensesRoute.post("/:id/reject", requireFinance, async(c)=>{
 });
 
 expensesRoute.patch("/:id", requireFinance, async (c) => {
-  const admin=c.get("admin"); const id=Number(c.req.param("id")); const body=await c.req.json<any>();
+  const admin=c.get("admin")!; const id=Number(c.req.param("id")); const body=await c.req.json<any>();
   const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
   if(!before)return c.json({error:"Not found"},404); if(before.status==='voided')return c.json({error:"Voided expenses cannot be edited"},409);
   const month=body.month??before.transaction_month??before.created_at.slice(0,7); try{await requireOpenMonth(c.env,month);}catch(e:any){return c.json({error:e.message},409);}
@@ -70,7 +70,7 @@ expensesRoute.patch("/:id", requireFinance, async (c) => {
 });
 
 expensesRoute.delete("/:id", requireFinance, async(c)=>{
-  const admin=c.get("admin"); const id=Number(c.req.param("id")); const body=await c.req.json().catch(()=>({})) as any;
+  const admin=c.get("admin")!; const id=Number(c.req.param("id")); const body=await c.req.json().catch(()=>({})) as any;
   const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:"Not found"},404);
   const month=before.transaction_month||before.created_at.slice(0,7); try{await requireOpenMonth(c.env,month);}catch(e:any){return c.json({error:e.message},409);}
   await c.env.DB.prepare("UPDATE expenses SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason=? WHERE id=?")
@@ -79,4 +79,4 @@ expensesRoute.delete("/:id", requireFinance, async(c)=>{
 });
 
 expensesRoute.get("/categories", requireAdmin, async(c)=>c.json((await c.env.DB.prepare("SELECT * FROM expense_categories ORDER BY name").all()).results));
-expensesRoute.post("/categories", requireFinance, async(c)=>{const admin=c.get("admin");const b=await c.req.json<{name:string}>();await c.env.DB.prepare("INSERT OR IGNORE INTO expense_categories(name) VALUES(?)").bind(b.name.trim()).run();await auditEntity(c.env,admin.id,"expense_category_created","expense_category",b.name,null,b);return c.json({ok:true},201);});
+expensesRoute.post("/categories", requireFinance, async(c)=>{const admin=c.get("admin")!;const b=await c.req.json<{name:string}>();await c.env.DB.prepare("INSERT OR IGNORE INTO expense_categories(name) VALUES(?)").bind(b.name.trim()).run();await auditEntity(c.env,admin.id,"expense_category_created","expense_category",b.name,null,b);return c.json({ok:true},201);});

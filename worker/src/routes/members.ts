@@ -1,10 +1,10 @@
 import { Hono } from "hono";
-import type { Env } from "../types";
+import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance } from "../auth";
 import { logAudit, generateMemberCode } from "../db";
 import { auditEntity, ensureOperationalSchema, findDuplicateMembers, requireOpenMonth } from "../ops";
 
-export const membersRoute = new Hono<{ Bindings: Env }>();
+export const membersRoute = new Hono<AppEnv>();
 
 membersRoute.get("/", requireAdmin, async (c) => {
   await ensureOperationalSchema(c.env);
@@ -64,7 +64,7 @@ membersRoute.get("/:id/statement", requireAdmin, async (c) => {
 });
 
 membersRoute.post("/", requireFinance, async (c) => {
-  const admin = c.get("admin");
+  const admin = c.get("admin")!;
   const body = await c.req.json<{ name: string; phone?: string; monthly_amount?: number; telegram_id?:string }>();
   const duplicates = await findDuplicateMembers(c.env, body.name, body.phone, body.telegram_id);
   if (duplicates.length) return c.json({error:"Possible duplicate member",duplicates},409);
@@ -77,7 +77,7 @@ membersRoute.post("/", requireFinance, async (c) => {
 });
 
 membersRoute.patch("/:id", requireFinance, async (c) => {
-  const admin = c.get("admin"); const id = Number(c.req.param("id"));
+  const admin = c.get("admin")!; const id = Number(c.req.param("id"));
   const body = await c.req.json<{ name?: string; phone?: string; monthly_amount?: number; active?: number; telegram_id?:string|null }>();
   const before = await c.env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(id).first<any>();
   if (!before) return c.json({ error: "Not found" }, 404);
@@ -91,7 +91,7 @@ membersRoute.patch("/:id", requireFinance, async (c) => {
 });
 
 membersRoute.post("/:id/exempt", requireFinance, async (c) => {
-  const admin = c.get("admin"); const id = c.req.param("id");
+  const admin = c.get("admin")!; const id = c.req.param("id");
   const body = await c.req.json<{ month: string; reason?: string }>();
   try { await requireOpenMonth(c.env,body.month); } catch(e:any){ return c.json({error:e.message},409); }
   await c.env.DB.prepare("INSERT OR REPLACE INTO exemptions (member_id,month,reason,granted_by) VALUES (?,?,?,?)")

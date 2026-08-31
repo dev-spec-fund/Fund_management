@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import type { Env } from "./types";
+import type { AppEnv, Env } from "./types";
 import { telegramAuth } from "./auth";
 import { handleUpdate } from "./bot";
 import { runScheduled } from "./scheduled";
@@ -12,7 +12,7 @@ import { settingsRoute } from "./routes/settings";
 import { adminRoute } from "./routes/admin";
 import { ensureOperationalSchema, safeLogError } from "./ops";
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AppEnv>();
 
 app.use("/api/*", cors());
 
