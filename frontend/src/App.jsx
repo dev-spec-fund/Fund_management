@@ -735,25 +735,108 @@ function MyHistory({ member }) {
 }
 
 function FundView() {
+  const [month, setMonth] = useState(currentMonthValue());
   const [summary, setSummary] = useState(null);
-  useEffect(() => { api.reports.publicSummary().then(setSummary).catch(() => {}); }, []);
+  const [showAllCategories, setShowAllCategories] = useState(false);
+
+  useEffect(() => {
+    setSummary(null);
+    api.reports.publicSummary(month).then(setSummary).catch(() => setSummary({}));
+  }, [month]);
+
+  const shiftMonth = (delta) => {
+    const [y,m] = month.split("-").map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);
+  };
+
+  const monthLabel = (() => {
+    try {
+      const [y,m] = month.split("-").map(Number);
+      return new Intl.DateTimeFormat("en",{month:"long",year:"numeric"}).format(new Date(y,m-1,1));
+    } catch { return month; }
+  })();
+
   if (!summary) return <Center>Loading…</Center>;
+
+  const categories = summary.byCategory || [];
+  const visibleCategories = showAllCategories ? categories : categories.filter(c => Number(c.spent || 0) > 0);
+  const monthSpent = Number(summary.expenses || 0);
+  const totalReceived = Number(summary.totalReceived || 0);
+  const totalSpent = Number(summary.totalSpent || 0);
+  const recent = summary.recentActivity || [];
+
   return (
     <>
-      <div className="sans" style={{ display: "flex", alignItems: "center", gap: 6, background: "#EAF1EE", color: "#1F3D2B", fontSize: 12, borderRadius: 10, padding: "9px 12px", marginBottom: 14 }}>
-        <Eye size={13} /> Read-only — shared with all members for transparency
+      <div className="sans" style={{ display:"flex", alignItems:"center", gap:7, background:"#EAF1EE", color:"#1F3D2B", fontSize:12, borderRadius:10, padding:"9px 12px", marginBottom:14 }}>
+        <Eye size={13} /> Fund information is read-only and visible to all members
       </div>
-      <div style={{ background: "#1F3D2B", borderRadius: 16, padding: 22, color: "#F7F5EF", marginBottom: 14 }}>
-        <div className="sans" style={{ fontSize: 12, opacity: 0.6, letterSpacing: 1 }}>TOTAL FUND BALANCE</div>
-        <div style={{ fontSize: 34, fontWeight: 600, marginTop: 4 }}>MVR {fmt(summary.fundBalance)}</div>
+
+      <div style={{ background:"#1F3D2B", borderRadius:16, padding:22, color:"#F7F5EF", marginBottom:10 }}>
+        <div className="sans" style={{ fontSize:12, opacity:.6, letterSpacing:1 }}>TOTAL FUND BALANCE</div>
+        <div style={{ fontSize:34, fontWeight:600, marginTop:4 }}>MVR {fmt(summary.fundBalance)}</div>
       </div>
-      <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>SPENDING BY CATEGORY</div>
-      {(summary.byCategory || []).map((c, i) => (
-        <div key={i} style={{ display: "flex", justifyContent: "space-between", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 16px", marginBottom: 8 }}>
-          <span className="sans" style={{ fontSize: 14, fontWeight: 500 }}>{c.category}</span>
-          <span className="sans" style={{ fontSize: 14, fontWeight: 600, color: "#A6432F" }}>MVR {fmt(c.spent)}</span>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:18}}>
+        <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:13}}>
+          <div className="sans" style={{fontSize:10,color:"#8A9086"}}>TOTAL RECEIVED</div>
+          <div className="sans" style={{fontSize:15,fontWeight:700,color:"#3A6B3E",marginTop:3}}>MVR {fmt(totalReceived)}</div>
         </div>
-      ))}
+        <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:13}}>
+          <div className="sans" style={{fontSize:10,color:"#8A9086"}}>TOTAL SPENT</div>
+          <div className="sans" style={{fontSize:15,fontWeight:700,color:"#A6432F",marginTop:3}}>MVR {fmt(totalSpent)}</div>
+        </div>
+      </div>
+
+      <div className="sans" style={{fontSize:13,color:"#6B7268",marginBottom:8,fontWeight:700}}>SPENDING</div>
+      <div style={{display:"grid",gridTemplateColumns:"42px 1fr 42px",alignItems:"center",gap:8,marginBottom:10}}>
+        <button onClick={()=>shiftMonth(-1)} style={{...compactBtn,padding:8}}>‹</button>
+        <div className="sans" style={{textAlign:"center",background:"#fff",border:"1px solid #E9E4D8",borderRadius:10,padding:10,fontWeight:600}}>{monthLabel}</div>
+        <button onClick={()=>shiftMonth(1)} style={{...compactBtn,padding:8}}>›</button>
+      </div>
+
+      <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:"11px 14px",marginBottom:9,display:"flex",justifyContent:"space-between"}}>
+        <span className="sans" style={{fontSize:12,color:"#6B7268"}}>Total spent this month</span>
+        <b className="sans" style={{fontSize:13,color:"#A6432F"}}>MVR {fmt(monthSpent)}</b>
+      </div>
+
+      {visibleCategories.map((c, i) => {
+        const spent = Number(c.spent || 0);
+        const pct = monthSpent > 0 ? Math.round((spent / monthSpent) * 100) : 0;
+        return <div key={i} style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:"12px 14px",marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
+            <span className="sans" style={{fontSize:14,fontWeight:500}}>{c.category}</span>
+            <span className="sans" style={{fontSize:14,fontWeight:700,color:"#A6432F"}}>MVR {fmt(spent)}</span>
+          </div>
+          {spent > 0 && <div className="sans" style={{fontSize:10,color:"#9A9384",marginTop:4}}>{pct}% of this month's expenses</div>}
+        </div>;
+      })}
+
+      {visibleCategories.length === 0 &&
+        <div className="sans" style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:14,color:"#8A9086",fontSize:12,marginBottom:8}}>
+          No spending recorded for {monthLabel}.
+        </div>}
+
+      {categories.some(c => Number(c.spent || 0) === 0) &&
+        <button onClick={()=>setShowAllCategories(!showAllCategories)} className="sans"
+          style={{width:"100%",border:0,background:"transparent",color:"#6B7268",fontSize:11,fontWeight:600,padding:"6px 0 16px",cursor:"pointer"}}>
+          {showAllCategories ? "Hide zero-value categories" : "View all categories"}
+        </button>}
+
+      <div className="sans" style={{fontSize:13,color:"#6B7268",marginBottom:8,fontWeight:700}}>RECENT FUND ACTIVITY</div>
+      {recent.map((a,i) => {
+        const incoming = a.kind === "contribution" || a.kind === "donation";
+        return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:"11px 13px",marginBottom:7}}>
+          <div style={{minWidth:0}}>
+            <div className="sans" style={{fontSize:12,fontWeight:600}}>{a.label}</div>
+            <div className="sans" style={{fontSize:10,color:"#9A9384",marginTop:2}}>{a.event_at ? formatLocalDateTime(a.event_at) : ""}</div>
+          </div>
+          <div className="sans" style={{fontSize:13,fontWeight:700,color:incoming?"#3A6B3E":"#A6432F",whiteSpace:"nowrap"}}>
+            {incoming ? "+" : "−"} MVR {fmt(a.amount)}
+          </div>
+        </div>;
+      })}
+      {recent.length === 0 && <div className="sans" style={{fontSize:12,color:"#8A9086"}}>No fund activity yet.</div>}
     </>
   );
 }
