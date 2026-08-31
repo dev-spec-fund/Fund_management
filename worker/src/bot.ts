@@ -22,7 +22,7 @@ import {
   ensureMemberRegistrationTable,
   findUnlinkedMemberMatches,
 } from "./db";
-import { adminCan, consumeRateLimit, duplicateSlip, requireOpenMonth, safeLogError } from "./ops";
+import { adminCan, consumeRateLimit, duplicateSlip, normalizeName, normalizePhone, requireOpenMonth, safeLogError } from "./ops";
 
 const DEFAULT_MINI_APP_URL = "https://fund-management.pages.dev";
 let cachedMiniAppUrl: { value: string; expiresAt: number } | null = null;
@@ -416,8 +416,8 @@ async function handleCallback(env: Env, callback: any) {
       const defaultMonthly = Number(await getSetting(env, "default_monthly_amount")) || 250;
       const displayName = [callback.from.first_name, callback.from.last_name].filter(Boolean).join(" ") || admin.name;
       const insert = await env.DB.prepare(
-        "INSERT INTO members (member_code, telegram_id, name, monthly_amount) VALUES (?, ?, ?, ?)"
-      ).bind(memberCode, telegramId, displayName, defaultMonthly).run();
+        "INSERT INTO members (member_code, telegram_id, name, monthly_amount, normalized_name, normalized_phone) VALUES (?, ?, ?, ?, ?, NULL)"
+      ).bind(memberCode, telegramId, displayName, defaultMonthly, normalizeName(displayName)).run();
       member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(insert.meta.last_row_id).first<any>();
       await logAudit(env, admin.id, "self_register_admin_as_member", `${member.member_code} — ${member.name}`);
     }
@@ -461,8 +461,8 @@ async function handleCallback(env: Env, callback: any) {
       const memberCode = await generateMemberCode(env);
       const defaultMonthly = Number(await getSetting(env, "default_monthly_amount")) || 250;
       const insert = await env.DB.prepare(
-        "INSERT INTO members (member_code, telegram_id, name, monthly_amount) VALUES (?, ?, ?, ?)"
-      ).bind(memberCode, request.telegram_id, request.name, defaultMonthly).run();
+        "INSERT INTO members (member_code, telegram_id, name, monthly_amount, normalized_name, normalized_phone) VALUES (?, ?, ?, ?, ?, NULL)"
+      ).bind(memberCode, request.telegram_id, request.name, defaultMonthly, normalizeName(request.name)).run();
       member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(insert.meta.last_row_id).first<any>();
     }
 

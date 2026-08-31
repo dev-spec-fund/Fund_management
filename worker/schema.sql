@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS members (
   telegram_id TEXT UNIQUE,
   name TEXT NOT NULL,
   phone TEXT,
+  normalized_name TEXT,
+  normalized_phone TEXT,
   monthly_amount REAL NOT NULL DEFAULT 250,
   active INTEGER NOT NULL DEFAULT 1,
   joined_at TEXT NOT NULL DEFAULT (date('now')),
@@ -238,7 +240,7 @@ CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(meeting_date, meeting_t
 CREATE INDEX IF NOT EXISTS idx_meeting_rsvps_meeting ON meeting_rsvps(meeting_id);
 
 
--- Schema migration ledger. Fresh databases created from schema.sql are current through v9.
+-- Schema migration ledger. Fresh databases created from schema.sql are current through v10.
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -252,3 +254,15 @@ INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (6,'meeting_managem
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (7,'meeting_notification_tracking');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (8,'expense_category_management');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (9,'hardening_and_schema_versioning');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (10,'performance_and_normalized_members');
+
+CREATE INDEX IF NOT EXISTS idx_members_normalized_name ON members(normalized_name);
+CREATE INDEX IF NOT EXISTS idx_members_normalized_phone ON members(normalized_phone);
+CREATE INDEX IF NOT EXISTS idx_allocations_member_month_contribution ON contribution_allocations(member_id,month,contribution_id);
+CREATE INDEX IF NOT EXISTS idx_allocations_month_contribution ON contribution_allocations(month,contribution_id);
+CREATE INDEX IF NOT EXISTS idx_exemptions_member_month ON exemptions(member_id,month);
+CREATE INDEX IF NOT EXISTS idx_month_closures_month ON month_closures(month);
+CREATE INDEX IF NOT EXISTS idx_expenses_status_transaction_month_category ON expenses(status,transaction_month,category_id);
+CREATE INDEX IF NOT EXISTS idx_donations_status_transaction_month ON donations(status,transaction_month);
+CREATE INDEX IF NOT EXISTS idx_meeting_rsvps_meeting_member ON meeting_rsvps(meeting_id,member_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_status_date ON meetings(status,meeting_date);

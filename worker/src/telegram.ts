@@ -332,3 +332,39 @@ export async function ocrSlip(
     raw: JSON.stringify({ amount: local.amount, ref: local.ref, date }),
   };
 }
+
+
+export type BatchMessage = {
+  chatId: string | number;
+  text: string;
+  extra?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+};
+
+/**
+ * Sends Telegram messages with bounded concurrency so bulk reminders/invitations
+ * do not serialize one-by-one or create an unbounded Promise.all burst.
+ */
+export async function sendInBatches(
+  env: Env,
+  messages: BatchMessage[],
+  concurrency = 6
+): Promise<{ sent: number; failed: number; failures: Array<{ message: BatchMessage; error: unknown }> }> {
+  const queue = [...messages];
+  let sent = 0;
+  const failures: Array<{ message: BatchMessage; error: unknown }> = [];
+  const workers = Array.from({ length: Math.max(1, Math.min(10, concurrency)) }, async () => {
+    while (queue.length) {
+      const message = queue.shift();
+      if (!message) break;
+      try {
+        await sendMessage(env, message.chatId, message.text, message.extra || {});
+        sent++;
+      } catch (error) {
+        failures.push({ message, error });
+      }
+    }
+  });
+  await Promise.all(workers);
+  return { sent, failed: failures.length, failures };
+}

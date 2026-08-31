@@ -22,7 +22,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 9;
+const REQUIRED_SCHEMA_VERSION = 10;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -33,6 +33,7 @@ export async function ensureOperationalSchema(env: Env) {
     }
     const checks:[string,string[]][] = [
       ["admins", ["active","deactivated_at","deactivated_by"]],
+      ["members", ["normalized_name","normalized_phone"]],
       ["contributions", ["bank_date","corrected_by","corrected_at","voided_by","voided_at","void_reason"]],
       ["donations", ["member_id","transaction_month","status","voided_by","voided_at","void_reason"]],
       ["expenses", ["transaction_month","status","approval_required","approved_by","approved_at","voided_by","voided_at","void_reason"]],
@@ -101,12 +102,16 @@ export async function duplicateSlip(env: Env, ref: string | null, amount: number
 }
 
 export async function findDuplicateMembers(env: Env, name?: string | null, phone?: string | null, telegramId?: string | null, excludeId?: number) {
-  const all = await env.DB.prepare("SELECT id,member_code,name,phone,telegram_id,active FROM members").all<any>();
-  const nn = normalizeName(name); const np = normalizePhone(phone); const tg = String(telegramId || "");
-  return all.results.filter((m: any) => {
-    if (excludeId && Number(m.id) === Number(excludeId)) return false;
-    return (tg && String(m.telegram_id || "") === tg) || (np && normalizePhone(m.phone) === np) || (nn && normalizeName(m.name) === nn);
-  }).slice(0,10);
+  const nn=normalizeName(name), np=normalizePhone(phone), tg=String(telegramId||"").trim();
+  if(!nn && !np && !tg) return [];
+  const clauses:string[]=[]; const values:any[]=[];
+  if(tg){clauses.push("telegram_id=?");values.push(tg);}
+  if(np){clauses.push("normalized_phone=?");values.push(np);}
+  if(nn){clauses.push("normalized_name=?");values.push(nn);}
+  let sql=`SELECT id,member_code,name,phone,telegram_id,active FROM members WHERE (${clauses.join(" OR ")})`;
+  if(excludeId){sql+=" AND id<>?";values.push(excludeId);}
+  sql+=" ORDER BY active DESC,name LIMIT 10";
+  return (await env.DB.prepare(sql).bind(...values).all<any>()).results;
 }
 
 const AUDIT_SENSITIVE_KEYS = new Set([

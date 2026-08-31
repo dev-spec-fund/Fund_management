@@ -1,26 +1,36 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance, requireSuperAdmin } from "../auth";
-import { auditEntity, duplicateSlip, ensureOperationalSchema, requireOpenMonth, safeLogError } from "../ops";
+import { auditEntity, duplicateSlip, ensureOperationalSchema, normalizeName, normalizePhone, requireOpenMonth, safeLogError } from "../ops";
 import { currentMonth, getSetting, generateMemberCode } from "../db";
 import { findDuplicateMembers } from "../ops";
-import { sendMessage } from "../telegram";
+import { sendMessage, sendInBatches } from "../telegram";
 import { approveWithAllocations, allocationReceipt, buildAllocationPlan, allocatedPaidSql } from "../allocations";
 import { money, validDate, validMonth, boundedText } from "../validation";
 
 export const adminRoute = new Hono<AppEnv>();
 
+async function sendMeetingBatch(env:any, items:any[], source:string){
+  const messages=items.filter(x=>x.telegram_id).map(x=>({chatId:x.telegram_id,text:x.text,extra:x.extra||{},context:{meeting_id:x.meeting_id,member_id:x.id}}));
+  const unlinked=items.length-messages.length;
+  const result=await sendInBatches(env,messages,6);
+  for(const f of result.failures) await safeLogError(env,source,f.error,f.message.context);
+  return {sent:result.sent,failed:result.failed,unlinked};
+}
+
+
 adminRoute.get('/pending', requireFinance, async c => {
   await ensureOperationalSchema(c.env);
   const registrations = await c.env.DB.prepare(`SELECT * FROM member_registration_requests WHERE status='pending' ORDER BY requested_at ASC`).all<any>();
-  const enrichedRegs:any[]=[];
-  for (const r of registrations.results) enrichedRegs.push({ ...r, possible_matches: (await findDuplicateMembers(c.env, r.name, null, r.telegram_id)).filter((m:any)=>!m.telegram_id) });
+  const enrichedRegs=await Promise.all(registrations.results.map(async (r:any) => ({
+    ...r,
+    possible_matches:(await findDuplicateMembers(c.env,r.name,null,r.telegram_id)).filter((m:any)=>!m.telegram_id)
+  })));
   const contributions = await c.env.DB.prepare(`SELECT c.*,m.name member_name,m.member_code FROM contributions c JOIN members m ON m.id=c.member_id WHERE c.status='pending' ORDER BY c.submitted_at ASC`).all<any>();
-  const contributionRows:any[]=[];
-  for(const row of contributions.results){
-    try { contributionRows.push({...row,allocation_preview:await buildAllocationPlan(c.env,row)}); }
-    catch { contributionRows.push({...row,allocation_preview:[]}); }
-  }
+  const contributionRows=await Promise.all(contributions.results.map(async (row:any)=>{
+    try { return {...row,allocation_preview:await buildAllocationPlan(c.env,row)}; }
+    catch { return {...row,allocation_preview:[]}; }
+  }));
   const expenses = await c.env.DB.prepare(`SELECT e.*,a.name logged_by_name FROM expenses e LEFT JOIN admins a ON a.id=e.logged_by WHERE e.status='pending' ORDER BY e.created_at ASC`).all();
   return c.json({ registrations: enrichedRegs, contributions: contributionRows, slips: contributionRows, expenses: expenses.results });
 });
@@ -39,7 +49,7 @@ adminRoute.post('/pending/registrations/:id/approve', requireFinance, async c =>
     const unlinked=dup.filter((x:any)=>!x.telegram_id);
     if(unlinked.length) return c.json({error:'Possible existing member found. Choose Link Existing Member instead.',duplicates:unlinked},409);
     const code=await generateMemberCode(c.env); const amount=Number(await getSetting(c.env,'default_monthly_amount'))||250;
-    const r=await c.env.DB.prepare("INSERT INTO members(member_code,telegram_id,name,monthly_amount) VALUES(?,?,?,?)").bind(code,req.telegram_id,req.name,amount).run();
+    const r=await c.env.DB.prepare("INSERT INTO members(member_code,telegram_id,name,monthly_amount,normalized_name,normalized_phone) VALUES(?,?,?,?,?,NULL)").bind(code,req.telegram_id,req.name,amount,normalizeName(req.name)).run();
     member=await c.env.DB.prepare("SELECT * FROM members WHERE id=?").bind(r.meta.last_row_id).first<any>();
   }
   const changed=await c.env.DB.prepare("UPDATE member_registration_requests SET status='approved',reviewed_by=?,reviewed_at=datetime('now') WHERE id=? AND status='pending'").bind(admin.id,id).run();
@@ -334,27 +344,22 @@ adminRoute.post('/meetings/:id/notify-update', requireFinance, async c => {
   }
 
   const members=await c.env.DB.prepare("SELECT id,telegram_id FROM members WHERE active=1").all<any>();
-  let sent=0,unlinked=0,failed=0;
-  for(const member of members.results){
-    if(!member.telegram_id){unlinked++;continue;}
-    const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
-    const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
-    const agenda=m.agenda?`\n\n${meetingEsc(m.agenda)}`:'';
-    const heading=rescheduled?'📅 <b>Meeting rescheduled</b>':'🔄 <b>Meeting updated</b>';
-    const schedule=rescheduled && previousDate
-      ? `\nPrevious: ${meetingEsc(meetingDisplayDateTime(previousDate,previousTime))}\nNew: <b>${meetingEsc(meetingDisplayDateTime(m.meeting_date,m.meeting_time))}</b>`
-      : `\n${meetingEsc(meetingDisplayDateTime(m.meeting_date,m.meeting_time))}`;
-    try{
-      await sendMessage(c.env,member.telegram_id,
-        `${heading}\n\n<b>${meetingEsc(m.title)}</b>${schedule}${venue}${deadline}${agenda}\n\nYour previous RSVP is still recorded. You can change it below.`,
-        {reply_markup:{inline_keyboard:[[
-          {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
-          {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
-          {text:'❌ No',callback_data:`meeting_rsvp:${id}:no`}
-        ]]}}
-      ); sent++;
-    }catch(e){failed++;await safeLogError(c.env,'meeting.update_notice',e,{meeting_id:id,member_id:member.id});}
-  }
+  const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
+  const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
+  const agenda=m.agenda?`\n\n${meetingEsc(m.agenda)}`:'';
+  const heading=rescheduled?'📅 <b>Meeting rescheduled</b>':'🔄 <b>Meeting updated</b>';
+  const schedule=rescheduled && previousDate
+    ? `\nPrevious: ${meetingEsc(meetingDisplayDateTime(previousDate,previousTime))}\nNew: <b>${meetingEsc(meetingDisplayDateTime(m.meeting_date,m.meeting_time))}</b>`
+    : `\n${meetingEsc(meetingDisplayDateTime(m.meeting_date,m.meeting_time))}`;
+  const delivery=await sendMeetingBatch(c.env,members.results.map((member:any)=>({...member,meeting_id:id,
+    text:`${heading}\n\n<b>${meetingEsc(m.title)}</b>${schedule}${venue}${deadline}${agenda}\n\nYour previous RSVP is still recorded. You can change it below.`,
+    extra:{reply_markup:{inline_keyboard:[[
+        {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
+        {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
+        {text:'❌ No',callback_data:`meeting_rsvp:${id}:no`}
+      ]]}}
+  })),'meeting.update_notice');
+  const {sent,unlinked,failed}=delivery;
   await c.env.DB.prepare("UPDATE meetings SET last_notification_at=datetime('now') WHERE id=?").bind(id).run();
   await auditEntity(c.env,adminUser.id,rescheduled?'meeting_reschedule_notified':'meeting_update_notified','meeting',id,m,{sent,unlinked,failed,changed_fields:changedFields});
   return c.json({ok:true,sent,unlinked,failed,rescheduled});
@@ -375,22 +380,17 @@ adminRoute.post('/meetings/:id/remind-pending', requireFinance, async c => {
     ORDER BY mem.name
   `).bind(id).all<any>();
 
-  let sent=0,unlinked=0,failed=0;
-  for(const member of members.results){
-    if(!member.telegram_id){unlinked++;continue;}
-    const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
-    const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
-    try{
-      await sendMessage(c.env,member.telegram_id,
-        `🔔 <b>Meeting RSVP reminder</b>\n\n<b>${meetingEsc(m.title)}</b>\n${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}${venue}${deadline}\n\nPlease let us know if you can attend.`,
-        {reply_markup:{inline_keyboard:[[
-          {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
-          {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
-          {text:'❌ No',callback_data:`meeting_rsvp:${id}:no`}
-        ]]}}
-      ); sent++;
-    }catch(e){failed++;await safeLogError(c.env,'meeting.pending_reminder',e,{meeting_id:id,member_id:member.id});}
-  }
+  const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
+  const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
+  const delivery=await sendMeetingBatch(c.env,members.results.map((member:any)=>({...member,meeting_id:id,
+    text:`🔔 <b>Meeting RSVP reminder</b>\n\n<b>${meetingEsc(m.title)}</b>\n${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}${venue}${deadline}\n\nPlease let us know if you can attend.`,
+    extra:{reply_markup:{inline_keyboard:[[
+        {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
+        {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
+        {text:'❌ No',callback_data:`meeting_rsvp:${id}:no`}
+      ]]}}
+  })),'meeting.pending_reminder');
+  const {sent,unlinked,failed}=delivery;
   await c.env.DB.prepare("UPDATE meetings SET last_notification_at=datetime('now') WHERE id=?").bind(id).run();
   await auditEntity(c.env,adminUser.id,'meeting_pending_reminder_sent','meeting',id,m,{sent,unlinked,failed,pending:members.results.length});
   return c.json({ok:true,sent,unlinked,failed,pending:members.results.length});
@@ -412,15 +412,10 @@ adminRoute.post('/meetings/:id/cancel', requireFinance, async c => {
   `).bind(adminUser.id,reason,id).run();
 
   const members=await c.env.DB.prepare("SELECT id,telegram_id FROM members WHERE active=1").all<any>();
-  let sent=0,unlinked=0,failed=0;
-  for(const member of members.results){
-    if(!member.telegram_id){unlinked++;continue;}
-    try{
-      await sendMessage(c.env,member.telegram_id,
-        `🚫 <b>Meeting cancelled</b>\n\n<b>${meetingEsc(before.title)}</b>\n${meetingEsc(before.meeting_date)} · ${meetingEsc(before.meeting_time)}\n\nReason: ${meetingEsc(reason)}`
-      ); sent++;
-    }catch(e){failed++;await safeLogError(c.env,'meeting.cancel_notice',e,{meeting_id:id,member_id:member.id});}
-  }
+  const delivery=await sendMeetingBatch(c.env,members.results.map((member:any)=>({...member,meeting_id:id,
+    text:`🚫 <b>Meeting cancelled</b>\n\n<b>${meetingEsc(before.title)}</b>\n${meetingEsc(before.meeting_date)} · ${meetingEsc(before.meeting_time)}\n\nReason: ${meetingEsc(reason)}`
+  })),'meeting.cancel_notice');
+  const {sent,unlinked,failed}=delivery;
 
   const after=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   await auditEntity(c.env,adminUser.id,'meeting_cancelled','meeting',id,before,{...after,notified:{sent,unlinked,failed}});
@@ -435,23 +430,18 @@ adminRoute.post('/meetings/:id/send', requireFinance, async c => {
   if(!m) return c.json({error:'Meeting not found'},404);
   if(m.status==='cancelled') return c.json({error:'Cancelled meetings cannot send invitations'},409);
   const members=await c.env.DB.prepare("SELECT id,name,telegram_id FROM members WHERE active=1 ORDER BY name").all<any>();
-  let sent=0,unlinked=0,failed=0;
-  for(const member of members.results){
-    if(!member.telegram_id){unlinked++;continue;}
-    const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
-    const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
-    const agenda=m.agenda?`\n\n${meetingEsc(m.agenda)}`:'';
-    try{
-      await sendMessage(c.env,member.telegram_id,
-        `📅 <b>Meeting invitation</b>\n\n<b>${meetingEsc(m.title)}</b>\n${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}${venue}${deadline}${agenda}\n\nWill you attend?`,
-        {reply_markup:{inline_keyboard:[[
-          {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
-          {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
-          {text:'❌ No',callback_data:`meeting_rsvp:${id}:no`}
-        ]]}}
-      ); sent++;
-    }catch(e){failed++;await safeLogError(c.env,'meeting.invite',e,{meeting_id:id,member_id:member.id});}
-  }
+  const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
+  const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
+  const agenda=m.agenda?`\n\n${meetingEsc(m.agenda)}`:'';
+  const delivery=await sendMeetingBatch(c.env,members.results.map((member:any)=>({...member,meeting_id:id,
+    text:`📅 <b>Meeting invitation</b>\n\n<b>${meetingEsc(m.title)}</b>\n${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}${venue}${deadline}${agenda}\n\nWill you attend?`,
+    extra:{reply_markup:{inline_keyboard:[[
+        {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
+        {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
+        {text:'❌ No',callback_data:`meeting_rsvp:${id}:no`}
+      ]]}}
+  })),'meeting.invite');
+  const {sent,unlinked,failed}=delivery;
   await c.env.DB.prepare("UPDATE meetings SET status='sent',sent_at=COALESCE(sent_at,datetime('now')),last_notification_at=datetime('now') WHERE id=?").bind(id).run();
   await auditEntity(c.env,adminUser.id,'meeting_invitations_sent','meeting',id,m,{sent,unlinked,failed});
   return c.json({ok:true,sent,unlinked,failed,total:members.results.length});

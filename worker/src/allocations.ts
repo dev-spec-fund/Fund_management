@@ -26,7 +26,10 @@ export async function paidForMonth(env: Env, memberId: number, month: string): P
   return Number(row?.total||0);
 }
 
-/** Build a forward allocation plan without changing the database. Exempt/closed months are skipped. */
+/** Build a forward allocation plan without changing the database.
+ * Exemptions, closures and existing paid totals are prefetched so a large
+ * advance payment does not cause hundreds of sequential D1 queries.
+ */
 export async function buildAllocationPlan(env: Env, contribution: any): Promise<Allocation[]> {
   const member=await env.DB.prepare("SELECT id,monthly_amount FROM members WHERE id=?").bind(contribution.member_id).first<any>();
   if(!member) throw new Error("Member not found");
@@ -36,22 +39,47 @@ export async function buildAllocationPlan(env: Env, contribution: any): Promise<
   let remaining=Number(contribution.amount||0);
   if(!Number.isFinite(remaining) || remaining<=0) throw new Error("Contribution amount is invalid");
 
-  let month=String(contribution.month);
+  const months:string[]=[];
+  let cursor=String(contribution.month);
+  for(let i=0;i<120;i++){ months.push(cursor); cursor=nextMonth(cursor); }
+  const lastMonth=months[months.length-1];
+
+  const [exemptions, closures, paidRows] = await Promise.all([
+    env.DB.prepare("SELECT month FROM exemptions WHERE member_id=? AND month>=? AND month<=?")
+      .bind(member.id,months[0],lastMonth).all<any>(),
+    env.DB.prepare("SELECT month FROM month_closures WHERE month>=? AND month<=?")
+      .bind(months[0],lastMonth).all<any>(),
+    env.DB.prepare(`
+      SELECT month,COALESCE(SUM(amount),0) paid FROM (
+        SELECT ca.month month,ca.amount amount
+        FROM contribution_allocations ca
+        JOIN contributions c ON c.id=ca.contribution_id
+        WHERE ca.member_id=? AND ca.month>=? AND ca.month<=? AND c.status='approved'
+        UNION ALL
+        SELECT c.month month,c.amount amount
+        FROM contributions c
+        WHERE c.member_id=? AND c.month>=? AND c.month<=? AND c.status='approved'
+          AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
+      ) GROUP BY month
+    `).bind(member.id,months[0],lastMonth,member.id,months[0],lastMonth).all<any>()
+  ]);
+
+  const exemptSet=new Set(exemptions.results.map((r:any)=>String(r.month)));
+  const closedSet=new Set(closures.results.map((r:any)=>String(r.month)));
+  const paidMap=new Map(paidRows.results.map((r:any)=>[String(r.month),Number(r.paid||0)]));
   const plan:Allocation[]=[];
-  for(let guard=0; remaining>0.004 && guard<120; guard++){
-    const exempt=await env.DB.prepare("SELECT 1 ok FROM exemptions WHERE member_id=? AND month=?").bind(member.id,month).first<any>();
-    const closed=await env.DB.prepare("SELECT 1 ok FROM month_closures WHERE month=?").bind(month).first<any>();
-    if(!exempt && !closed){
-      const already=await paidForMonth(env,member.id,month);
-      const needed=Math.max(0,monthly-already);
-      if(needed>0.004){
-        const amount=Math.min(remaining,needed);
-        const after=already+amount;
-        plan.push({month,amount:Number(amount.toFixed(2)),status_after:after+0.005>=monthly?"paid":"partial"});
-        remaining=Number((remaining-amount).toFixed(2));
-      }
-    }
-    month=nextMonth(month);
+
+  for(const month of months){
+    if(remaining<=0.004) break;
+    if(exemptSet.has(month) || closedSet.has(month)) continue;
+    const already=Number(paidMap.get(month)||0);
+    const needed=Math.max(0,monthly-already);
+    if(needed<=0.004) continue;
+    const amount=Math.min(remaining,needed);
+    const after=already+amount;
+    plan.push({month,amount:Number(amount.toFixed(2)),status_after:after+0.005>=monthly?"paid":"partial"});
+    paidMap.set(month,after);
+    remaining=Number((remaining-amount).toFixed(2));
   }
   if(remaining>0.004) throw new Error("Could not allocate the full contribution within 120 future months");
   return plan;

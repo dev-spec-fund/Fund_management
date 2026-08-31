@@ -5,6 +5,7 @@ export type Env = {
   TELEGRAM_WEBHOOK_SECRET: string;
   ADMIN_TELEGRAM_IDS: string;
   FUND_TIMEZONE: string;
+  DEV_AUTH_ENABLED?: string;
 };
 
 export type Member = {

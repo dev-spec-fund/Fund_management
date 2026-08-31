@@ -89,43 +89,25 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
 
-  const income = await c.env.DB.prepare(
-    "SELECT COALESCE(SUM(amount),0) as total FROM contributions WHERE status='approved' AND month = ?"
-  ).bind(month).first<{ total: number }>();
-
-  const allocatedContributions = await allocatedTotalForMonth(c.env,month);
-  const advanceAllocated = await advanceAllocatedForMonth(c.env,month);
-
-  const donationTotal = await c.env.DB.prepare(
-    "SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = ?"
-  ).bind(month).first<{ total: number }>();
-
-  const expenseTotal = await c.env.DB.prepare(
-    "SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE COALESCE(status,'approved')='approved' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = ?"
-  ).bind(month).first<{ total: number }>();
-
-  const byCategory = await c.env.DB.prepare(`
-    SELECT cat.id as category_id, cat.name as category, COALESCE(SUM(e.amount),0) as spent
-    FROM expense_categories cat
-    LEFT JOIN expenses e ON e.category_id = cat.id AND COALESCE(e.status,'approved')='approved' AND COALESCE(e.transaction_month,strftime('%Y-%m', e.created_at)) = ?
-    GROUP BY cat.id
-  `).bind(month).all();
-
-  const totalBalance = await c.env.DB.prepare(`
-    SELECT
-      (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved') +
-      (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active') -
-      (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') as balance
-  `).first<{ balance: number }>();
-
-  const lifetime = await c.env.DB.prepare(`
-    SELECT
-      (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved') +
-      (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active') AS total_received,
-      (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') AS total_spent
-  `).first<any>();
-
-  const recent = await c.env.DB.prepare(`
+  const [income,allocatedContributions,advanceAllocated,donationTotal,expenseTotal,byCategory,lifetime,recent] = await Promise.all([
+    c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) as total FROM contributions WHERE status='approved' AND month = ?").bind(month).first<{total:number}>(),
+    allocatedTotalForMonth(c.env,month),
+    advanceAllocatedForMonth(c.env,month),
+    c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month = ?").bind(month).first<{total:number}>(),
+    c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month = ?").bind(month).first<{total:number}>(),
+    c.env.DB.prepare(`
+      SELECT cat.id as category_id,cat.name as category,COALESCE(SUM(e.amount),0) spent
+      FROM expense_categories cat
+      LEFT JOIN expenses e ON e.category_id=cat.id AND COALESCE(e.status,'approved')='approved' AND e.transaction_month=?
+      GROUP BY cat.id
+    `).bind(month).all(),
+    c.env.DB.prepare(`
+      SELECT
+        (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved') +
+        (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active') AS total_received,
+        (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') AS total_spent
+    `).first<any>(),
+    c.env.DB.prepare(`
     SELECT kind,label,amount,event_at FROM (
       SELECT 'contribution' kind,'Member contribution' label,amount,
         COALESCE(approved_at,submitted_at) event_at
@@ -147,7 +129,8 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     WHERE event_at IS NOT NULL
     ORDER BY event_at DESC
     LIMIT 5
-  `).all<any>();
+    `).all<any>()
+  ]);
 
   return c.json({
     month,
@@ -158,7 +141,7 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     expenses: expenseTotal?.total ?? 0,
     net: (income?.total ?? 0) + (donationTotal?.total ?? 0) - (expenseTotal?.total ?? 0),
     byCategory: byCategory.results,
-    fundBalance: totalBalance?.balance ?? 0,
+    fundBalance: Number(lifetime?.total_received||0)-Number(lifetime?.total_spent||0),
     totalReceived: lifetime?.total_received ?? 0,
     totalSpent: lifetime?.total_spent ?? 0,
     recentActivity: recent.results,
@@ -184,7 +167,7 @@ reportsRoute.get("/public-expenses", requireMemberOrAdmin, async (c) => {
     JOIN expense_categories c ON c.id=e.category_id
     WHERE e.category_id=?
       AND COALESCE(e.status,'approved')='approved'
-      AND COALESCE(e.transaction_month,strftime('%Y-%m',e.created_at))=?
+      AND e.transaction_month=?
     ORDER BY COALESCE(e.approved_at,e.created_at) DESC,e.id DESC
   `).bind(categoryId,month).all<any>();
 
@@ -197,46 +180,27 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
 
-  const income = await c.env.DB.prepare(
-    "SELECT COALESCE(SUM(amount),0) as total FROM contributions WHERE status='approved' AND month = ?"
-  ).bind(month).first<{ total: number }>();
-
-  const allocatedContributions = await allocatedTotalForMonth(c.env,month);
-  const advanceAllocated = await advanceAllocatedForMonth(c.env,month);
-
-  const donationTotal = await c.env.DB.prepare(
-    "SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = ?"
-  ).bind(month).first<{ total: number }>();
-
-  const expenseTotal = await c.env.DB.prepare(
-    "SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE COALESCE(status,'approved')='approved' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = ?"
-  ).bind(month).first<{ total: number }>();
-
-  const byCategory = await c.env.DB.prepare(`
-    SELECT cat.name as category, COALESCE(SUM(e.amount),0) as spent
-    FROM expense_categories cat
-    LEFT JOIN expenses e ON e.category_id = cat.id AND COALESCE(e.status,'approved')='approved' AND COALESCE(e.transaction_month,strftime('%Y-%m', e.created_at)) = ?
-    GROUP BY cat.id
-  `).bind(month).all();
-
-  const outstanding = await c.env.DB.prepare(`
-    SELECT m.id,m.member_code,m.name,m.monthly_amount,
-      ${allocatedPaidSql} paid,
-      CASE
-        WHEN EXISTS(SELECT 1 FROM exemptions ex WHERE ex.member_id=m.id AND ex.month=?) THEN 'exempt'
-        WHEN (${allocatedPaidSql}) <= 0 THEN 'unpaid'
-        WHEN (${allocatedPaidSql}) < m.monthly_amount THEN 'partial'
-        ELSE 'paid'
-      END payment_status
-    FROM members m WHERE m.active=1
-  `).bind(month,month,month,month,month,month,month).all<any>();
-
-  const totalBalance = await c.env.DB.prepare(`
-    SELECT
-      (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved') +
-      (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active') -
-      (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') as balance
-  `).first<{ balance: number }>();
+  const [income,allocatedContributions,advanceAllocated,donationTotal,expenseTotal,byCategory,outstanding,totalBalance] = await Promise.all([
+    c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month=?").bind(month).first<{total:number}>(),
+    allocatedTotalForMonth(c.env,month),
+    advanceAllocatedForMonth(c.env,month),
+    c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month=?").bind(month).first<{total:number}>(),
+    c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month=?").bind(month).first<{total:number}>(),
+    c.env.DB.prepare(`SELECT cat.name category,COALESCE(SUM(e.amount),0) spent FROM expense_categories cat LEFT JOIN expenses e ON e.category_id=cat.id AND COALESCE(e.status,'approved')='approved' AND e.transaction_month=? GROUP BY cat.id`).bind(month).all(),
+    c.env.DB.prepare(`
+      WITH paid AS (
+        SELECT member_id,SUM(amount) paid FROM (
+          SELECT ca.member_id,ca.amount FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id WHERE ca.month=? AND c.status='approved'
+          UNION ALL
+          SELECT c.member_id,c.amount FROM contributions c WHERE c.month=? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
+        ) GROUP BY member_id
+      )
+      SELECT m.id,m.member_code,m.name,m.monthly_amount,COALESCE(p.paid,0) paid,
+        CASE WHEN ex.member_id IS NOT NULL THEN 'exempt' WHEN COALESCE(p.paid,0)<=0 THEN 'unpaid' WHEN COALESCE(p.paid,0)<m.monthly_amount THEN 'partial' ELSE 'paid' END payment_status
+      FROM members m LEFT JOIN paid p ON p.member_id=m.id LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=? WHERE m.active=1
+    `).bind(month,month,month).all<any>(),
+    c.env.DB.prepare(`SELECT (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved')+(SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active')-(SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') balance`).first<{balance:number}>()
+  ]);
 
   return c.json({
     month,
@@ -261,13 +225,14 @@ reportsRoute.get("/trend", requireAdmin, async (c) => {
   if (!validMonth(base)) return c.json({error:"Month must use YYYY-MM"},400);
   const [by,bm]=base.split('-').map(Number);
   const months=Array.from({length:6},(_,i)=>{const d=new Date(Date.UTC(by,bm-1-(5-i),1));return d.toISOString().slice(0,7);});
-  const rows = await Promise.all(months.map(async (month) => {
-    const [contributionTotal, donationTotal, expenseTotal] = await Promise.all([
-      c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month=?").bind(month).first<{total:number}>(),
-      c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m',created_at))=?").bind(month).first<{total:number}>(),
-      c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND COALESCE(transaction_month,strftime('%Y-%m',created_at))=?").bind(month).first<{total:number}>(),
-    ]);
-    return {month,income:Number(contributionTotal?.total||0)+Number(donationTotal?.total||0),expense:Number(expenseTotal?.total||0)};
-  }));
-  return c.json(rows);
+  const first=months[0],last=months[months.length-1];
+  const [contributions,donations,expenses]=await Promise.all([
+    c.env.DB.prepare("SELECT month,COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month BETWEEN ? AND ? GROUP BY month").bind(first,last).all<any>(),
+    c.env.DB.prepare("SELECT transaction_month month,COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month BETWEEN ? AND ? GROUP BY transaction_month").bind(first,last).all<any>(),
+    c.env.DB.prepare("SELECT transaction_month month,COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month BETWEEN ? AND ? GROUP BY transaction_month").bind(first,last).all<any>()
+  ]);
+  const cm=new Map(contributions.results.map((r:any)=>[r.month,Number(r.total||0)]));
+  const dm=new Map(donations.results.map((r:any)=>[r.month,Number(r.total||0)]));
+  const em=new Map(expenses.results.map((r:any)=>[r.month,Number(r.total||0)]));
+  return c.json(months.map(month=>({month,income:Number(cm.get(month)||0)+Number(dm.get(month)||0),expense:Number(em.get(month)||0)})));
 });

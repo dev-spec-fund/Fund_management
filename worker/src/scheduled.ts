@@ -1,5 +1,5 @@
 import type { Env } from "./types";
-import { sendMessage } from "./telegram";
+import { sendInBatches } from "./telegram";
 import { currentDayOfMonth, currentMonth, getSetting } from "./db";
 import { isMonthClosed, safeLogError } from "./ops";
 import { allocatedPaidSql } from "./allocations";
@@ -21,13 +21,19 @@ export async function runScheduled(env: Env) {
       AND NOT EXISTS (SELECT 1 FROM exemptions e WHERE e.member_id=m.id AND e.month=?)
     `).bind(month,month,month).all<any>();
 
-    for (const member of members.results) {
+    const messages = members.results.flatMap((member:any) => {
       const paid=Number(member.paid||0), due=Math.max(0,Number(member.monthly_amount||0)-paid);
-      if (due <= 0.005) continue;
+      if (due <= 0.005) return [];
       const status=paid>0?"partially paid":"unpaid";
-      await sendMessage(env,member.telegram_id,
-        `🔔 Reminder: ${month} is ${status}. Paid: MVR ${paid}. Remaining: MVR ${due}. Send a bank slip photo to submit the balance.`
-      );
+      return [{
+        chatId: member.telegram_id,
+        text: `🔔 Reminder: ${month} is ${status}. Paid: MVR ${paid}. Remaining: MVR ${due}. Send a bank slip photo to submit the balance.`,
+        context: { member_id: member.id }
+      }];
+    });
+    const result = await sendInBatches(env, messages, 6);
+    for (const failure of result.failures) {
+      await safeLogError(env,"scheduled.reminder_send",failure.error,failure.message.context);
     }
   } catch (e) {
     await safeLogError(env,"scheduled.reminders",e);

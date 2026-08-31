@@ -20,6 +20,7 @@ binding = "AI"
 
 [vars]
 FUND_TIMEZONE = "Indian/Maldives"
+# DEV_AUTH_ENABLED is intentionally omitted in production. Set to "true" only in local .dev.vars.
 
 [triggers]
 crons = ["0 19 * * *"] # runs 19:00 UTC daily = 00:00 Maldives time (UTC+5)

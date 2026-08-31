@@ -13,8 +13,8 @@ async function useLocalDevAuth(c: Context<AppEnv>, next: Next) {
   `).bind(LOCAL_DEV_TELEGRAM_ID).run();
 
   await c.env.DB.prepare(`
-    INSERT OR IGNORE INTO members (member_code, telegram_id, name, phone, monthly_amount)
-    VALUES ('M0000', ?, 'Local Dev Member', '000', 250)
+    INSERT OR IGNORE INTO members (member_code, telegram_id, name, phone, monthly_amount, normalized_name, normalized_phone)
+    VALUES ('M0000', ?, 'Local Dev Member', '000', 250, 'local dev member', '000')
   `).bind(LOCAL_DEV_TELEGRAM_ID).run();
 
   const user = {
@@ -42,7 +42,7 @@ export async function telegramAuth(c: Context<AppEnv>, next: Next) {
   const initData = c.req.header("X-Telegram-Init-Data");
   const hostname = new URL(c.req.url).hostname;
   const localDevHost = hostname === "127.0.0.1" || hostname === "localhost";
-  if (!initData && localDevHost) return useLocalDevAuth(c, next);
+  if (!initData && localDevHost && String(c.env.DEV_AUTH_ENABLED || "").toLowerCase() === "true") return useLocalDevAuth(c, next);
   if (!initData) return c.json({ error: "Missing Telegram auth" }, 401);
 
   const params = new URLSearchParams(initData);

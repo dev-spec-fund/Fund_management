@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance } from "../auth";
 import { logAudit, generateMemberCode, currentMonth, getSetting } from "../db";
-import { auditEntity, ensureOperationalSchema, findDuplicateMembers, requireOpenMonth } from "../ops";
+import { auditEntity, ensureOperationalSchema, findDuplicateMembers, normalizeName, normalizePhone, requireOpenMonth } from "../ops";
 import { boundedText, flag, money, telegramId, validMonth } from "../validation";
 import { paidForMonth } from "../allocations";
 
@@ -102,8 +102,8 @@ membersRoute.post("/", requireFinance, async (c) => {
   if (duplicates.length) return c.json({error:"Possible duplicate member",duplicates},409);
   const memberCode = await generateMemberCode(c.env);
   const res = await c.env.DB.prepare(
-    "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount) VALUES (?, ?, ?, ?, ?)"
-  ).bind(memberCode, tg, name, phone || null, monthly).run();
+    "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount, normalized_name, normalized_phone) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).bind(memberCode, tg, name, phone || null, monthly, normalizeName(name), normalizePhone(phone)||null).run();
   await auditEntity(c.env, admin.id, "member_created", "member", Number(res.meta.last_row_id), null, {member_code:memberCode,...body});
   return c.json({ id: res.meta.last_row_id, member_code: memberCode }, 201);
 });
@@ -117,8 +117,8 @@ membersRoute.patch("/:id", requireFinance, async (c) => {
   if(!name || monthly===null || active===null || (body.telegram_id && !tg)) return c.json({error:"Invalid member data"},400);
   const duplicates = await findDuplicateMembers(c.env, name, phone, tg, id);
   if (duplicates.length) return c.json({error:"Possible duplicate member",duplicates},409);
-  await c.env.DB.prepare("UPDATE members SET name=?,phone=?,monthly_amount=?,active=?,telegram_id=? WHERE id=?")
-    .bind(name,phone||null,monthly,active,tg,id).run();
+  await c.env.DB.prepare("UPDATE members SET name=?,phone=?,monthly_amount=?,active=?,telegram_id=?,normalized_name=?,normalized_phone=? WHERE id=?")
+    .bind(name,phone||null,monthly,active,tg,normalizeName(name),normalizePhone(phone)||null,id).run();
   const after = await c.env.DB.prepare("SELECT * FROM members WHERE id=?").bind(id).first<any>();
   await auditEntity(c.env,admin.id,body.active!==undefined&&body.active!==before.active?(body.active?"member_reactivated":"member_deactivated"):"member_updated","member",id,before,after);
   return c.json({ok:true});
