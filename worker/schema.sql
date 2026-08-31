@@ -219,6 +219,7 @@ CREATE TABLE IF NOT EXISTS meetings (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT,
   sent_at TEXT,
+  last_notification_at TEXT,
   cancelled_at TEXT,
   cancelled_by INTEGER REFERENCES admins(id),
   cancel_reason TEXT
