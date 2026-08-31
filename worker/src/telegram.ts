@@ -42,7 +42,7 @@ export function editMessageText(env: Env, chatId: string | number, messageId: nu
 /** Downloads a Telegram file (e.g. slip photo) and returns its bytes + mime type. */
 export async function downloadTelegramFile(env: Env, fileId: string): Promise<{ bytes: ArrayBuffer; mime: string } | null> {
   const fileInfoRes = await fetch(API(env.TELEGRAM_BOT_TOKEN, "getFile") + `?file_id=${fileId}`);
-  const fileInfo = await fileInfoRes.json<any>();
+  const fileInfo = (await fileInfoRes.json()) as any;
   if (!fileInfo.ok) return null;
   const filePath = fileInfo.result.file_path;
   const fileUrl = `https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${filePath}`;
@@ -230,60 +230,10 @@ export async function ocrSlip(
   env: Env,
   imageBytes: ArrayBuffer,
   mime = "image/jpeg"
-): Promise<{
-  let visionRaw = "";
-
-  const runVision = async (retry = false) => {
-    const prompt = retry
-      ? "Read the bank transfer slip image. Reply with ONLY three lines: AMOUNT=<MVR transferred amount or null>\\nREF=<bank transaction/reference number or null>\\nDATE=<transaction date as YYYY-MM-DD or null>. Do not use account numbers, phone numbers, customer IDs, beneficiary IDs, or timestamps as REF."
-      : "Read this Maldivian bank transfer slip (commonly BML or MIB). Extract the actual transferred MVR amount, the BANK transaction/reference number, and transaction date. Reply ONLY as: AMOUNT=<number|null>\\nREF=<string|null>\\nDATE=<YYYY-MM-DD|null>. Do not explain anything. Never use account/card/phone/customer/beneficiary numbers as REF.";
-
-    const result: any = await (env.AI as any).run(
-      "@cf/google/gemma-4-26b-a4b-it" as any,
-      {
-        messages: [
-          {
-            role: "system",
-            content: "You are a precise bank-slip OCR extractor. Read only visible text. Never invent values.",
-          },
-          { role: "user", content: prompt },
-        ],
-        image: imageDataUrl(imageBytes, mime),
-        max_tokens: 90,
-        temperature: 0,
-        chat_template_kwargs: {
-          enable_thinking: false,
-        },
-      } as any
-    );
-
-    const text = modelText(result);
-    if (text) visionRaw = text;
-    return parseModelJson(text);
-  };
-
-  try {
-    const first = await runVision(false);
-    if (first.amount !== null && first.ref) {
-      return { amount: first.amount, ref: first.ref, raw: JSON.stringify(first) };
-    }
-
-    // Retry once when either critical field is missing. This is cheap compared with
-    // making the member resend a perfectly readable slip.
-    const second = await runVision(true);
-    const merged = {
-      amount: second.amount ?? first.amount,
-      ref: second.ref ?? first.ref,
-      date: second.date ?? first.date,
-    };
-    if (merged.amount !== null || merged.ref) {
-      return { amount: merged.amount, ref: merged.ref, raw: JSON.stringify(merged) };
-    }
-  } catch (err) {
-    await safeLogError(env, "ocr.vision", err);
-  }
-
-  let ocrText = "";
+): Promise<{ amount: number | null; ref: string | null; raw: string }> {
+  // First path: Cloudflare's document/image text conversion. For bank slips this
+  // often preserves labels such as Amount, Reference and Transaction date very well.
+  let extractedText = "";
   try {
     const extension = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
     const converted: any = await (env.AI as any).toMarkdown(
@@ -300,21 +250,85 @@ export async function ocrSlip(
     );
 
     const first = Array.isArray(converted) ? converted[0] : converted;
-    ocrText = first?.data || first?.text || "";
-    if (first?.format === "error") {
+    if (first?.format !== "error") {
+      extractedText = String(first?.data || first?.text || "");
+      const parsed = parseSlipText(extractedText);
+      const date = cleanDate(extractedText);
+      if (parsed.amount !== null && parsed.ref) {
+        return {
+          amount: parsed.amount,
+          ref: parsed.ref,
+          raw: JSON.stringify({ amount: parsed.amount, ref: parsed.ref, date }),
+        };
+      }
+    } else {
       await safeLogError(env, "ocr.convert", new Error(first?.error || "OCR conversion error"));
-      ocrText = "";
     }
   } catch (err) {
     await safeLogError(env, "ocr.convert", err);
   }
 
-  const local = parseSlipText(ocrText);
-  const date = cleanDate(String(ocrText || visionRaw || ""));
+  // Second path: direct vision extraction. Thinking is disabled so the model spends
+  // its output budget on the requested fields rather than internal reasoning.
+  let firstVision: { amount: number | null; ref: string | null; date: string | null } = {
+    amount: null,
+    ref: null,
+    date: null,
+  };
+
+  const runVision = async (retry = false) => {
+    const prompt = retry
+      ? "Read the bank transfer slip image carefully. Reply with ONLY three lines: AMOUNT=<MVR transferred amount or null>\\nREF=<bank transaction/reference number or null>\\nDATE=<transaction date as YYYY-MM-DD or null>. Never use an account number as REF."
+      : "Read this Maldivian bank transfer slip. Extract the transferred MVR amount, BANK reference number, and transaction date. Reply ONLY as AMOUNT=<number|null>\\nREF=<string|null>\\nDATE=<YYYY-MM-DD|null>. Never use account/card/phone/customer/beneficiary numbers as REF.";
+
+    const result: any = await (env.AI as any).run(
+      "@cf/google/gemma-4-26b-a4b-it" as any,
+      {
+        messages: [
+          { role: "system", content: "You are a precise bank-slip OCR extractor. Read only visible text. Never invent values." },
+          { role: "user", content: prompt },
+        ],
+        image: imageDataUrl(imageBytes, mime),
+        max_tokens: 120,
+        temperature: 0,
+        chat_template_kwargs: { enable_thinking: false },
+      } as any
+    );
+
+    const text = modelText(result);
+    return { parsed: parseModelJson(text), raw: text };
+  };
+
+  try {
+    const one = await runVision(false);
+    firstVision = one.parsed;
+    if (one.parsed.amount !== null && one.parsed.ref) {
+      return {
+        amount: one.parsed.amount,
+        ref: one.parsed.ref,
+        raw: JSON.stringify(one.parsed),
+      };
+    }
+
+    const two = await runVision(true);
+    const merged = {
+      amount: two.parsed.amount ?? firstVision.amount,
+      ref: two.parsed.ref ?? firstVision.ref,
+      date: two.parsed.date ?? firstVision.date,
+    };
+    if (merged.amount !== null || merged.ref) {
+      return { amount: merged.amount, ref: merged.ref, raw: JSON.stringify(merged) };
+    }
+  } catch (err) {
+    await safeLogError(env, "ocr.vision", err);
+  }
+
+  // Last chance: use whichever text we did obtain from conversion.
+  const local = parseSlipText(extractedText);
+  const date = cleanDate(extractedText);
   return {
     amount: local.amount,
     ref: local.ref,
     raw: JSON.stringify({ amount: local.amount, ref: local.ref, date }),
   };
 }
-
