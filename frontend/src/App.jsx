@@ -510,6 +510,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   const [editing, setEditing] = useState(false);
   const [reminding, setReminding] = useState(false);
   const [reminderNote, setReminderNote] = useState("");
+  const [showRejected, setShowRejected] = useState(false);
   const [form, setForm] = useState({ name: member.name, phone: member.phone, monthly_amount: member.monthly_amount });
 
   useEffect(() => { api.members.get(member.id).then(setDetail).catch(() => {}); }, [member.id]);
@@ -522,13 +523,96 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   };
 
   const toggleActive = async () => {
+    const action = member.active ? "deactivate" : "reactivate";
+    if (!confirm(`${action === "deactivate" ? "Deactivate" : "Reactivate"} ${member.name}?`)) return;
     await api.members.update(member.id, { active: member.active ? 0 : 1 });
     onChanged();
     onClose();
   };
 
+  const contributions = detail?.contributions || [];
+  const allocations = detail?.allocations || [];
+  const monthlyStatuses = detail?.monthly_status || [];
+  const currentStatus = monthlyStatuses.find((x) => x.month === month);
+  const monthlyAmount = Number(member.monthly_amount || 0);
+  const currentPaid = Number(currentStatus?.paid || 0);
+  const currentDue = currentStatus?.status === "exempt" ? 0 : Number(currentStatus?.due ?? Math.max(0, monthlyAmount - currentPaid));
+  const currentLabel = currentStatus?.status || (currentPaid >= monthlyAmount && monthlyAmount > 0 ? "paid" : currentPaid > 0 ? "partial" : "unpaid");
+  const totalContributed = contributions
+    .filter((x) => x.status === "approved")
+    .reduce((sum, x) => sum + Number(x.amount || 0), 0);
+
+  const approved = contributions
+    .filter((x) => x.status === "approved")
+    .sort((a,b) => String(b.approved_at || b.submitted_at || "").localeCompare(String(a.approved_at || a.submitted_at || "")));
+  const rejected = contributions
+    .filter((x) => x.status !== "approved")
+    .sort((a,b) => String(b.submitted_at || "").localeCompare(String(a.submitted_at || "")));
+
+  const allocationsFor = (contributionId) =>
+    allocations
+      .filter((a) => Number(a.contribution_id) === Number(contributionId))
+      .sort((a,b) => String(a.month).localeCompare(String(b.month)));
+
+  const looksLikeBankRef = (value) => {
+    if (!value) return false;
+    const v = String(value).trim();
+    if (v.length < 6) return false;
+    if (/\s/.test(v)) return false;
+    if (!/[0-9]/.test(v)) return false;
+    return /^[A-Z0-9\-_/]+$/i.test(v);
+  };
+
+  const statusColor = currentLabel === "paid" ? "#3A6B3E" : currentLabel === "partial" ? "#7A5A18" : currentLabel === "exempt" ? "#51606A" : "#A6432F";
+  const monthLabel = (() => {
+    try { return new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${month}-01T00:00:00Z`)); }
+    catch { return month; }
+  })();
+
+  const contributionCard = (h) => {
+    const applied = allocationsFor(h.id);
+    const refValid = looksLikeBankRef(h.ref_number);
+    return (
+      <div key={h.id} style={{ background:"#fff", border:"1px solid #E9E4D8", borderRadius:12, padding:"12px 13px", marginBottom:8 }}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start"}}>
+          <div style={{minWidth:0}}>
+            <div className="sans" style={{fontSize:13,fontWeight:700,color:"#1F3D2B"}}>{h.txn_id}</div>
+            <div className="sans" style={{fontSize:10,color:"#8A9086",marginTop:2,textTransform:"capitalize"}}>
+              {h.status}{h.approved_at ? ` · ${formatLocalDateTime(h.approved_at)}` : h.submitted_at ? ` · ${formatLocalDateTime(h.submitted_at)}` : ""}
+            </div>
+          </div>
+          <div className="sans" style={{fontSize:14,fontWeight:700,whiteSpace:"nowrap"}}>MVR {fmt(h.amount)}</div>
+        </div>
+
+        <div className="sans" style={{fontSize:10,color:refValid?"#6B7268":"#A46B24",marginTop:8}}>
+          {refValid ? <>Bank ref: <b style={{color:"#1F3D2B"}}>{h.ref_number}</b></> : <>⚠ Reference needs review: <b>{h.ref_number || "not detected"}</b></>}
+        </div>
+
+        {applied.length > 0 && (
+          <div style={{background:"#F7F5EF",borderRadius:9,padding:"8px 9px",marginTop:8}}>
+            <div className="sans" style={{fontSize:9,fontWeight:700,color:"#6B7268",letterSpacing:.5,marginBottom:4}}>APPLIED TO</div>
+            {applied.map((a,i)=> {
+              const monthly = Number(member.monthly_amount || 0);
+              const label = Number(a.amount) + .005 >= monthly ? "Paid" : "Allocated";
+              return <div key={i} className="sans" style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:10,padding:"3px 0"}}>
+                <span>{a.month}</span>
+                <span><b>MVR {fmt(a.amount)}</b> · {label}</span>
+              </div>
+            })}
+          </div>
+        )}
+
+        {applied.length === 0 && h.status === "approved" && (
+          <div className="sans" style={{fontSize:9,color:"#9A9384",marginTop:7}}>
+            Legacy contribution · applied to {h.month}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <Modal onClose={onClose} title={member.name} action={<button onClick={() => setEditing(true)} style={{ background: "none", border: "none", cursor: "pointer" }}><Pencil size={17} color="#8A9086" /></button>}>
+    <Modal onClose={onClose} title={member.name} action={<button onClick={() => setEditing(true)} style={{ background:"none", border:"none", cursor:"pointer" }}><Pencil size={17} color="#8A9086" /></button>}>
       {editing ? (
         <>
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -538,24 +622,59 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
         </>
       ) : (
         <>
-          <div className="sans" style={{ fontSize: 13, color: "#8A9086", marginBottom: 16 }}>{member.member_code} · {member.phone || "no phone"} · MVR {member.monthly_amount}/mo</div>
-          <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>CONTRIBUTION HISTORY</div>
-          {(detail?.contributions || []).map((h) => (
-            <div key={h.id} style={{ display: "flex", justifyContent: "space-between", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "12px 16px", marginBottom: 8 }}>
-              <div>
-                <div className="sans" style={{ fontSize: 14, fontWeight: 500 }}>{h.month}</div>
-                <div className="sans" style={{ fontSize: 11, color: "#B5AE9C" }}>{h.txn_id} · Bank ref: {h.ref_number || "—"} · {h.status}</div>
-              </div>
-              <div className="sans" style={{ fontSize: 14, fontWeight: 600 }}>MVR {h.amount}</div>
-            </div>
-          ))}
-          {(!detail || detail.contributions?.length === 0) && <div className="sans" style={{ fontSize: 13, color: "#8A9086" }}>No contributions recorded yet.</div>}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
-            <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn()}>PDF statement</button>
-            <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn()}>CSV statement</button>
+          <div className="sans" style={{fontSize:12,color:"#8A9086"}}>
+            {member.member_code} · {member.phone || "Phone not added"} · MVR {fmt(member.monthly_amount)}/mo
           </div>
-          {member.active && canRemind && <button className="sans" disabled={reminding} onClick={async()=>{
-            if(!confirm(`Send a payment reminder to ${member.name} for ${month}?`)) return;
+          <div className="sans" style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:member.telegram_id?"#3A6B3E":"#8A9086",marginTop:5}}>
+            <span>{member.telegram_id ? "●" : "○"}</span>{member.telegram_id ? "Telegram linked" : "Telegram not linked"}
+          </div>
+
+          <div style={{background:"#F7F5EF",border:"1px solid #E9E4D8",borderRadius:12,padding:13,marginTop:14}}>
+            <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+              <div>
+                <div style={{fontSize:10,color:"#8A9086"}}>{monthLabel}</div>
+                <div style={{fontSize:15,fontWeight:700,color:statusColor,textTransform:"capitalize",marginTop:2}}>{currentLabel}</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:13,fontWeight:700}}>MVR {fmt(currentPaid)} / {fmt(monthlyAmount)}</div>
+                <div style={{fontSize:10,color:currentDue>0?"#A6432F":"#3A6B3E",marginTop:2}}>{currentDue>0?`MVR ${fmt(currentDue)} due`:"No amount due"}</div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:9,marginBottom:16}}>
+            <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:11,padding:11}}>
+              <div className="sans" style={{fontSize:9,color:"#8A9086"}}>TOTAL CONTRIBUTED</div>
+              <div className="sans" style={{fontSize:14,fontWeight:700,marginTop:3}}>MVR {fmt(totalContributed)}</div>
+            </div>
+            <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:11,padding:11}}>
+              <div className="sans" style={{fontSize:9,color:"#8A9086"}}>CURRENT OUTSTANDING</div>
+              <div className="sans" style={{fontSize:14,fontWeight:700,color:currentDue>0?"#A6432F":"#3A6B3E",marginTop:3}}>MVR {fmt(currentDue)}</div>
+            </div>
+          </div>
+
+          <div className="sans" style={{fontSize:11,color:"#6B7268",marginBottom:8,fontWeight:700,letterSpacing:.5}}>CONTRIBUTION HISTORY</div>
+          {approved.map(contributionCard)}
+          {approved.length===0 && <div className="sans" style={{fontSize:12,color:"#8A9086",padding:"8px 0"}}>No approved contributions yet.</div>}
+
+          {rejected.length>0 && (
+            <>
+              <button onClick={()=>setShowRejected(!showRejected)} className="sans"
+                style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",border:0,background:"transparent",padding:"10px 2px",color:"#8A9086",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                <span>REJECTED / VOIDED · {rejected.length}</span><span>{showRejected?"▲":"▼"}</span>
+              </button>
+              {showRejected && rejected.map(contributionCard)}
+            </>
+          )}
+
+          <div className="sans" style={{fontSize:10,color:"#8A9086",fontWeight:700,marginTop:12,marginBottom:6}}>EXPORT STATEMENT</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn()}>PDF</button>
+            <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn()}>CSV</button>
+          </div>
+
+          {member.active && canRemind && currentDue > 0 && <button className="sans" disabled={reminding} onClick={async()=>{
+            if(!confirm(`Send a payment reminder to ${member.name} for ${monthLabel}?`)) return;
             try{
               setReminding(true); setReminderNote("");
               const r=await api.admin.sendPaymentReminders({month,member_id:member.id});
@@ -564,9 +683,17 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
           }} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"#EAF1EE",color:"#1F3D2B",border:"1px solid #CFE0D6",borderRadius:10,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",marginTop:10}}>
             <Bell size={14}/>{reminding?"Sending…":"Send payment reminder"}
           </button>}
+
+          {member.active && canRemind && currentDue <= 0 && (
+            <div className="sans" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"#F2F5F3",color:"#6B7268",border:"1px solid #E0E6E2",borderRadius:10,padding:10,fontSize:11,fontWeight:600,marginTop:10}}>
+              ✓ Paid — no reminder needed
+            </div>
+          )}
+
           {reminderNote && <div className="sans" style={{fontSize:10,color:"#6B7268",marginTop:5,textAlign:"center"}}>{reminderNote}</div>}
+
           <button onClick={toggleActive} className="sans"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "none", color: member.active ? "#A6432F" : "#3A6B3E", border: "1px solid " + (member.active ? "#F2D6D0" : "#DDECD9"), borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 12 }}>
+            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"none",color:member.active?"#A6432F":"#3A6B3E",border:"1px solid "+(member.active?"#F2D6D0":"#DDECD9"),borderRadius:10,padding:12,fontSize:13,fontWeight:600,cursor:"pointer",marginTop:12}}>
             {member.active ? "Deactivate member" : "Reactivate member"}
           </button>
         </>
