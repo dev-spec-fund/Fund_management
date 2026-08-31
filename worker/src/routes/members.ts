@@ -28,7 +28,7 @@ membersRoute.get("/:id", requireAdmin, async (c) => {
     : "SELECT id,member_code,name,phone,monthly_amount,active,joined_at,created_at,telegram_id FROM members WHERE id=?").bind(id).first();
   if (!member) return c.json({ error: "Not found" }, 404);
   const contributions = await c.env.DB.prepare(
-    `SELECT id,txn_id,member_id,amount,month,ref_number,status,approved_by,submitted_at,approved_at,bank_date,corrected_by,corrected_at,voided_by,voided_at,void_reason
+    `SELECT id,txn_id,member_id,amount,month,${viewer?"NULL":"ref_number"} ref_number,status,approved_by,submitted_at,approved_at,${viewer?"NULL":"bank_date"} bank_date,corrected_by,corrected_at,voided_by,voided_at,void_reason
      FROM contributions WHERE member_id = ? ORDER BY month DESC, submitted_at DESC`
   ).bind(id).all();
   return c.json({ ...member, contributions: contributions.results });
@@ -61,7 +61,7 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
     ? "SELECT id,member_code,name,NULL phone,monthly_amount,active,joined_at,created_at,NULL telegram_id FROM members WHERE id=?"
     : "SELECT id,member_code,name,phone,monthly_amount,active,joined_at,created_at,telegram_id FROM members WHERE id=?").bind(id).first<any>();
   if (!member) return c.json({error:"Not found"},404);
-  const contributions = await c.env.DB.prepare(`SELECT id,txn_id,amount,month,ref_number,status,submitted_at,approved_at FROM contributions WHERE member_id=? ORDER BY submitted_at`).bind(id).all<any>();
+  const contributions = await c.env.DB.prepare(`SELECT id,txn_id,amount,month,${viewer?"NULL":"ref_number"} ref_number,status,submitted_at,approved_at FROM contributions WHERE member_id=? ORDER BY submitted_at`).bind(id).all<any>();
   const allocations = await c.env.DB.prepare(`
     SELECT ca.contribution_id,ca.month,ca.amount
     FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id

@@ -1,0 +1,64 @@
+import { jsPDF } from "jspdf";
+import { api } from "../api";
+
+const fmt = (n) => Number(n || 0).toLocaleString();
+
+export async function sendExportToTelegram(blob, filename, caption) {
+  const result = await api.reports.sendDocument(blob, filename, caption);
+  const message = `✅ ${result.filename || filename} sent to your Telegram chat.`;
+  if (window.Telegram?.WebApp?.showAlert) window.Telegram.WebApp.showAlert(message);
+  else alert(message);
+  return result;
+}
+
+export async function exportStatementCsv(member) {
+  const st = await api.members.statement(member.id);
+  const rows = [["Member ID", st.member.member_code], ["Member", st.member.name], [], ["Month","Status","Paid","Due","Reason"]];
+  for (const x of st.monthly_status) rows.push([x.month,x.status,x.paid,x.due,x.reason||""]);
+  rows.push([], ["Contribution transaction","Month","Amount","Bank reference","Status","Submitted"]);
+  for (const x of st.contributions) rows.push([x.txn_id,x.month,x.amount,x.ref_number||"",x.status,x.submitted_at]);
+  rows.push([], ["Donation transaction","Month","Amount","Note","Date"]);
+  for (const x of (st.donations || [])) rows.push([x.txn_id,x.transaction_month||"",x.amount,x.note||"",x.created_at]);
+  rows.push([], ["Balance date","Transaction","Type","Amount","Running balance"]);
+  for (const x of (st.balance_history || [])) rows.push([x.at,x.txn_id,x.kind,x.amount,x.balance]);
+  const safeCsv = (v) => { let x=String(v ?? ""); if (/^[=+\-@]/.test(x)) x=`'${x}`; return `"${x.replace(/"/g,'""')}"`; };
+  const csv = rows.map(r => r.map(safeCsv).join(",")).join("\n");
+  const filename=`${st.member.member_code}-statement.csv`;
+  return sendExportToTelegram(new Blob([csv], {type:"text/csv;charset=utf-8"}), filename, `${st.member.member_code} · Member statement CSV`);
+}
+
+export async function exportStatementPdf(member) {
+  const st = await api.members.statement(member.id);
+  const doc = new jsPDF(); let y=18;
+  doc.setFontSize(16); doc.text("Fund Member Statement", 14, y); y+=9;
+  doc.setFontSize(10); doc.text(`${st.member.member_code} — ${st.member.name}`,14,y); y+=6;
+  doc.text(`Monthly contribution: MVR ${fmt(st.member.monthly_amount)}`,14,y); y+=10;
+  doc.setFontSize(11); doc.text("Monthly status",14,y); y+=6; doc.setFontSize(9);
+  for (const x of st.monthly_status) { if(y>280){doc.addPage();y=18;} doc.text(`${x.month}  ${String(x.status).toUpperCase()}  Paid MVR ${fmt(x.paid)}  Due MVR ${fmt(x.due)}`,14,y); y+=5; }
+  y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Transactions",14,y); y+=6; doc.setFontSize(9);
+  for (const x of st.contributions) { if(y>280){doc.addPage();y=18;} doc.text(`${x.txn_id}  ${x.month}  MVR ${fmt(x.amount)}  ${x.ref_number||"No bank ref"}  ${x.status}`,14,y); y+=5; }
+  if ((st.donations || []).length) { y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Donations",14,y); y+=6; doc.setFontSize(9); for(const x of st.donations){if(y>280){doc.addPage();y=18;}doc.text(`${x.txn_id}  ${x.transaction_month||""}  MVR ${fmt(x.amount)}  ${x.note||""}`,14,y);y+=5;} }
+  y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Balance history",14,y); y+=6; doc.setFontSize(9); for(const x of (st.balance_history||[])){if(y>280){doc.addPage();y=18;}doc.text(`${String(x.at||"").slice(0,10)}  ${x.txn_id}  ${x.kind}  +MVR ${fmt(x.amount)}  Balance MVR ${fmt(x.balance)}`,14,y);y+=5;}
+  const filename=`${st.member.member_code}-statement.pdf`;
+  return sendExportToTelegram(doc.output("blob"), filename, `${st.member.member_code} · Member statement PDF`);
+}
+
+export async function exportFundPdf({ month, monthLabel, summary }) {
+  const doc = new jsPDF(); let y=18;
+  const line=(label,value)=>{ doc.text(label,14,y); doc.text(String(value),120,y); y+=7; };
+  doc.setFontSize(16); doc.text("Fund Report",14,y); y+=9;
+  doc.setFontSize(11); doc.text(monthLabel,14,y); y+=10;
+  doc.setFontSize(10);
+  line("Contribution cash received", `MVR ${fmt(summary.memberIncome)}`);
+  line("Allocated contributions", `MVR ${fmt(summary.allocatedContributions ?? summary.memberIncome)}`);
+  line("Paid in advance", `MVR ${fmt(summary.advanceAllocated)}`);
+  line("Donations", `MVR ${fmt(summary.donationIncome)}`);
+  line("Expenses", `MVR ${fmt(summary.expenses)}`);
+  line("Net change", `MVR ${fmt(summary.net)}`);
+  line("Closing balance", `MVR ${fmt(summary.fundBalance)}`);
+  line("Outstanding dues", `MVR ${fmt(summary.outstanding?.total)}`);
+  y+=5; doc.setFontSize(11); doc.text("Expense categories",14,y); y+=7; doc.setFontSize(9);
+  for(const c of (summary.byCategory||[]).filter(x=>Number(x.spent||0)>0)){ if(y>280){doc.addPage();y=18;} doc.text(String(c.category||"Uncategorised"),14,y); doc.text(`MVR ${fmt(c.spent)}`,120,y); y+=6; }
+  const filename=`fund-report-${month}.pdf`;
+  return sendExportToTelegram(doc.output("blob"), filename, `${monthLabel} · Fund report PDF`);
+}

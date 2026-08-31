@@ -24,10 +24,10 @@ reportsRoute.post("/send-document", requireMemberOrAdmin, async (c) => {
 
     const safeName = requestedName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "fund-document";
     const lower = safeName.toLowerCase();
-    if (!lower.endsWith(".pdf") && !lower.endsWith(".csv"))
-      return c.json({ error: "Only PDF and CSV documents are supported" }, 400);
+    if (!lower.endsWith(".pdf") && !lower.endsWith(".csv") && !lower.endsWith(".json"))
+      return c.json({ error: "Only PDF, CSV and JSON documents are supported" }, 400);
 
-    const blob = new Blob([await file.arrayBuffer()], { type: file.type || (lower.endsWith(".pdf") ? "application/pdf" : "text/csv") });
+    const blob = new Blob([await file.arrayBuffer()], { type: file.type || (lower.endsWith(".pdf") ? "application/pdf" : lower.endsWith(".json") ? "application/json" : "text/csv") });
     await sendDocument(c.env, String(user.id), safeName, blob, caption || "Fund Manager export");
     return c.json({ ok: true, filename: safeName });
   } catch (e) {

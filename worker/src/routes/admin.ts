@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance, requireSuperAdmin } from "../auth";
-import { auditEntity, duplicateSlip, ensureOperationalSchema, normalizeName, normalizePhone, requireOpenMonth, safeLogError } from "../ops";
+import { auditEntity, contributionDuplicateKey, duplicateSlip, ensureOperationalSchema, normalizeName, normalizePhone, requireOpenMonth, safeLogError } from "../ops";
 import { currentMonth, getSetting, generateMemberCode } from "../db";
 import { findDuplicateMembers } from "../ops";
 import { sendMessage, sendInBatches } from "../telegram";
@@ -75,8 +75,8 @@ adminRoute.patch('/pending/contributions/:id', requireFinance, async c => {
   const amount=money(body.amount??before.amount); const ref=body.ref_number===undefined?before.ref_number:boundedText(body.ref_number,120); const bankDate=body.bank_date===undefined?before.bank_date:body.bank_date;
   if(amount===null || !validDate(bankDate)) return c.json({error:'Invalid amount or bank date'},400);
   const dup=await duplicateSlip(c.env,ref,amount,bankDate,id); if(dup) return c.json({error:`Duplicate slip matches ${dup.txn_id}`,duplicate:dup},409);
-  await c.env.DB.prepare(`UPDATE contributions SET amount=?,ref_number=?,bank_date=?,month=?,corrected_by=?,corrected_at=datetime('now') WHERE id=? AND status='pending'`)
-    .bind(amount,ref||null,bankDate||null,month,admin.id,id).run();
+  await c.env.DB.prepare(`UPDATE contributions SET amount=?,ref_number=?,bank_date=?,month=?,duplicate_key=?,corrected_by=?,corrected_at=datetime('now') WHERE id=? AND status='pending'`)
+    .bind(amount,ref||null,bankDate||null,month,contributionDuplicateKey(ref,amount,bankDate),admin.id,id).run();
   const after=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
   await auditEntity(c.env,admin.id,'contribution_ocr_corrected','contribution',id,before,after); return c.json(after);
 });
@@ -458,8 +458,9 @@ adminRoute.get('/health', requireAdmin, async c => {
   return c.json(out);
 });
 
-adminRoute.get('/errors', requireSuperAdmin, async c => { await ensureOperationalSchema(c.env); return c.json((await c.env.DB.prepare("SELECT * FROM error_log ORDER BY created_at DESC LIMIT 200").all()).results); });
-adminRoute.delete('/errors', requireSuperAdmin, async c => { const admin=c.get('admin')!; await c.env.DB.prepare("DELETE FROM error_log").run(); await auditEntity(c.env,admin.id,'error_log_cleared','error_log','all',null,{cleared:true}); return c.json({ok:true}); });
+adminRoute.get('/errors', requireSuperAdmin, async c => { await ensureOperationalSchema(c.env); return c.json((await c.env.DB.prepare("SELECT * FROM error_log ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, created_at DESC LIMIT 200").all()).results); });
+adminRoute.post('/errors/:id/resolve', requireSuperAdmin, async c => { const admin=c.get('admin')!; const id=Number(c.req.param('id')); const before=await c.env.DB.prepare("SELECT * FROM error_log WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:'Not found'},404); await c.env.DB.prepare("UPDATE error_log SET status='resolved',resolved_at=datetime('now'),resolved_by=? WHERE id=?").bind(admin.id,id).run(); await auditEntity(c.env,admin.id,'error_resolved','error_log',id,before,{...before,status:'resolved'}); return c.json({ok:true}); });
+adminRoute.post('/errors/resolve-all', requireSuperAdmin, async c => { const admin=c.get('admin')!; const row=await c.env.DB.prepare("SELECT COUNT(*) n FROM error_log WHERE status='open'").first<any>(); await c.env.DB.prepare("UPDATE error_log SET status='resolved',resolved_at=datetime('now'),resolved_by=? WHERE status='open'").bind(admin.id).run(); await auditEntity(c.env,admin.id,'errors_resolved','error_log','open',null,{resolved:Number(row?.n||0)}); return c.json({ok:true,resolved:Number(row?.n||0)}); });
 
 adminRoute.get('/backup', requireSuperAdmin, async c => {
   await ensureOperationalSchema(c.env);

@@ -145,12 +145,6 @@ export function requireAdmin(c: Context<AppEnv>, next: Next) {
   return next();
 }
 
-export function requireOwner(c: Context<AppEnv>, next: Next) {
-  const admin = c.get("admin");
-  if (!admin || (admin.role !== "owner" && admin.role !== "super_admin")) return c.json({ error: "Owner access required" }, 403);
-  return next();
-}
-
 export function requireFinance(c: Context<AppEnv>, next: Next) {
   const admin = c.get("admin");
   if (!adminCan(admin, "finance")) return c.json({ error: "Treasurer or Super Admin access required" }, 403);

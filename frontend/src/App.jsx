@@ -4,59 +4,11 @@ import {
   Download, ShieldCheck, Bell, ChevronLeft, ChevronRight, AlertTriangle, Eye, Pencil, Trash2, Search,
 } from "lucide-react";
 import { api } from "./api";
-import { jsPDF } from "jspdf";
 import { Modal, Field } from "./components/FormControls";
+import { currentMonthValue, shiftMonthValue, todayValue } from "./utils/date";
+import { exportFundPdf, exportStatementCsv, exportStatementPdf, sendExportToTelegram } from "./utils/exports";
 
 const fmt = (n) => Number(n || 0).toLocaleString();
-const currentMonthValue = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Indian/Maldives", year: "numeric", month: "2-digit" }).format(new Date());
-
-function downloadText(filename, text, type = "text/plain") {
-  const blob = new Blob([text], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 500);
-}
-
-async function sendExportToTelegram(blob, filename, caption) {
-  const result = await api.reports.sendDocument(blob, filename, caption);
-  const message = `✅ ${result.filename || filename} sent to your Telegram chat.`;
-  if (window.Telegram?.WebApp?.showAlert) window.Telegram.WebApp.showAlert(message);
-  else alert(message);
-}
-
-async function exportStatementCsv(member) {
-  const st = await api.members.statement(member.id);
-  const rows = [["Member ID", st.member.member_code], ["Member", st.member.name], [], ["Month","Status","Paid","Due","Reason"]];
-  for (const x of st.monthly_status) rows.push([x.month,x.status,x.paid,x.due,x.reason||""]);
-  rows.push([], ["Contribution transaction","Month","Amount","Bank reference","Status","Submitted"]);
-  for (const x of st.contributions) rows.push([x.txn_id,x.month,x.amount,x.ref_number||"",x.status,x.submitted_at]);
-  rows.push([], ["Donation transaction","Month","Amount","Note","Date"]);
-  for (const x of (st.donations || [])) rows.push([x.txn_id,x.transaction_month||"",x.amount,x.note||"",x.created_at]);
-  rows.push([], ["Balance date","Transaction","Type","Amount","Running balance"]);
-  for (const x of (st.balance_history || [])) rows.push([x.at,x.txn_id,x.kind,x.amount,x.balance]);
-  const safeCsv = (v) => { let x=String(v ?? ""); if (/^[=+\-@]/.test(x)) x=`'${x}`; return `"${x.replace(/"/g,'""')}"`; };
-  const csv = rows.map(r => r.map(safeCsv).join(",")).join("\n");
-  const filename=`${st.member.member_code}-statement.csv`;
-  await sendExportToTelegram(new Blob([csv], {type:"text/csv;charset=utf-8"}), filename, `${st.member.member_code} · Member statement CSV`);
-}
-
-async function exportStatementPdf(member) {
-  const st = await api.members.statement(member.id);
-  const doc = new jsPDF(); let y=18;
-  doc.setFontSize(16); doc.text("Fund Member Statement", 14, y); y+=9;
-  doc.setFontSize(10); doc.text(`${st.member.member_code} — ${st.member.name}`,14,y); y+=6;
-  doc.text(`Monthly contribution: MVR ${fmt(st.member.monthly_amount)}`,14,y); y+=10;
-  doc.setFontSize(11); doc.text("Monthly status",14,y); y+=6; doc.setFontSize(9);
-  for (const x of st.monthly_status) { if(y>280){doc.addPage();y=18;} doc.text(`${x.month}  ${String(x.status).toUpperCase()}  Paid MVR ${fmt(x.paid)}  Due MVR ${fmt(x.due)}`,14,y); y+=5; }
-  y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Transactions",14,y); y+=6; doc.setFontSize(9);
-  for (const x of st.contributions) { if(y>280){doc.addPage();y=18;} doc.text(`${x.txn_id}  ${x.month}  MVR ${fmt(x.amount)}  ${x.ref_number||"No bank ref"}  ${x.status}`,14,y); y+=5; }
-  if ((st.donations || []).length) { y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Donations",14,y); y+=6; doc.setFontSize(9); for(const x of st.donations){if(y>280){doc.addPage();y=18;}doc.text(`${x.txn_id}  ${x.transaction_month||""}  MVR ${fmt(x.amount)}  ${x.note||""}`,14,y);y+=5;} }
-  y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Balance history",14,y); y+=6; doc.setFontSize(9); for(const x of (st.balance_history||[])){if(y>280){doc.addPage();y=18;}doc.text(`${String(x.at||"").slice(0,10)}  ${x.txn_id}  ${x.kind}  +MVR ${fmt(x.amount)}  Balance MVR ${fmt(x.balance)}`,14,y);y+=5;}
-  const filename=`${st.member.member_code}-statement.pdf`;
-  const blob=doc.output("blob");
-  await sendExportToTelegram(blob, filename, `${st.member.member_code} · Member statement PDF`);
-}
-
 export default function App() {
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1067,7 +1019,7 @@ function Activity({ isAdmin, canFinance = false }) {
 }
 /* ---------- Reports (admin) ---------- */
 function Reports({ setTab }) {
-  const nowMonth = new Date().toISOString().slice(0, 7);
+  const nowMonth = currentMonthValue();
   const [month, setMonth] = useState(nowMonth);
   const [summary, setSummary] = useState(null);
   const [trend, setTrend] = useState([]);
@@ -1085,9 +1037,7 @@ function Reports({ setTab }) {
   }, [month]);
 
   const shiftMonth = (delta) => {
-    const [y, m] = month.split("-").map(Number);
-    const d = new Date(Date.UTC(y, m - 1 + delta, 1));
-    setMonth(d.toISOString().slice(0, 7));
+    setMonth(shiftMonthValue(month, delta));
   };
 
   const monthLabel = new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" })
@@ -1133,7 +1083,8 @@ function Reports({ setTab }) {
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#1F3D2B", letterSpacing: .4 }}>REPORTS</div>
         <div style={{ display: "flex", gap: 6, position: "relative" }}>
-          <button onClick={exportCsv} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> Export</button>
+          <button onClick={()=>exportFundPdf({month,monthLabel,summary}).catch(e=>alert(e.message))} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
+          <button onClick={exportCsv} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>
           <button onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Add</button>
           {showAdd && (
             <div style={{ position: "absolute", right: 0, top: 38, zIndex: 5, width: 160, background: "#fff", border: "1px solid #E9E4D8", borderRadius: 10, padding: 5, boxShadow: "0 8px 24px rgba(31,61,43,.12)" }}>
@@ -1862,11 +1813,11 @@ function Settings({ admin }) {
     // Secondary panels are independent and may fail without blocking Settings.
     const jobs=[
       api.settings.admins().then(setAdmins),
-      api.settings.auditLog().then(setAudit),
       api.expenses.categories().then(setCategories),
       api.admin.health().then(setHealth),
       api.admin.monthClosures().then(setClosures),
     ];
+    if(financeAdmin) jobs.push(api.settings.auditLog().then(setAudit));
     if(superAdmin){
       jobs.push(api.members.list().then(setMembersForAdmin));
       jobs.push(api.admin.errors().then(setErrors));
@@ -1915,12 +1866,14 @@ function Settings({ admin }) {
   const backup=async()=>{
     try{
       const data=await api.admin.backup();
-      downloadText(`kys-fund-backup-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(data,null,2),"application/json");
+      const filename=`kys-fund-backup-${todayValue()}.json`;
+      await sendExportToTelegram(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),filename,"Super Admin database backup");
+      setMessage("Backup sent to your Telegram chat");
     }catch(e){setMessage(e.message)}
   };
 
   const monthClosed = closures.some(x=>x.month===currentMonth);
-  const tabs=[["general","General"],["admins","Admins"],["system","System"],["audit","Audit"]];
+  const tabs=[["general","General"],["admins","Admins"],["system","System"],...(financeAdmin?[["audit","Audit"]]:[])];
 
   return <>
     {message && <div className="sans" style={{fontSize:12,background:"#EAF1EE",padding:9,borderRadius:9,marginBottom:12}}>{message}</div>}
@@ -2122,20 +2075,26 @@ function Settings({ admin }) {
 
         <SectionTitle>RECENT ERRORS {errors.length>0?`· ${errors.length}`:""}</SectionTitle>
         <div style={cardStyle}>
-          {errors.length>0&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}>
+          {errors.some(e=>e.status!=="resolved")&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}>
             <button onClick={async()=>{
-              if(!confirm("Clear all logged errors?")) return;
+              if(!confirm("Mark all open errors as resolved? Error history will be retained.")) return;
               try{
-                await api.admin.clearErrors();
-                const fresh=await api.admin.errors();
-                setErrors(fresh);
-                setMessage("Error log cleared");
+                await api.admin.resolveAllErrors();
+                setErrors(await api.admin.errors());
+                setMessage("Open errors marked resolved");
               }catch(e){setMessage(e.message)}
-            }} style={compactBtn}>Clear errors</button>
+            }} style={compactBtn}>Resolve all open</button>
           </div>}
-          {errors.slice(0,30).map(e=><div key={e.id} className="sans" style={{padding:"8px 0",borderBottom:"1px solid #F0EDE3",fontSize:11}}>
-            <b>{e.source}</b><div style={{color:"#6B7268",marginTop:2}}>{e.message}</div>
-            <div style={{color:"#B5AE9C",marginTop:3}}>{formatLocalDateTime(e.created_at)}</div>
+          {errors.slice(0,30).map(e=><div key={e.id} className="sans" style={{padding:"8px 0",borderBottom:"1px solid #F0EDE3",fontSize:11,opacity:e.status==="resolved"?.62:1}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"flex-start"}}>
+              <b>{e.source}</b>
+              <span style={{fontSize:9,fontWeight:700,color:e.status==="resolved"?"#6B7268":"#A6432F"}}>{e.status==="resolved"?"RESOLVED":"OPEN"}</span>
+            </div>
+            <div style={{color:"#6B7268",marginTop:2}}>{e.message}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:3}}>
+              <span style={{color:"#B5AE9C"}}>{formatLocalDateTime(e.created_at)}</span>
+              {e.status!=="resolved"&&<button onClick={async()=>{try{await api.admin.resolveError(e.id);setErrors(await api.admin.errors())}catch(err){setMessage(err.message)}}} style={{...compactBtn,padding:"4px 7px",fontSize:9}}>Resolve</button>}
+            </div>
           </div>)}
           {!errors.length&&<EmptyLine>No logged errors.</EmptyLine>}
         </div>

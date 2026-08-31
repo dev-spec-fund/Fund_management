@@ -22,7 +22,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 10;
+const REQUIRED_SCHEMA_VERSION = 11;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -34,11 +34,12 @@ export async function ensureOperationalSchema(env: Env) {
     const checks:[string,string[]][] = [
       ["admins", ["active","deactivated_at","deactivated_by"]],
       ["members", ["normalized_name","normalized_phone"]],
-      ["contributions", ["bank_date","corrected_by","corrected_at","voided_by","voided_at","void_reason"]],
+      ["contributions", ["bank_date","corrected_by","corrected_at","voided_by","voided_at","void_reason","duplicate_key"]],
       ["donations", ["member_id","transaction_month","status","voided_by","voided_at","void_reason"]],
       ["expenses", ["transaction_month","status","approval_required","approved_by","approved_at","voided_by","voided_at","void_reason"]],
       ["expense_categories", ["active"]],
       ["meetings", ["updated_at","last_notification_at","cancelled_at","cancelled_by","cancel_reason"]],
+      ["error_log", ["status","resolved_at","resolved_by"]],
     ];
     for (const [table,required] of checks) {
       const rows=await env.DB.prepare(`PRAGMA table_info(${table})`).all<any>();
@@ -86,10 +87,24 @@ export async function requireOpenMonth(env: Env, month: string) {
   if (await isMonthClosed(env, month)) throw new Error(`Month ${month} is closed and cannot be changed.`);
 }
 
-export async function duplicateSlip(env: Env, ref: string | null, amount: number, bankDate: string | null, excludeId?: number) {
+export function contributionDuplicateKey(ref: string | null | undefined, amount: number, bankDate: string | null | undefined) {
   const nref = normalizeRef(ref);
-  if (!nref) return null;
+  const date = String(bankDate || "").trim();
+  if (!nref || !date || !Number.isFinite(amount) || amount <= 0) return null;
+  return `${nref}|${Math.round(amount * 100)}|${date}`;
+}
+
+export async function duplicateSlip(env: Env, ref: string | null, amount: number, bankDate: string | null, excludeId?: number) {
   const date = bankDate || new Date().toISOString().slice(0,10);
+  const key = contributionDuplicateKey(ref, amount, date);
+  if (!key) return null;
+  const byKey = await env.DB.prepare(`SELECT id, txn_id, member_id, amount, ref_number, bank_date, status, submitted_at
+    FROM contributions WHERE duplicate_key=? AND status NOT IN ('rejected','voided') ${excludeId ? "AND id<>?" : ""} LIMIT 1`)
+    .bind(...(excludeId ? [key, excludeId] : [key])).first<any>();
+  if (byKey) return byKey;
+
+  // Legacy fallback covers pre-v11 rows that could not receive a canonical key.
+  const nref = normalizeRef(ref);
   const stmt = env.DB.prepare(`SELECT id, txn_id, member_id, amount, ref_number, bank_date, status, submitted_at
     FROM contributions
     WHERE status NOT IN ('rejected','voided') AND ABS(amount-?) < 0.005
@@ -139,6 +154,29 @@ export function sanitizeAuditDetail(detail: unknown): unknown {
   if (typeof detail !== "string") return sanitizeAuditValue(detail);
   try { return sanitizeAuditValue(JSON.parse(detail)); }
   catch { return detail.length > 500 ? `${detail.slice(0, 500)}…` : detail; }
+}
+
+const VIEWER_PRIVATE_KEYS = new Set([
+  "phone", "normalized_phone", "telegram_id", "telegram_user_id", "chat_id", "slip_file_id",
+  "ref_number", "bank_reference", "bank_ref", "reference",
+]);
+
+function redactViewerAuditValue(value: unknown, depth = 0): unknown {
+  if (depth > 5) return "[truncated]";
+  if (Array.isArray(value)) return value.slice(0,25).map(v=>redactViewerAuditValue(v,depth+1));
+  if (value && typeof value === "object") {
+    const clean:Record<string,unknown>={};
+    for (const [key,val] of Object.entries(value as Record<string,unknown>)) {
+      clean[key]=VIEWER_PRIVATE_KEYS.has(key.toLowerCase()) ? "[redacted]" : redactViewerAuditValue(val,depth+1);
+    }
+    return clean;
+  }
+  return value;
+}
+
+export function sanitizeAuditDetailForRole(detail: unknown, role?: string | null): unknown {
+  const clean=sanitizeAuditDetail(detail);
+  return role === "viewer" ? redactViewerAuditValue(clean) : clean;
 }
 
 export async function auditEntity(env: Env, adminId: number | null, action: string, entity: string, entityId: number | string | null, before?: unknown, after?: unknown) {

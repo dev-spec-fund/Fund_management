@@ -22,7 +22,7 @@ import {
   ensureMemberRegistrationTable,
   findUnlinkedMemberMatches,
 } from "./db";
-import { adminCan, consumeRateLimit, duplicateSlip, normalizeName, normalizePhone, requireOpenMonth, safeLogError } from "./ops";
+import { adminCan, consumeRateLimit, contributionDuplicateKey, duplicateSlip, normalizeName, normalizePhone, requireOpenMonth, safeLogError } from "./ops";
 
 const DEFAULT_MINI_APP_URL = "https://fund-management.pages.dev";
 let cachedMiniAppUrl: { value: string; expiresAt: number } | null = null;
@@ -302,9 +302,16 @@ Logged by: ${esc(admin.name)}`;
   const dupWarning = "";
 
   const txnId = await generateTxnId(env, "C");
-  const insertRes = await env.DB.prepare(
-    "INSERT INTO contributions (txn_id, member_id, amount, month, ref_number, bank_date, slip_file_id, ocr_raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).bind(txnId, member.id, amount, month, ref, bankDate, slipReference(fileId), ocr.raw).run();
+  let insertRes:any;
+  try {
+    insertRes = await env.DB.prepare(
+      "INSERT INTO contributions (txn_id, member_id, amount, month, ref_number, bank_date, duplicate_key, slip_file_id, ocr_raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(txnId, member.id, amount, month, ref, bankDate, contributionDuplicateKey(ref,Number(amount),bankDate), slipReference(fileId), ocr.raw).run();
+  } catch (e:any) {
+    const raced = await duplicateSlip(env, ref, Number(amount), bankDate);
+    if (raced) return sendMessage(env, chatId, `⚠️ This slip appears to be a duplicate of <code>${esc(raced.txn_id)}</code>. It was not submitted again.`);
+    throw e;
+  }
   const contributionId = Number(insertRes.meta.last_row_id);
 
   await sendMessage(env, chatId,

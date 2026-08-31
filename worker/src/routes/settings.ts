@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance, requireSuperAdmin } from "../auth";
 import { logAudit, setSetting } from "../db";
-import { auditEntity, ensureOperationalSchema, sanitizeAuditDetail } from "../ops";
+import { auditEntity, ensureOperationalSchema, sanitizeAuditDetailForRole } from "../ops";
 import { boundedText, telegramId } from "../validation";
 
 export const settingsRoute = new Hono<AppEnv>();
@@ -118,7 +118,7 @@ settingsRoute.delete("/admins/:id", requireSuperAdmin, async(c)=>{
   await c.env.DB.prepare("UPDATE admins SET active=0,deactivated_at=datetime('now'),deactivated_by=? WHERE id=?").bind(admin.id,id).run();
   const after=await c.env.DB.prepare("SELECT * FROM admins WHERE id=?").bind(id).first<any>();await auditEntity(c.env,admin.id,"admin_deactivated","admin",id,before,after);return c.json({ok:true});
 });
-settingsRoute.get("/audit-log", requireAdmin, async(c)=>{
+settingsRoute.get("/audit-log", requireFinance, async(c)=>{
   const rows=await c.env.DB.prepare(`SELECT al.id,al.admin_id,al.action,al.detail,al.created_at,a.name admin_name,a.role admin_role FROM audit_log al LEFT JOIN admins a ON a.id=al.admin_id ORDER BY al.created_at DESC LIMIT 500`).all<any>();
-  return c.json(rows.results.map((row:any)=>({...row,detail:sanitizeAuditDetail(row.detail)})));
+  return c.json(rows.results.map((row:any)=>({...row,detail:sanitizeAuditDetailForRole(row.detail, c.get("admin")?.role)})));
 });

@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS contributions (
   corrected_at TEXT,
   voided_by INTEGER REFERENCES admins(id),
   voided_at TEXT,
-  void_reason TEXT
+  void_reason TEXT,
+  duplicate_key TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_contributions_member ON contributions(member_id);
@@ -68,6 +69,8 @@ CREATE INDEX IF NOT EXISTS idx_contributions_member ON contributions(member_id);
 CREATE INDEX IF NOT EXISTS idx_contributions_month ON contributions(month);
 
 CREATE INDEX IF NOT EXISTS idx_contributions_ref ON contributions(ref_number);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_contributions_live_duplicate_key ON contributions(duplicate_key) WHERE duplicate_key IS NOT NULL AND status NOT IN ('rejected','voided');
+CREATE INDEX IF NOT EXISTS idx_contributions_duplicate_lookup ON contributions(duplicate_key,status);
 
 CREATE TABLE IF NOT EXISTS donations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,7 +141,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
   admin_id INTEGER REFERENCES admins(id),
   action TEXT NOT NULL,
   detail TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  status TEXT NOT NULL DEFAULT 'open',
+  resolved_at TEXT,
+  resolved_by INTEGER REFERENCES admins(id)
 );
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ('fund_name', 'Kanditheemu Youth Society');
@@ -166,7 +172,10 @@ CREATE TABLE IF NOT EXISTS error_log (
   source TEXT NOT NULL,
   message TEXT NOT NULL,
   detail TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  status TEXT NOT NULL DEFAULT 'open',
+  resolved_at TEXT,
+  resolved_by INTEGER REFERENCES admins(id)
 );
 
 CREATE TABLE IF NOT EXISTS rate_limits (
@@ -255,6 +264,7 @@ INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (7,'meeting_notific
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (8,'expense_category_management');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (9,'hardening_and_schema_versioning');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (10,'performance_and_normalized_members');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (11,'integrity_privacy_and_error_resolution');
 
 CREATE INDEX IF NOT EXISTS idx_members_normalized_name ON members(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_members_normalized_phone ON members(normalized_phone);
@@ -266,3 +276,5 @@ CREATE INDEX IF NOT EXISTS idx_expenses_status_transaction_month_category ON exp
 CREATE INDEX IF NOT EXISTS idx_donations_status_transaction_month ON donations(status,transaction_month);
 CREATE INDEX IF NOT EXISTS idx_meeting_rsvps_meeting_member ON meeting_rsvps(meeting_id,member_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_status_date ON meetings(status,meeting_date);
+
+CREATE INDEX IF NOT EXISTS idx_error_log_status_created ON error_log(status,created_at DESC);
