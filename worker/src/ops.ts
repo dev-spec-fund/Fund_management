@@ -91,7 +91,6 @@ export async function ensureOperationalSchema(env: Env) {
 
 export async function safeLogError(env: Env, source: string, error: unknown, detail?: unknown) {
   try {
-    await ensureOperationalSchema(env);
     const message = error instanceof Error ? error.message : String(error);
     const extra = detail === undefined ? (error instanceof Error ? error.stack : null) : JSON.stringify(detail);
     await env.DB.prepare("INSERT INTO error_log (source,message,detail) VALUES (?,?,?)")
@@ -102,20 +101,20 @@ export async function safeLogError(env: Env, source: string, error: unknown, det
 }
 
 export async function consumeRateLimit(env: Env, bucket: string, subject: string, limit: number, windowSeconds: number) {
-  await ensureOperationalSchema(env);
   const now = Math.floor(Date.now() / 1000);
   const windowStart = Math.floor(now / windowSeconds) * windowSeconds;
-  await env.DB.prepare(`INSERT INTO rate_limits (bucket,subject,window_start,count) VALUES (?,?,?,1)
-    ON CONFLICT(bucket,subject,window_start) DO UPDATE SET count=count+1`)
-    .bind(bucket, subject, windowStart).run();
-  const row = await env.DB.prepare("SELECT count FROM rate_limits WHERE bucket=? AND subject=? AND window_start=?")
+  const row = await env.DB.prepare(`INSERT INTO rate_limits (bucket,subject,window_start,count) VALUES (?,?,?,1)
+    ON CONFLICT(bucket,subject,window_start) DO UPDATE SET count=count+1
+    RETURNING count`)
     .bind(bucket, subject, windowStart).first<{count:number}>();
-  if (Math.random() < 0.02) await env.DB.prepare("DELETE FROM rate_limits WHERE window_start < ?").bind(windowStart - 86400).run();
+  if (Math.random() < 0.01) {
+    // Cleanup is best-effort and intentionally not awaited on the hot path.
+    env.DB.prepare("DELETE FROM rate_limits WHERE window_start < ?").bind(windowStart - 86400).run().catch(() => {});
+  }
   return (row?.count || 0) <= limit;
 }
 
 export async function isMonthClosed(env: Env, month: string) {
-  await ensureOperationalSchema(env);
   const row = await env.DB.prepare("SELECT month FROM month_closures WHERE month=?").bind(month).first();
   return !!row;
 }

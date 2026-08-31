@@ -10,7 +10,7 @@ import { donationsRoute } from "./routes/donations";
 import { reportsRoute } from "./routes/reports";
 import { settingsRoute } from "./routes/settings";
 import { adminRoute } from "./routes/admin";
-import { ensureOperationalSchema, safeLogError } from "./ops";
+import { consumeRateLimit, safeLogError } from "./ops";
 
 const app = new Hono<AppEnv>();
 
@@ -38,10 +38,14 @@ app.post("/telegram/webhook", async (c) => {
 // Mini App API — all routes require verified Telegram initData
 app.use("/api/*", telegramAuth);
 app.use("/api/*", async (c, next) => {
-  await ensureOperationalSchema(c.env);
-  const user=c.get("telegramUser");
-  const { consumeRateLimit } = await import("./ops");
-  if (!(await consumeRateLimit(c.env, "api", String(user?.id || "unknown"), 120, 60))) return c.json({error:"Too many requests"},429);
+  // Reads are intentionally not backed by a D1 write. Mutations retain a
+  // persistent rate limit, reducing dashboard latency while protecting writes.
+  if (c.req.method !== "GET" && c.req.method !== "OPTIONS") {
+    const user = c.get("telegramUser");
+    if (!(await consumeRateLimit(c.env, "api_write", String(user?.id || "unknown"), 60, 60))) {
+      return c.json({ error: "Too many requests" }, 429);
+    }
+  }
   await next();
 });
 app.route("/api/members", membersRoute);
@@ -52,7 +56,6 @@ app.route("/api/settings", settingsRoute);
 app.route("/api/admin", adminRoute);
 
 app.get("/api/me", async (c) => {
-  await ensureOperationalSchema(c.env);
   const user = c.get("telegramUser");
   const member = await c.env.DB.prepare(
     "SELECT id, member_code, telegram_id, name, phone, monthly_amount, active, joined_at, created_at FROM members WHERE telegram_id = ? LIMIT 1"

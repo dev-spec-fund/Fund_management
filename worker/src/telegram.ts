@@ -180,11 +180,12 @@ export async function ocrSlip(
           {
             role: "user",
             content:
-              "Read this Maldivian bank transfer slip (commonly BML or MIB). Extract the transferred amount in MVR, the BANK transaction/reference number, the transaction date if visible, and a short transcription of important labels/values. Do not use account numbers, card numbers, phone numbers, customer IDs, beneficiary IDs, timestamps, or the amount itself as the reference. Return exactly JSON: {\"amount\":number|null,\"ref\":string|null,\"date\":\"YYYY-MM-DD\"|null,\"text\":string}.",
+              "Read this Maldivian bank transfer slip (commonly BML or MIB). Extract only the transferred amount in MVR, the BANK transaction/reference number, and transaction date if visible. Never use account/card/phone/customer/beneficiary IDs, timestamps, or the amount as the reference. Return exactly JSON: {\"amount\":number|null,\"ref\":string|null,\"date\":\"YYYY-MM-DD\"|null}.",
           },
         ],
         image: imageDataUrl(imageBytes, mime),
-        max_tokens: 350,
+        max_tokens: 120,
+        temperature: 0,
       } as any
     );
 
@@ -201,9 +202,8 @@ export async function ocrSlip(
         const parsed: any = JSON.parse(jsonMatch[0]);
         const amount = cleanAmount(parsed.amount);
         const ref = cleanRef(parsed.ref ?? parsed.reference ?? parsed.transaction_reference ?? parsed.transaction_id);
-        const text = String(parsed.text || "").trim();
         const date = typeof parsed.date === "string" ? parsed.date.trim() : "";
-        const raw = [text, date && `Transaction Date: ${date}`, `[Vision parse]\n${visionRaw}`].filter(Boolean).join("\n");
+        const raw = [date && `Transaction Date: ${date}`, `[Vision parse]\n${visionRaw}`].filter(Boolean).join("\n");
         if (amount !== null || ref) return { amount, ref, raw };
       } catch (err) {
         await safeLogError(env, "ocr.vision.json", err, String(visionRaw).slice(0, 1000));

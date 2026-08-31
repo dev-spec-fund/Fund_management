@@ -6,37 +6,23 @@ import { validMonth } from "../validation";
 
 export const reportsRoute = new Hono<AppEnv>();
 
-/** Combined activity feed: contributions (approved) + expenses + donations, newest first. */
+/** Combined activity feed: one indexed query instead of three full-table reads + JS sorting. */
 reportsRoute.get("/activity", requireMemberOrAdmin, async (c) => {
-  const contributions = await c.env.DB.prepare(`
-    SELECT c.id, c.txn_id, m.name as who, m.member_code, 'contribution' as kind, c.amount, c.month, NULL as ref,
-           c.approved_at as at, a.name as by_name
-    FROM contributions c
-    JOIN members m ON m.id = c.member_id
-    LEFT JOIN admins a ON a.id = c.approved_by
-    WHERE c.status = 'approved'
+  const rows = await c.env.DB.prepare(`
+    SELECT * FROM (
+      SELECT c.id, c.txn_id, m.name as who, m.member_code, 'contribution' as kind, c.amount, c.month, NULL as ref,
+             c.approved_at as at, a.name as by_name
+      FROM contributions c JOIN members m ON m.id=c.member_id LEFT JOIN admins a ON a.id=c.approved_by
+      WHERE c.status='approved'
+      UNION ALL
+      SELECT e.id, e.txn_id, e.description, NULL, 'expense', e.amount, NULL, NULL, e.created_at, a.name
+      FROM expenses e LEFT JOIN admins a ON a.id=e.logged_by WHERE COALESCE(e.status,'approved')='approved'
+      UNION ALL
+      SELECT d.id, d.txn_id, d.donor_name, NULL, 'donation', d.amount, NULL, NULL, d.created_at, a.name
+      FROM donations d LEFT JOIN admins a ON a.id=d.logged_by WHERE COALESCE(d.status,'active')='active'
+    ) ORDER BY at DESC LIMIT 100
   `).all<any>();
-
-  const expenses = await c.env.DB.prepare(`
-    SELECT e.id, e.txn_id, e.description as who, NULL as member_code, 'expense' as kind, e.amount, NULL as month, NULL as ref,
-           e.created_at as at, a.name as by_name
-    FROM expenses e
-    LEFT JOIN admins a ON a.id = e.logged_by
-    WHERE COALESCE(e.status,'approved')='approved'
-  `).all<any>();
-
-  const donations = await c.env.DB.prepare(`
-    SELECT d.id, d.txn_id, d.donor_name as who, NULL as member_code, 'donation' as kind, d.amount, NULL as month, NULL as ref,
-           d.created_at as at, a.name as by_name
-    FROM donations d
-    LEFT JOIN admins a ON a.id = d.logged_by
-    WHERE COALESCE(d.status,'active')='active'
-  `).all<any>();
-
-  const combined = [...contributions.results, ...expenses.results, ...donations.results]
-    .sort((a, b) => (b.at || "").localeCompare(a.at || ""));
-
-  return c.json(combined);
+  return c.json(rows.results);
 });
 
 
@@ -145,12 +131,13 @@ reportsRoute.get("/trend", requireAdmin, async (c) => {
   const base=currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   const [by,bm]=base.split('-').map(Number);
   const months=Array.from({length:6},(_,i)=>{const d=new Date(Date.UTC(by,bm-1-(5-i),1));return d.toISOString().slice(0,7);});
-  const rows=[];
-  for (const month of months) {
-    const contributionTotal=await c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month=?").bind(month).first<{total:number}>();
-    const donationTotal=await c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m',created_at))=?").bind(month).first<{total:number}>();
-    const expenseTotal=await c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND COALESCE(transaction_month,strftime('%Y-%m',created_at))=?").bind(month).first<{total:number}>();
-    rows.push({month,income:Number(contributionTotal?.total||0)+Number(donationTotal?.total||0),expense:Number(expenseTotal?.total||0)});
-  }
+  const rows = await Promise.all(months.map(async (month) => {
+    const [contributionTotal, donationTotal, expenseTotal] = await Promise.all([
+      c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month=?").bind(month).first<{total:number}>(),
+      c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m',created_at))=?").bind(month).first<{total:number}>(),
+      c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND COALESCE(transaction_month,strftime('%Y-%m',created_at))=?").bind(month).first<{total:number}>(),
+    ]);
+    return {month,income:Number(contributionTotal?.total||0)+Number(donationTotal?.total||0),expense:Number(expenseTotal?.total||0)};
+  }));
   return c.json(rows);
 });

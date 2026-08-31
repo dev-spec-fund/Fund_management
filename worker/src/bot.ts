@@ -21,10 +21,16 @@ import {
   ensureMemberRegistrationTable,
   findUnlinkedMemberMatches,
 } from "./db";
-import { adminCan, consumeRateLimit, duplicateSlip, ensureOperationalSchema, requireOpenMonth, safeLogError } from "./ops";
+import { adminCan, consumeRateLimit, duplicateSlip, requireOpenMonth, safeLogError } from "./ops";
 
 const DEFAULT_MINI_APP_URL = "https://fund-management.pages.dev";
-async function miniAppUrl(env: Env) { return (await getSetting(env, "mini_app_url")) || DEFAULT_MINI_APP_URL; }
+let cachedMiniAppUrl: { value: string; expiresAt: number } | null = null;
+async function miniAppUrl(env: Env) {
+  if (cachedMiniAppUrl && cachedMiniAppUrl.expiresAt > Date.now()) return cachedMiniAppUrl.value;
+  const value = (await getSetting(env, "mini_app_url")) || DEFAULT_MINI_APP_URL;
+  cachedMiniAppUrl = { value, expiresAt: Date.now() + 5 * 60_000 };
+  return value;
+}
 
 function esc(value: unknown) {
   return String(value ?? "")
@@ -64,7 +70,7 @@ function parseCaption(caption: string): {
 
 async function notifyAdmins(env: Env, text: string, extra: Record<string, unknown> = {}) {
   const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
-  for (const a of admins.results) await sendMessage(env, a.telegram_id, text, extra);
+  await Promise.allSettled(admins.results.map((a) => sendMessage(env, a.telegram_id, text, extra)));
 }
 
 async function notifyAdminsWithPhoto(
@@ -74,7 +80,7 @@ async function notifyAdminsWithPhoto(
   extra: Record<string, unknown> = {}
 ) {
   const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
-  for (const a of admins.results) await sendPhoto(env, a.telegram_id, photoFileId, caption, extra);
+  await Promise.allSettled(admins.results.map((a) => sendPhoto(env, a.telegram_id, photoFileId, caption, extra)));
 }
 
 function registrationButtons(requestId: number, matches: any[]) {
@@ -88,7 +94,6 @@ function registrationButtons(requestId: number, matches: any[]) {
 }
 
 export async function handleUpdate(env: Env, update: any) {
-  await ensureOperationalSchema(env);
   try {
     if (update.message) return handleMessage(env, update.message);
     if (update.callback_query) return handleCallback(env, update.callback_query);
@@ -206,6 +211,10 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
   const caption: string = message.caption || "";
   const largestPhoto = message.photo[message.photo.length - 1];
   const fileId = largestPhoto.file_id;
+  // Use a smaller Telegram-generated photo for OCR when available. The original
+  // file_id is still kept/sent to admins, so review image quality is unchanged.
+  const ocrPhoto = [...message.photo].reverse().find((p: any) => Math.max(Number(p.width || 0), Number(p.height || 0)) <= 1280) || largestPhoto;
+  const ocrFileId = ocrPhoto.file_id;
 
   if (caption.startsWith("/expense")) {
     const admin = await getAdminByTelegramId(env, telegramId);
@@ -216,7 +225,7 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
     const description = monthMatch ? rest.replace(monthMatch[0], "").trim() : rest;
     try { await requireOpenMonth(env, month); } catch (e:any) { return sendMessage(env, chatId, esc(e.message)); }
 
-    const file = await downloadTelegramFile(env, fileId);
+    const file = await downloadTelegramFile(env, ocrFileId);
     const ocr = file ? await ocrSlip(env, file.bytes, file.mime) : { amount: null, ref: null, raw: "" };
     const amount = Number(ocr.amount || 0);
     if (amount <= 0) return sendMessage(env, chatId, "I couldn't read the expense amount. Please add/edit this expense in the Fund App.");
@@ -239,10 +248,10 @@ Amount: <b>MVR ${amount}</b>
 Month: ${month}
 Logged by: ${esc(admin.name)}`;
       const admins = await env.DB.prepare("SELECT telegram_id,id FROM admins WHERE id != ? AND COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").bind(admin.id).all<any>();
-      for (const a of admins.results) await sendPhoto(env, a.telegram_id, fileId, captionText, { reply_markup: { inline_keyboard: [[
+      await Promise.allSettled(admins.results.map((a) => sendPhoto(env, a.telegram_id, fileId, captionText, { reply_markup: { inline_keyboard: [[
         { text: "✅ Confirm expense", callback_data: `expapprove:${expenseId}` },
         { text: "❌ Reject expense", callback_data: `expreject:${expenseId}` },
-      ]] } });
+      ]] } })));
       return sendMessage(env, chatId, `Expense ${txnId} saved as pending. A different admin must confirm it because it is MVR ${amount}.`);
     }
     return sendMessage(env, chatId, `Expense logged (${txnId}): ${esc(description || "Expense")} — MVR ${amount}`);
@@ -253,8 +262,13 @@ Logged by: ${esc(admin.name)}`;
   if (!member.active) return sendMessage(env, chatId, "Your membership is currently inactive. Contact an admin if this is unexpected.");
 
   const parsed = parseCaption(caption);
-  const file = await downloadTelegramFile(env, fileId);
-  const ocr = file ? await ocrSlip(env, file.bytes, file.mime) : { amount: null, ref: null, raw: "" };
+  // A complete caption is authoritative and avoids an unnecessary AI request.
+  // OCR still runs whenever either amount or reference is missing.
+  let ocr: { amount: number | null; ref: string | null; raw: string } = { amount: null, ref: null, raw: "" };
+  if (parsed.amount === null || !parsed.ref) {
+    const file = await downloadTelegramFile(env, ocrFileId);
+    ocr = file ? await ocrSlip(env, file.bytes, file.mime) : ocr;
+  }
   const amount = parsed.amount ?? ocr.amount;
   const ref = parsed.ref ?? ocr.ref;
   const month = parsed.month ?? currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");
