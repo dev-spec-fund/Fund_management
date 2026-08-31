@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Users, Receipt, ArrowUpRight, ArrowDownRight, Check, Clock, Plus, X,
-  Download, ShieldCheck, Bell, ChevronLeft, AlertTriangle, Eye, Pencil, Trash2,
+  Download, ShieldCheck, Bell, ChevronLeft, ChevronRight, AlertTriangle, Eye, Pencil, Trash2, Search,
 } from "lucide-react";
 import { api } from "./api";
 import { jsPDF } from "jspdf";
@@ -250,6 +250,7 @@ function Members({ isAdmin }) {
   const [month, setMonth] = useState(currentMonthValue());
   const [monthlySummary, setMonthlySummary] = useState(null);
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", monthly_amount: 250 });
@@ -270,55 +271,105 @@ function Members({ isAdmin }) {
     load();
   };
 
-  const filtered = members.filter((m) => m.name.toLowerCase().includes(search.toLowerCase()));
-  const unpaidByMember = new Map((monthlySummary?.outstanding?.members || []).map((m) => [Number(m.id), m]));
+  const outstandingByMember = new Map((monthlySummary?.outstanding?.members || []).map((m) => [Number(m.id), m]));
   const activeMembers = members.filter((m) => m.active);
-  const unpaidCount = activeMembers.filter((m) => unpaidByMember.has(Number(m.id))).length;
-  const paidCount = activeMembers.length - unpaidCount;
+  const memberStatus = (m) => {
+    if (!m.active) return "inactive";
+    return outstandingByMember.get(Number(m.id))?.payment_status || "paid";
+  };
+  const counts = activeMembers.reduce((a, m) => { a[memberStatus(m)] = (a[memberStatus(m)] || 0) + 1; return a; }, { paid: 0, partial: 0, unpaid: 0, exempt: 0 });
+  const expected = activeMembers.reduce((sum, m) => sum + Number(m.monthly_amount || 0), 0);
+  const dueTotal = Number(monthlySummary?.outstanding?.total || 0);
+  const collected = Math.max(0, expected - dueTotal);
+  const percent = expected > 0 ? Math.min(100, Math.round((collected / expected) * 100)) : 0;
+  const filtered = members.filter((m) => {
+    const q = search.trim().toLowerCase();
+    const matchesSearch = !q || m.name.toLowerCase().includes(q) || String(m.member_code || "").toLowerCase().includes(q) || String(m.phone || "").includes(q);
+    const status = memberStatus(m);
+    const matchesFilter = filter === "all" || (filter === "outstanding" ? status === "partial" || status === "unpaid" : status === filter);
+    return matchesSearch && matchesFilter;
+  });
+
+  const shiftMonth = (delta) => {
+    const [y, m] = month.split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+    setMonth(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  };
+  const monthLabel = new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
 
   return (
     <>
-      <button onClick={() => setShowAdd(true)} className="sans"
-        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "#1F3D2B", color: "#F7F5EF", border: "none", borderRadius: 12, padding: 12, fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>
-        <Plus size={16} /> Add member
-      </button>
-      <div className="sans" style={{ display: "flex", alignItems: "center", gap: 6, background: "#EAF1EE", color: "#1F3D2B", fontSize: 12, borderRadius: 10, padding: "9px 12px", marginBottom: 12 }}>
-        Payments are submitted by members via Telegram — approve slips there.
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "end", gap: 10, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div>
-          <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 4 }}>Subscription month</div>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="sans"
-            style={{ width: "100%", border: "1px solid #D9D3C4", borderRadius: 10, padding: "9px 11px", fontSize: 14, boxSizing: "border-box", background: "#fff" }} />
+          <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "#1F3D2B" }}>Members</div>
+          <div className="sans" style={{ fontSize: 11, color: "#8A9086", marginTop: 2 }}>{activeMembers.length} active members</div>
         </div>
-        <div className="sans" style={{ textAlign: "right", fontSize: 12, color: "#6B7268", paddingBottom: 9 }}>
-          <b style={{ color: "#3A6B3E" }}>{paidCount}</b> paid · <b style={{ color: "#A6432F" }}>{unpaidCount}</b> due
+        <button onClick={() => setShowAdd(true)} className="sans" style={{ display: "flex", alignItems: "center", gap: 5, background: "#1F3D2B", color: "#F7F5EF", border: "none", borderRadius: 9, padding: "8px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+          <Plus size={15} /> Add
+        </button>
+      </div>
+
+      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <button onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
+          <label className="sans" style={{ position: "relative", fontSize: 14, fontWeight: 700, color: "#1F3D2B", cursor: "pointer" }}>
+            {monthLabel}
+            <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", cursor: "pointer" }} />
+          </label>
+          <button onClick={() => shiftMonth(1)} aria-label="Next month" style={monthNavBtn()}><ChevronRight size={18} /></button>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <div className="sans" style={{ fontSize: 18, fontWeight: 750, color: "#1F3D2B" }}>MVR {fmt(collected)} <span style={{ fontSize: 12, fontWeight: 500, color: "#8A9086" }}>/ {fmt(expected)}</span></div>
+          <div className="sans" style={{ fontSize: 12, fontWeight: 700, color: "#3A6B3E" }}>{percent}% collected</div>
+        </div>
+        <div style={{ height: 6, background: "#ECE8DE", borderRadius: 999, overflow: "hidden", margin: "8px 0 13px" }}><div style={{ width: `${percent}%`, height: "100%", background: "#3A6B3E", borderRadius: 999 }} /></div>
+        <div className="sans" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5, textAlign: "center", fontSize: 10, color: "#6B7268" }}>
+          <div><b style={{ display: "block", fontSize: 14, color: "#3A6B3E" }}>{counts.paid}</b>Paid</div>
+          <div><b style={{ display: "block", fontSize: 14, color: "#7A5A18" }}>{counts.partial}</b>Partial</div>
+          <div><b style={{ display: "block", fontSize: 14, color: "#A6432F" }}>{counts.unpaid}</b>Unpaid</div>
+          <div><b style={{ display: "block", fontSize: 14, color: "#51606A" }}>{counts.exempt}</b>Exempt</div>
         </div>
       </div>
-      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search members…" className="sans"
-        style={{ width: "100%", border: "1px solid #D9D3C4", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, boxSizing: "border-box" }} />
+
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 3, marginBottom: 10 }}>
+        {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt']].map(([key,label]) => (
+          <button key={key} onClick={() => setFilter(key)} className="sans" style={{ flexShrink: 0, border: filter === key ? "1px solid #1F3D2B" : "1px solid #DED8CA", background: filter === key ? "#1F3D2B" : "#fff", color: filter === key ? "#fff" : "#6B7268", borderRadius: 999, padding: "6px 10px", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>{label}</button>
+        ))}
+      </div>
+
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <Search size={16} color="#8A9086" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, ID or phone…" className="sans" style={{ width: "100%", border: "1px solid #D9D3C4", borderRadius: 10, padding: "10px 12px 10px 36px", fontSize: 13, boxSizing: "border-box", background: "#fff" }} />
+      </div>
 
       {filtered.map((m) => {
-        const monthly = unpaidByMember.get(Number(m.id));
-        const status = !m.active ? "inactive" : monthly?.payment_status || "paid";
-        const paid = Number(monthly?.paid || (status === "paid" ? m.monthly_amount : 0));
+        const monthly = outstandingByMember.get(Number(m.id));
+        const status = memberStatus(m);
+        const paid = Number(monthly?.paid ?? (status === "paid" ? m.monthly_amount : 0));
         const due = status === "exempt" || status === "inactive" ? 0 : Math.max(0, Number(m.monthly_amount) - paid);
+        const memberPercent = Number(m.monthly_amount) > 0 ? Math.min(100, Math.round((paid / Number(m.monthly_amount)) * 100)) : 0;
         return (
-          <div key={m.id} onClick={() => setSelected(m)}
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: m.active ? "#fff" : "#F1EFE7", opacity: m.active ? 1 : 0.65, border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 16px", marginBottom: 8, cursor: "pointer" }}>
-            <div>
-              <div className="sans" style={{ fontSize: 14, fontWeight: 500 }}>{m.name} <span style={{ fontSize: 11, color: "#B5AE9C", fontWeight: 500 }}>{m.member_code}</span> {!m.active && <span style={{ fontSize: 10, color: "#8A9086" }}>(inactive)</span>}</div>
-              <div className="sans" style={{ fontSize: 12, color: "#8A9086" }}>{m.phone || "no phone"} · MVR {m.monthly_amount}/mo · Since {m.joined_at}</div>
-              {due > 0 && <div className="sans" style={{ fontSize: 11, color: "#A6432F", marginTop: 3 }}>Due for {month}: MVR {fmt(due)}</div>}
+          <div key={m.id} onClick={() => setSelected(m)} style={{ background: m.active ? "#fff" : "#F1EFE7", opacity: m.active ? 1 : 0.65, border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 14px", marginBottom: 8, cursor: "pointer" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="sans" style={{ fontSize: 14, fontWeight: 650, color: "#222" }}>{m.name} <span style={{ fontSize: 11, color: "#B5AE9C", fontWeight: 500 }}>{m.member_code}</span></div>
+                <div className="sans" style={{ fontSize: 11, color: "#8A9086", marginTop: 2 }}>{m.phone ? m.phone : "Phone not added"} · MVR {fmt(m.monthly_amount)}/mo</div>
+              </div>
+              <StatusBadge status={status} />
             </div>
-            <StatusBadge status={status} />
+            {m.active && status !== "exempt" && <>
+              <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 10, color: "#6B7268" }}>
+                <span>MVR {fmt(paid)} of {fmt(m.monthly_amount)} paid</span>
+                <span style={{ color: due > 0 ? "#A6432F" : "#3A6B3E", fontWeight: 650 }}>{due > 0 ? `MVR ${fmt(due)} due` : "Complete"}</span>
+              </div>
+              <div style={{ height: 4, background: "#ECE8DE", borderRadius: 999, overflow: "hidden", marginTop: 6 }}><div style={{ width: `${memberPercent}%`, height: "100%", background: status === "partial" ? "#B58A3D" : "#3A6B3E" }} /></div>
+            </>}
           </div>
         );
       })}
-      {filtered.length === 0 && <div className="sans" style={{ fontSize: 13, color: "#8A9086" }}>No members yet.</div>}
+      {filtered.length === 0 && <div className="sans" style={{ textAlign: "center", fontSize: 13, color: "#8A9086", padding: "24px 0" }}>No members match this view.</div>}
 
       {selected && <MemberPopup member={selected} onClose={() => setSelected(null)} onChanged={load} />}
-
       {showAdd && (
         <Modal onClose={() => setShowAdd(false)} title="Add member">
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -329,6 +380,10 @@ function Members({ isAdmin }) {
       )}
     </>
   );
+}
+
+function monthNavBtn() {
+  return { display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, background: "#F7F5EF", color: "#1F3D2B", border: "1px solid #E9E4D8", borderRadius: 9, cursor: "pointer" };
 }
 
 function StatusBadge({ status }) {
