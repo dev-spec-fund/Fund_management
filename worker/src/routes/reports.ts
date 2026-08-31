@@ -3,8 +3,25 @@ import type { AppEnv } from "../types";
 import { requireAdmin, requireMemberOrAdmin } from "../auth";
 import { currentMonth } from "../db";
 import { validMonth } from "../validation";
+import { allocatedPaidSql } from "../allocations";
 
 export const reportsRoute = new Hono<AppEnv>();
+
+async function allocatedTotalForMonth(env:any, month:string){
+  const row=await env.DB.prepare(`
+    SELECT COALESCE(SUM(amount),0) total FROM (
+      SELECT ca.amount amount
+      FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id
+      WHERE ca.month=? AND c.status='approved'
+      UNION ALL
+      SELECT c.amount amount
+      FROM contributions c
+      WHERE c.month=? AND c.status='approved'
+        AND NOT EXISTS(SELECT 1 FROM contribution_allocations ca2 WHERE ca2.contribution_id=c.id)
+    )
+  `).bind(month,month).first<any>();
+  return Number(row?.total||0);
+}
 
 /** Combined activity feed: one indexed query instead of three full-table reads + JS sorting. */
 reportsRoute.get("/activity", requireMemberOrAdmin, async (c) => {
@@ -35,6 +52,8 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     "SELECT COALESCE(SUM(amount),0) as total FROM contributions WHERE status='approved' AND month = ?"
   ).bind(month).first<{ total: number }>();
 
+  const allocatedContributions = await allocatedTotalForMonth(c.env,month);
+
   const donationTotal = await c.env.DB.prepare(
     "SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = ?"
   ).bind(month).first<{ total: number }>();
@@ -60,6 +79,7 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
   return c.json({
     month,
     memberIncome: income?.total ?? 0,
+    allocatedContributions,
     donationIncome: donationTotal?.total ?? 0,
     expenses: expenseTotal?.total ?? 0,
     net: (income?.total ?? 0) + (donationTotal?.total ?? 0) - (expenseTotal?.total ?? 0),
@@ -76,6 +96,8 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
   const income = await c.env.DB.prepare(
     "SELECT COALESCE(SUM(amount),0) as total FROM contributions WHERE status='approved' AND month = ?"
   ).bind(month).first<{ total: number }>();
+
+  const allocatedContributions = await allocatedTotalForMonth(c.env,month);
 
   const donationTotal = await c.env.DB.prepare(
     "SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = ?"
@@ -94,15 +116,15 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
 
   const outstanding = await c.env.DB.prepare(`
     SELECT m.id,m.member_code,m.name,m.monthly_amount,
-      COALESCE((SELECT SUM(c.amount) FROM contributions c WHERE c.member_id=m.id AND c.month=? AND c.status='approved'),0) paid,
+      ${allocatedPaidSql} paid,
       CASE
         WHEN EXISTS(SELECT 1 FROM exemptions ex WHERE ex.member_id=m.id AND ex.month=?) THEN 'exempt'
-        WHEN COALESCE((SELECT SUM(c2.amount) FROM contributions c2 WHERE c2.member_id=m.id AND c2.month=? AND c2.status='approved'),0) <= 0 THEN 'unpaid'
-        WHEN COALESCE((SELECT SUM(c3.amount) FROM contributions c3 WHERE c3.member_id=m.id AND c3.month=? AND c3.status='approved'),0) < m.monthly_amount THEN 'partial'
+        WHEN (${allocatedPaidSql}) <= 0 THEN 'unpaid'
+        WHEN (${allocatedPaidSql}) < m.monthly_amount THEN 'partial'
         ELSE 'paid'
       END payment_status
     FROM members m WHERE m.active=1
-  `).bind(month,month,month,month).all<any>();
+  `).bind(month,month,month,month,month,month,month).all<any>();
 
   const totalBalance = await c.env.DB.prepare(`
     SELECT
@@ -114,6 +136,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
   return c.json({
     month,
     memberIncome: income?.total ?? 0,
+    allocatedContributions,
     donationIncome: donationTotal?.total ?? 0,
     expenses: expenseTotal?.total ?? 0,
     net: (income?.total ?? 0) + (donationTotal?.total ?? 0) - (expenseTotal?.total ?? 0),

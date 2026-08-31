@@ -5,6 +5,7 @@ import { auditEntity, duplicateSlip, ensureOperationalSchema, requireOpenMonth, 
 import { currentMonth, getSetting, generateMemberCode } from "../db";
 import { findDuplicateMembers } from "../ops";
 import { sendMessage } from "../telegram";
+import { approveWithAllocations, allocationReceipt, buildAllocationPlan, allocatedPaidSql } from "../allocations";
 import { money, validDate, validMonth, boundedText } from "../validation";
 
 export const adminRoute = new Hono<AppEnv>();
@@ -14,9 +15,14 @@ adminRoute.get('/pending', requireAdmin, async c => {
   const registrations = await c.env.DB.prepare(`SELECT * FROM member_registration_requests WHERE status='pending' ORDER BY requested_at ASC`).all<any>();
   const enrichedRegs:any[]=[];
   for (const r of registrations.results) enrichedRegs.push({ ...r, possible_matches: (await findDuplicateMembers(c.env, r.name, null, r.telegram_id)).filter((m:any)=>!m.telegram_id) });
-  const contributions = await c.env.DB.prepare(`SELECT c.*,m.name member_name,m.member_code FROM contributions c JOIN members m ON m.id=c.member_id WHERE c.status='pending' ORDER BY c.submitted_at ASC`).all();
+  const contributions = await c.env.DB.prepare(`SELECT c.*,m.name member_name,m.member_code FROM contributions c JOIN members m ON m.id=c.member_id WHERE c.status='pending' ORDER BY c.submitted_at ASC`).all<any>();
+  const contributionRows:any[]=[];
+  for(const row of contributions.results){
+    try { contributionRows.push({...row,allocation_preview:await buildAllocationPlan(c.env,row)}); }
+    catch { contributionRows.push({...row,allocation_preview:[]}); }
+  }
   const expenses = await c.env.DB.prepare(`SELECT e.*,a.name logged_by_name FROM expenses e LEFT JOIN admins a ON a.id=e.logged_by WHERE e.status='pending' ORDER BY e.created_at ASC`).all();
-  return c.json({ registrations: enrichedRegs, contributions: contributions.results, slips: contributions.results, expenses: expenses.results });
+  return c.json({ registrations: enrichedRegs, contributions: contributionRows, slips: contributionRows, expenses: expenses.results });
 });
 
 adminRoute.post('/pending/registrations/:id/approve', requireFinance, async c => {
@@ -69,8 +75,15 @@ adminRoute.post('/pending/contributions/:id/approve', requireFinance, async c =>
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const row=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
   if(!row)return c.json({error:'Not found'},404); if(row.status!=='pending')return c.json({error:`Already ${row.status}`},409); try{await requireOpenMonth(c.env,row.month)}catch(e:any){return c.json({error:e.message},409)}
   const dup=await duplicateSlip(c.env,row.ref_number,Number(row.amount),row.bank_date,id); if(dup)return c.json({error:`Duplicate slip matches ${dup.txn_id}`,duplicate:dup},409);
-  const r=await c.env.DB.prepare("UPDATE contributions SET status='approved',approved_by=?,approved_at=datetime('now'),ocr_raw=NULL WHERE id=? AND status='pending'").bind(admin.id,id).run(); if(!r.meta.changes)return c.json({error:'Already reviewed'},409);
-  await auditEntity(c.env,admin.id,'contribution_approved','contribution',id,row,{...row,status:'approved'}); return c.json({ok:true});
+  let approved;
+  try { approved=await approveWithAllocations(c.env,id,admin.id); }
+  catch(e:any){ return c.json({error:e.message},409); }
+  await auditEntity(c.env,admin.id,'contribution_approved','contribution',id,row,{...row,status:'approved',allocations:approved.allocations});
+  const member=await c.env.DB.prepare("SELECT * FROM members WHERE id=?").bind(row.member_id).first<any>();
+  if(member?.telegram_id) await sendMessage(c.env,member.telegram_id,
+    `✅ <b>Contribution approved</b>\n\nReceived: <b>MVR ${Number(row.amount).toFixed(2)}</b>\n\nApplied to:\n${allocationReceipt(approved.allocations)}`
+  );
+  return c.json({ok:true,allocations:approved.allocations});
 });
 
 adminRoute.post('/pending/contributions/:id/reject', requireFinance, async c => {
@@ -83,7 +96,10 @@ adminRoute.post('/pending/contributions/:id/reject', requireFinance, async c => 
 adminRoute.delete('/contributions/:id', requireFinance, async c => {
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const body=await c.req.json().catch(()=>({})) as any; const row=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>(); if(!row)return c.json({error:'Not found'},404);
   try{await requireOpenMonth(c.env,row.month)}catch(e:any){return c.json({error:e.message},409)}
-  await c.env.DB.prepare("UPDATE contributions SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason=? WHERE id=?").bind(admin.id,body.reason||'Voided by admin',id).run(); await auditEntity(c.env,admin.id,'contribution_voided','contribution',id,row,{...row,status:'voided'}); return c.json({ok:true});
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE contributions SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason=? WHERE id=?").bind(admin.id,body.reason||'Voided by admin',id),
+    c.env.DB.prepare("DELETE FROM contribution_allocations WHERE contribution_id=?").bind(id)
+  ]); await auditEntity(c.env,admin.id,'contribution_voided','contribution',id,row,{...row,status:'voided'}); return c.json({ok:true});
 });
 
 adminRoute.get('/month-close', requireAdmin, async c => { await ensureOperationalSchema(c.env); return c.json((await c.env.DB.prepare("SELECT mc.*,a.name closed_by_name FROM month_closures mc LEFT JOIN admins a ON a.id=mc.closed_by ORDER BY month DESC").all()).results); });
@@ -101,13 +117,12 @@ adminRoute.post('/payment-reminders', requireFinance, async c => {
 
   const rows=await c.env.DB.prepare(`
     SELECT m.id,m.member_code,m.name,m.telegram_id,m.monthly_amount,
-      COALESCE((SELECT SUM(c.amount) FROM contributions c
-        WHERE c.member_id=m.id AND c.month=? AND c.status='approved'),0) paid,
+      ${allocatedPaidSql} paid,
       CASE WHEN EXISTS(SELECT 1 FROM exemptions e WHERE e.member_id=m.id AND e.month=?) THEN 1 ELSE 0 END exempt
     FROM members m
     WHERE m.active=1 ${memberId!==null?'AND m.id=?':''}
     ORDER BY m.name
-  `).bind(...(memberId!==null?[month,month,memberId]:[month,month])).all<any>();
+  `).bind(...(memberId!==null?[month,month,month,memberId]:[month,month,month])).all<any>();
 
   const dueMembers=rows.results
     .map((m:any)=>({...m,paid:Number(m.paid||0),due:Math.max(0,Number(m.monthly_amount||0)-Number(m.paid||0))}))

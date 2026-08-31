@@ -4,6 +4,7 @@ import { requireAdmin, requireFinance } from "../auth";
 import { logAudit, generateMemberCode, currentMonth } from "../db";
 import { auditEntity, ensureOperationalSchema, findDuplicateMembers, requireOpenMonth } from "../ops";
 import { boundedText, flag, money, telegramId, validMonth } from "../validation";
+import { paidForMonth } from "../allocations";
 
 export const membersRoute = new Hono<AppEnv>();
 
@@ -31,8 +32,7 @@ membersRoute.get("/:id/monthly-status", requireAdmin, async (c) => {
   const member = await c.env.DB.prepare("SELECT id,monthly_amount FROM members WHERE id=?").bind(id).first<any>();
   if (!member) return c.json({error:"Not found"},404);
   const ex = await c.env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(id,month).first<any>();
-  const paid = await c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE member_id=? AND month=? AND status='approved'").bind(id,month).first<any>();
-  const total = Number(paid?.total || 0);
+  const total = await paidForMonth(c.env,id,month);
   const status = ex ? "exempt" : total <= 0 ? "unpaid" : total + 0.005 < Number(member.monthly_amount) ? "partial" : "paid";
   return c.json({month,status,paid:total,due:Math.max(0,Number(member.monthly_amount)-total),monthly_amount:Number(member.monthly_amount),exemption_reason:ex?.reason||null});
 });
@@ -42,7 +42,12 @@ membersRoute.get("/:id/statement", requireAdmin, async (c) => {
   const id = Number(c.req.param("id"));
   const member = await c.env.DB.prepare("SELECT * FROM members WHERE id=?").bind(id).first<any>();
   if (!member) return c.json({error:"Not found"},404);
-  const contributions = await c.env.DB.prepare(`SELECT txn_id,amount,month,ref_number,status,submitted_at,approved_at FROM contributions WHERE member_id=? ORDER BY month,submitted_at`).bind(id).all<any>();
+  const contributions = await c.env.DB.prepare(`SELECT id,txn_id,amount,month,ref_number,status,submitted_at,approved_at FROM contributions WHERE member_id=? ORDER BY submitted_at`).bind(id).all<any>();
+  const allocations = await c.env.DB.prepare(`
+    SELECT ca.contribution_id,ca.month,ca.amount
+    FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id
+    WHERE ca.member_id=? AND c.status='approved' ORDER BY ca.month
+  `).bind(id).all<any>();
   const exemptions = await c.env.DB.prepare("SELECT month,reason,created_at FROM exemptions WHERE member_id=? ORDER BY month").bind(id).all<any>();
   const donations = await c.env.DB.prepare(`SELECT txn_id,donor_name,amount,note,transaction_month,status,created_at FROM donations
     WHERE COALESCE(status,'active')='active' AND member_id=? ORDER BY created_at`).bind(id).all<any>();
@@ -56,13 +61,20 @@ membersRoute.get("/:id/statement", requireAdmin, async (c) => {
   const months:string[]=[]; let [y,m]=firstMonth.split('-').map(Number); const [ey,em]=nowMonth.split('-').map(Number);
   while (y<ey || (y===ey && m<=em)) { months.push(`${y}-${String(m).padStart(2,'0')}`); m++; if(m>12){m=1;y++;} }
   const exSet = new Map(exemptions.results.map((x:any)=>[x.month,x]));
+  const allocationMap=new Map<string,number>();
+  for(const a of allocations.results) allocationMap.set(a.month,(allocationMap.get(a.month)||0)+Number(a.amount||0));
+  // Historical approved transactions without allocation rows keep their original month.
+  for(const x of approved){
+    const hasAllocation=allocations.results.some((a:any)=>Number(a.contribution_id)===Number(x.id));
+    if(!hasAllocation) allocationMap.set(x.month,(allocationMap.get(x.month)||0)+Number(x.amount||0));
+  }
   const statuses = months.map(month=>{
-    const paid=approved.filter((x:any)=>x.month===month).reduce((s:number,x:any)=>s+Number(x.amount||0),0);
+    const paid=allocationMap.get(month)||0;
     const ex=exSet.get(month) as any;
     const status=ex?'exempt':paid<=0?'unpaid':paid+0.005<Number(member.monthly_amount)?'partial':'paid';
     return {month,status,paid,due:ex?0:Math.max(0,Number(member.monthly_amount)-paid),reason:ex?.reason||null};
   });
-  return c.json({member,contributions:contributions.results,donations:donations.results,monthly_status:statuses,balance_history:balanceHistory});
+  return c.json({member,contributions:contributions.results,allocations:allocations.results,donations:donations.results,monthly_status:statuses,balance_history:balanceHistory});
 });
 
 membersRoute.post("/", requireFinance, async (c) => {

@@ -1,12 +1,12 @@
 import type { Env } from "./types";
 import { sendMessage } from "./telegram";
 import { currentDayOfMonth, currentMonth, getSetting } from "./db";
-import { ensureOperationalSchema, isMonthClosed, safeLogError } from "./ops";
+import { isMonthClosed, safeLogError } from "./ops";
+import { allocatedPaidSql } from "./allocations";
 
 /** Runs daily and evaluates reminder dates in FUND_TIMEZONE (Indian/Maldives by default). */
 export async function runScheduled(env: Env) {
   try {
-    await ensureOperationalSchema(env);
     const reminderDay = await getSetting(env, "reminder_day");
     if (!reminderDay || reminderDay === "off") return;
     const timeZone = env.FUND_TIMEZONE || "Indian/Maldives";
@@ -15,14 +15,11 @@ export async function runScheduled(env: Env) {
     if (await isMonthClosed(env, month)) return;
 
     const members = await env.DB.prepare(`
-      SELECT m.*, COALESCE((
-        SELECT SUM(c.amount) FROM contributions c
-        WHERE c.member_id=m.id AND c.month=? AND c.status='approved'
-      ),0) paid
+      SELECT m.*, ${allocatedPaidSql} paid
       FROM members m
       WHERE m.active=1 AND m.telegram_id IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM exemptions e WHERE e.member_id=m.id AND e.month=?)
-    `).bind(month,month).all<any>();
+    `).bind(month,month,month).all<any>();
 
     for (const member of members.results) {
       const paid=Number(member.paid||0), due=Math.max(0,Number(member.monthly_amount||0)-paid);

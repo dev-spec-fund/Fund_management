@@ -1,4 +1,5 @@
 import type { Env } from "./types";
+import { approveWithAllocations, allocationReceipt, paidForMonth } from "./allocations";
 import {
   sendMessage,
   sendPhoto,
@@ -183,7 +184,7 @@ async function handleMessage(env: Env, message: any) {
       "SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE member_id = ? AND month = ? AND status = 'approved'"
     ).bind(member.id, month).first<any>();
     const exemption = await env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(member.id,month).first<any>();
-    const paid = Number(paidRow?.total || 0); const due = Math.max(0, Number(member.monthly_amount)-paid);
+    const paid = Number(paidTotal || 0); const due = Math.max(0, Number(member.monthly_amount)-paid);
     const status = exemption ? `✅ Exempt for ${month}.` : paid<=0 ? `⏳ Unpaid for ${month}. Due: MVR ${member.monthly_amount}.` : due>0.004 ? `🟡 Partial for ${month}: MVR ${paid} paid, MVR ${due.toFixed(2)} due.` : `✅ Paid for ${month}.`;
     return sendMessage(env, chatId, `Member ID: ${esc(member.member_code)}\n${status}`);
   }
@@ -463,13 +464,14 @@ async function handleCallback(env: Env, callback: any) {
     try { await requireOpenMonth(env, contribution.month); } catch (e:any) { return answerCallback(env, callback.id, e.message); }
     const duplicate = await duplicateSlip(env, contribution.ref_number, Number(contribution.amount), contribution.bank_date, contributionId);
     if (duplicate) return answerCallback(env, callback.id, `Duplicate of ${duplicate.txn_id}; review in app.`);
-    const changed = await env.DB.prepare(
-      "UPDATE contributions SET status = 'approved', approved_by = ?, approved_at = datetime('now') WHERE id = ? AND status = 'pending'"
-    ).bind(admin.id, contributionId).run();
-    if (!changed.meta.changes) return answerCallback(env, callback.id, "Already reviewed.");
-    await logAudit(env, admin.id, "contribution_approved", `${contribution.txn_id} approved`);
+    let approved;
+    try { approved=await approveWithAllocations(env,contributionId,admin.id); }
+    catch(e:any){ return answerCallback(env,callback.id,e.message); }
+    await logAudit(env, admin.id, "contribution_approved", `${contribution.txn_id} approved — ${approved.allocations.map((a:any)=>`${a.month}:${a.amount}`).join(", ")}`);
     const member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(contribution.member_id).first<any>();
-    if (member?.telegram_id) await sendMessage(env, member.telegram_id, `✅ Your MVR ${contribution.amount} contribution for ${contribution.month} was approved. Thank you!`);
+    if (member?.telegram_id) await sendMessage(env, member.telegram_id,
+      `✅ <b>Contribution approved</b>\n\nReceived: <b>MVR ${Number(contribution.amount).toFixed(2)}</b>\n\nApplied to:\n${allocationReceipt(approved.allocations)}`
+    );
     const previous = callback.message.caption || callback.message.text || "Contribution";
     await finishRegistrationMessage(env, callback, `${previous}\n\n✅ Approved by ${esc(admin.name)}`);
     return answerCallback(env, callback.id, "Approved");

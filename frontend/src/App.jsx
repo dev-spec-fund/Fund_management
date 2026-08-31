@@ -189,13 +189,14 @@ function Overview({ isAdmin, setTab }) {
   if (!summary) return <Center>Loading overview…</Center>;
 
   const contributions = Number(summary.memberIncome || 0);
+  const allocatedContributions = Number(summary.allocatedContributions ?? summary.memberIncome ?? 0);
   const donations = Number(summary.donationIncome || 0);
   const expenses = Number(summary.expenses || 0);
   const netMonth = contributions + donations - expenses;
   const outstandingTotal = Number(summary.outstanding?.total || 0);
   const outstandingMembers = (summary.outstanding?.members || []).length;
-  const expected = contributions + outstandingTotal;
-  const collectionPct = expected > 0 ? Math.min(100, Math.round((contributions / expected) * 100)) : 0;
+  const expected = allocatedContributions + outstandingTotal;
+  const collectionPct = expected > 0 ? Math.min(100, Math.round((allocatedContributions / expected) * 100)) : 0;
 
   return (
     <>
@@ -222,7 +223,7 @@ function Overview({ isAdmin, setTab }) {
       <div className="sans" style={{ fontSize: 11, color: "#6B7268", marginTop: 18, marginBottom: 7, fontWeight: 700, letterSpacing: .5 }}>MONTHLY COLLECTION</div>
       <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 13, padding: "13px 14px" }}>
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12 }}>
-          <span><b style={{ color: "#1F3D2B" }}>MVR {fmt(contributions)}</b> <span style={{ color: "#9A9384" }}>/ MVR {fmt(expected)}</span></span>
+          <span><b style={{ color: "#1F3D2B" }}>MVR {fmt(allocatedContributions)}</b> <span style={{ color: "#9A9384" }}>/ MVR {fmt(expected)}</span></span>
           <b style={{ color: "#3A6B3E" }}>{collectionPct}% collected</b>
         </div>
         <div style={{ height: 6, background: "#ECE8DE", borderRadius: 999, overflow: "hidden", marginTop: 8 }}>
@@ -714,8 +715,9 @@ function Reports({ setTab }) {
 
   const maxVal = Math.max(1, ...trend.map((t) => Math.max(Number(t.income || 0), Number(t.expense || 0))));
   const members = summary.outstanding?.members || [];
-  const totalRequired = Number(summary.memberIncome || 0) + Number(summary.outstanding?.total || 0);
-  const collectionPct = totalRequired > 0 ? Math.min(100, Math.round((Number(summary.memberIncome || 0) / totalRequired) * 100)) : 0;
+  const allocatedContributions = Number(summary.allocatedContributions ?? summary.memberIncome ?? 0);
+  const totalRequired = allocatedContributions + Number(summary.outstanding?.total || 0);
+  const collectionPct = totalRequired > 0 ? Math.min(100, Math.round((allocatedContributions / totalRequired) * 100)) : 0;
   const activeCategories = (summary.byCategory || []).filter((c) => Number(c.spent || 0) > 0);
 
   const exportCsv = () => {
@@ -785,7 +787,7 @@ function Reports({ setTab }) {
       <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>COLLECTION</div>
       <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 14, marginBottom: 12 }}>
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 7 }}>
-          <span>MVR {fmt(summary.memberIncome)} / MVR {fmt(totalRequired)}</span>
+          <span>MVR {fmt(allocatedContributions)} / MVR {fmt(totalRequired)}</span>
           <strong>{collectionPct}%</strong>
         </div>
         <div style={{ height: 7, borderRadius: 99, background: "#E9E4D8", overflow: "hidden" }}>
@@ -995,6 +997,14 @@ function PendingApprovals() {
               <div className="sans" style={{fontSize:10,color:needsReview?"#A46B24":"#3A6B3E",marginTop:7,fontWeight:600}}>
                 {needsReview ? "⚠ OCR needs review" : "✓ OCR details detected"}
               </div>
+              {Array.isArray(c.allocation_preview) && c.allocation_preview.length>0 && (
+                <div className="sans" style={{background:"#F7F5EF",borderRadius:9,padding:9,marginTop:8,fontSize:10,color:"#59645B"}}>
+                  <b style={{color:"#1F3D2B"}}>Will be applied to</b>
+                  {c.allocation_preview.map((a,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                    <span>{a.month}</span><span>MVR {fmt(a.amount)} · {a.status_after==="paid"?"Paid":"Partial"}</span>
+                  </div>)}
+                </div>
+              )}
               <button onClick={() => setEditing({...c})}
                 style={{...approveBtn,width:"100%",marginTop:10,padding:"9px 10px"}}>
                 Review →
@@ -1051,6 +1061,10 @@ function PendingApprovals() {
       <Field label="Bank reference" value={editing.ref_number || ""} onChange={(v)=>setEditing({...editing,ref_number:v})}/>
       <Field label="Bank date (YYYY-MM-DD)" value={editing.bank_date || ""} onChange={(v)=>setEditing({...editing,bank_date:v})}/>
       <Field label="Contribution month (YYYY-MM)" value={editing.month || ""} onChange={(v)=>setEditing({...editing,month:v})}/>
+      {Array.isArray(editing.allocation_preview) && editing.allocation_preview.length>0 && <div className="sans" style={{background:"#EAF1EE",borderRadius:9,padding:10,marginBottom:10,fontSize:11}}>
+        <b>Automatic allocation preview</b>
+        {editing.allocation_preview.map((a,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",marginTop:5}}><span>{a.month}</span><span>MVR {fmt(a.amount)} · {a.status_after==="paid"?"Paid":"Partial"}</span></div>)}
+      </div>}
       <div style={{display:"flex",gap:8}}>
         <button style={{...compactBtn,flex:1}} onClick={() => act(async()=>{
           await api.admin.correctContribution(editing.id,{amount:editing.amount,ref_number:editing.ref_number||null,bank_date:editing.bank_date||null,month:editing.month});

@@ -185,11 +185,21 @@ INSERT OR IGNORE INTO settings (key, value) VALUES ('expense_approval_threshold'
 INSERT OR IGNORE INTO settings (key, value) VALUES ('mini_app_url', 'https://fund-management.pages.dev');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('reminder_schedule', 'Daily 00:00 Maldives (19:00 UTC)');
 
--- Performance indexes (safe to run on existing databases)
-CREATE INDEX IF NOT EXISTS idx_members_telegram_active ON members(telegram_id, active);
-CREATE INDEX IF NOT EXISTS idx_admins_telegram_active_role ON admins(telegram_id, active, role);
-CREATE INDEX IF NOT EXISTS idx_contributions_status_month_member ON contributions(status, month, member_id);
-CREATE INDEX IF NOT EXISTS idx_contributions_status_approved_at ON contributions(status, approved_at);
-CREATE INDEX IF NOT EXISTS idx_expenses_status_created ON expenses(status, created_at);
-CREATE INDEX IF NOT EXISTS idx_donations_status_created ON donations(status, created_at);
-CREATE INDEX IF NOT EXISTS idx_registrations_status_requested ON member_registration_requests(status, requested_at);
+
+-- Automatic future-month contribution allocation.
+CREATE TABLE IF NOT EXISTS contribution_allocations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  contribution_id INTEGER NOT NULL,
+  member_id INTEGER NOT NULL,
+  month TEXT NOT NULL CHECK(month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+  amount REAL NOT NULL CHECK(amount > 0),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(contribution_id) REFERENCES contributions(id),
+  FOREIGN KEY(member_id) REFERENCES members(id),
+  UNIQUE(contribution_id, month)
+);
+
+CREATE INDEX IF NOT EXISTS idx_contribution_allocations_member_month
+  ON contribution_allocations(member_id, month);
+CREATE INDEX IF NOT EXISTS idx_contribution_allocations_contribution
+  ON contribution_allocations(contribution_id);
