@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Check, X, Bell } from "lucide-react";
+import { Bell } from "lucide-react";
 import { api } from "../api";
-import { Center, PrimaryButton, SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
+import { Center, MessageBanner, SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, todayValue, formatLocalDateTime } from "../utils/date";
 import { sendExportToTelegram } from "../utils/exports";
 
@@ -48,8 +48,6 @@ function AuditEntry({a}) {
   </div>;
 }
 
-
-/* ---------- Meetings (admin) ---------- */
 
 export default function Settings({ admin }) {
   const [settings,setSettings]=useState(null);
@@ -155,7 +153,7 @@ export default function Settings({ admin }) {
   const tabs=[["general","General"],["admins","Admins"],["system","System"],...(financeAdmin?[["audit","Audit"]]:[])];
 
   return <>
-    {message && <div className="sans" style={{fontSize:12,background:"#EAF1EE",padding:9,borderRadius:9,marginBottom:12}}>{message}</div>}
+    <MessageBanner>{message}</MessageBanner>
 
     <div style={{display:"flex",gap:6,overflowX:"auto",marginBottom:16,paddingBottom:2}}>
       {tabs.map(([key,label])=>
@@ -389,6 +387,4 @@ export default function Settings({ admin }) {
     </>}
   </>;
 }
-
-/* ---------- Shared UI bits ---------- */
 

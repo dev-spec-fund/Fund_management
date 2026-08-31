@@ -1,4 +1,28 @@
-import React from "react";
+
+export function MessageBanner({ children, tone = "success" }) {
+  if (!children) return null;
+  const error = tone === "error";
+  return (
+    <div className="sans" style={{
+      fontSize: 11, padding: 10, borderRadius: 9, marginBottom: 12,
+      background: error ? "#FDEDE8" : "#EAF1EE",
+      color: error ? "#A6432F" : "#1F3D2B",
+      border: `1px solid ${error ? "#F2D6D0" : "#CFE0D6"}`
+    }}>{children}</div>
+  );
+}
+
+export function PageHeader({ title, subtitle, action }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14 }}>
+      <div style={{ minWidth: 0 }}>
+        <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "#1F3D2B" }}>{title}</div>
+        {subtitle && <div className="sans" style={{ fontSize: 11, color: "#8A9086", marginTop: 2 }}>{subtitle}</div>}
+      </div>
+      {action}
+    </div>
+  );
+}
 
 export function Center({ children }) {
   return <div style={{ padding: 60, textAlign: "center", fontFamily: "\'Inter\',sans-serif", color: "#6B7268" }}>{children}</div>;

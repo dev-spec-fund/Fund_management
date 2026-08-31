@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
 import { Modal, Field } from "../components/FormControls";
-import { Center, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
+import { Center, MessageBanner, PageHeader, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
-import { fmt } from "../utils/format";
 
 export default function Meetings(){
   const emptyForm={title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:""};
@@ -151,15 +150,13 @@ export default function Meetings(){
   };
 
   return <>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-      <div>
-        <div className="sans" style={{fontSize:15,fontWeight:700,color:"#1F3D2B"}}>Meetings</div>
-        <div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:2}}>Invitations, RSVP and meeting schedule</div>
-      </div>
-      <button onClick={()=>{setForm(emptyForm);setShowCreate(true)}} style={{...approveBtn,padding:"9px 12px"}}>+ New meeting</button>
-    </div>
+    <PageHeader
+      title="Meetings"
+      subtitle="Invitations, RSVP and meeting schedule"
+      action={<button onClick={()=>{setForm(emptyForm);setShowCreate(true)}} style={{...approveBtn,padding:"9px 12px"}}>+ New meeting</button>}
+    />
 
-    {message&&<div className="sans" style={{fontSize:11,padding:10,borderRadius:9,background:"#EAF1EE",color:"#1F3D2B",marginBottom:12}}>{message}</div>}
+    <MessageBanner>{message}</MessageBanner>
 
     {rows===null?<Center>Loading…</Center>:rows.length===0
       ?<div className="sans" style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:18,color:"#8A9086",fontSize:12}}>No meetings created yet.</div>

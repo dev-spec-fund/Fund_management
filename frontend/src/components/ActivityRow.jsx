@@ -1,4 +1,3 @@
-import React from "react";
 import { ArrowUpRight, ArrowDownRight, Pencil } from "lucide-react";
 import { fmt } from "../utils/format";
 

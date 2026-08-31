@@ -79,14 +79,7 @@ function modeButton(active) {
 function Shell({ children, isAdmin, isMember, mode, me }) {
   return (
     <div style={{ fontFamily: "'Fraunces','Georgia',serif", background: "#F7F5EF", height: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column", color: "#1F2A22" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap');
-        html, body, #root { height: 100%; width: 100%; max-width: 100%; overflow-x: hidden; }
-        *, *::before, *::after { box-sizing: border-box; }
-        body { margin: 0; overflow: hidden; overscroll-behavior-x: none; }
-        input:focus, textarea:focus, select:focus { border-color: #2F5A3D !important; background: #F4F8F5 !important; box-shadow: 0 0 0 2px rgba(47,90,61,0.10) !important; outline: none !important; }
-        .sans { font-family: 'Inter', sans-serif; }
-      `}</style>
+
       <div className="sans" style={{ flexShrink: 0, background: "#17212B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", fontSize: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}><ChevronLeft size={18} /><span style={{ fontWeight: 600 }}>Fund Bot</span></div>
         {me && <div style={{ opacity: 0.75, fontSize: 12 }}>{isAdmin && isMember ? (mode === "admin" ? "Admin View" : "My Account") : isAdmin ? "Admin" : "Member"}</div>}
