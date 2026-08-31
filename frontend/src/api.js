@@ -57,6 +57,7 @@ export const api = {
     activity: () => request("/api/reports/activity"),
     summary: (month) => request(`/api/reports/summary${month ? `?month=${month}` : ""}`),
     publicSummary: (month) => request(`/api/reports/public-summary${month ? `?month=${month}` : ""}`),
+    publicExpenses: (month, categoryId) => request(`/api/reports/public-expenses?month=${encodeURIComponent(month)}&category_id=${encodeURIComponent(categoryId)}`),
     trend: (month) => request(`/api/reports/trend${month ? `?month=${month}` : ""}`),
   },
 

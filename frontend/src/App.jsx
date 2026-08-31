@@ -746,12 +746,38 @@ function MyHistory({ member }) {
 function FundView() {
   const [month, setMonth] = useState(currentMonthValue());
   const [summary, setSummary] = useState(null);
+  const [summaryError, setSummaryError] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [expenseDetail, setExpenseDetail] = useState(null);
+  const [expenseLoading, setExpenseLoading] = useState(false);
+  const [expenseError, setExpenseError] = useState("");
+
+  const loadSummary = () => {
+    setSummary(null);
+    setSummaryError("");
+    api.reports.publicSummary(month)
+      .then(setSummary)
+      .catch((err) => setSummaryError(err?.message || "Could not load fund information."));
+  };
 
   useEffect(() => {
-    setSummary(null);
-    api.reports.publicSummary(month).then(setSummary).catch(() => setSummary({}));
+    loadSummary();
+    setExpenseDetail(null);
   }, [month]);
+
+  const openExpenseCategory = async (category) => {
+    if (!category?.category_id) return;
+    setExpenseLoading(true);
+    setExpenseError("");
+    setExpenseDetail({ category: { id: category.category_id, name: category.category }, month, total: Number(category.spent || 0), expenses: null });
+    try {
+      setExpenseDetail(await api.reports.publicExpenses(month, category.category_id));
+    } catch (e) {
+      setExpenseError(e?.message || "Could not load expense details.");
+    } finally {
+      setExpenseLoading(false);
+    }
+  };
 
   const shiftMonth = (delta) => {
     const [y,m] = month.split("-").map(Number);
@@ -766,6 +792,13 @@ function FundView() {
     } catch { return month; }
   })();
 
+  if (summaryError) return (
+    <div className="sans" style={{background:"#FFF7F3",border:"1px solid #E9CFC5",borderRadius:12,padding:16,color:"#8E3F2E"}}>
+      <div style={{fontWeight:700,marginBottom:5}}>Fund information unavailable</div>
+      <div style={{fontSize:12,marginBottom:12}}>{summaryError}</div>
+      <button onClick={loadSummary} style={compactBtn}>Try again</button>
+    </div>
+  );
   if (!summary) return <Center>Loading…</Center>;
 
   const categories = summary.byCategory || [];
@@ -812,13 +845,18 @@ function FundView() {
       {visibleCategories.map((c, i) => {
         const spent = Number(c.spent || 0);
         const pct = monthSpent > 0 ? Math.round((spent / monthSpent) * 100) : 0;
-        return <div key={i} style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:"12px 14px",marginBottom:8}}>
-          <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
+        return <button key={i} onClick={()=>openExpenseCategory(c)}
+          style={{width:"100%",textAlign:"left",background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:"12px 14px",marginBottom:8,cursor:"pointer",color:"inherit"}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
             <span className="sans" style={{fontSize:14,fontWeight:500}}>{c.category}</span>
-            <span className="sans" style={{fontSize:14,fontWeight:700,color:"#A6432F"}}>MVR {fmt(spent)}</span>
+            <span style={{display:"flex",alignItems:"center",gap:7}}>
+              <span className="sans" style={{fontSize:14,fontWeight:700,color:"#A6432F"}}>MVR {fmt(spent)}</span>
+              <span className="sans" style={{fontSize:16,color:"#9A9384"}}>›</span>
+            </span>
           </div>
-          {spent > 0 && <div className="sans" style={{fontSize:10,color:"#9A9384",marginTop:4}}>{pct}% of this month's expenses</div>}
-        </div>;
+          {spent > 0 && <div className="sans" style={{fontSize:10,color:"#9A9384",marginTop:4}}>{pct}% of this month's expenses · Tap for details</div>}
+          {spent === 0 && <div className="sans" style={{fontSize:10,color:"#B2ACA0",marginTop:4}}>No expenses · Tap for details</div>}
+        </button>;
       })}
 
       {visibleCategories.length === 0 &&
@@ -846,6 +884,38 @@ function FundView() {
         </div>;
       })}
       {recent.length === 0 && <div className="sans" style={{fontSize:12,color:"#8A9086"}}>No fund activity yet.</div>}
+
+      {expenseDetail && <Modal title={expenseDetail.category?.name || "Expense details"} onClose={()=>!expenseLoading&&setExpenseDetail(null)}>
+        <div className="sans" style={{background:"#F7F5EF",borderRadius:11,padding:12,marginBottom:12}}>
+          <div style={{fontSize:10,color:"#8A9086"}}>{monthLabel.toUpperCase()}</div>
+          <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"end",marginTop:4}}>
+            <div style={{fontSize:14,fontWeight:700}}>{expenseDetail.category?.name}</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#A6432F"}}>MVR {fmt(expenseDetail.total || 0)}</div>
+          </div>
+        </div>
+
+        {expenseLoading && <Center>Loading expenses…</Center>}
+        {expenseError && <div className="sans" style={{background:"#FFF7F3",border:"1px solid #E9CFC5",borderRadius:10,padding:11,color:"#8E3F2E",fontSize:11}}>{expenseError}</div>}
+
+        {!expenseLoading && !expenseError && (expenseDetail.expenses || []).map((e)=><div key={e.id}
+          style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:"12px 13px",marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"}}>
+            <div style={{minWidth:0}}>
+              <div className="sans" style={{fontSize:13,fontWeight:700,color:"#1F2A22"}}>{e.description || "Expense"}</div>
+              <div className="sans" style={{fontSize:10,color:"#9A9384",marginTop:3}}>{e.txn_id || `Expense #${e.id}`}</div>
+            </div>
+            <div className="sans" style={{fontSize:14,fontWeight:700,color:"#A6432F",whiteSpace:"nowrap"}}>MVR {fmt(e.amount)}</div>
+          </div>
+          <div className="sans" style={{display:"grid",gridTemplateColumns:"1fr auto",gap:"5px 10px",fontSize:10,marginTop:10,paddingTop:9,borderTop:"1px solid #F0EDE3"}}>
+            <span style={{color:"#8A9086"}}>Category</span><span>{e.category}</span>
+            <span style={{color:"#8A9086"}}>Expense month</span><span>{e.transaction_month || month}</span>
+            <span style={{color:"#8A9086"}}>Logged</span><span>{e.created_at ? formatLocalDateTime(e.created_at) : "—"}</span>
+          </div>
+        </div>)}
+
+        {!expenseLoading && !expenseError && (expenseDetail.expenses || []).length===0 &&
+          <div className="sans" style={{fontSize:12,color:"#8A9086",padding:"10px 2px 4px"}}>No expenses recorded in this category for {monthLabel}.</div>}
+      </Modal>}
     </>
   );
 }
