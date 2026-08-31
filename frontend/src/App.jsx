@@ -904,7 +904,7 @@ function AuditEntry({a}) {
   const rows=auditSummary(a.detail);
   return <div className="sans" style={{padding:"11px 0",borderBottom:"1px solid #F0EDE3"}}>
     <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:12}}>
-      <b>{auditLabel(a.action)}</b><span style={{color:"#B5AE9C",fontSize:10,whiteSpace:"nowrap"}}>{a.created_at}</span>
+      <b>{auditLabel(a.action)}</b><span style={{color:"#B5AE9C",fontSize:10,whiteSpace:"nowrap"}}>{formatLocalDateTime(a.created_at)}</span>
     </div>
     {rows.map((r,i)=><div key={`${r.label}-${i}`} style={{fontSize:11,color:"#6B7268",marginTop:3}}><span style={{color:"#9A9384"}}>{r.label}:</span> {r.value}</div>)}
     <div style={{fontSize:10,color:"#B5AE9C",marginTop:4}}>by {a.admin_name || "system"}</div>
@@ -912,6 +912,14 @@ function AuditEntry({a}) {
 }
 
 /* ---------- Settings (admin) ---------- */
+function formatLocalDateTime(value) {
+  if (!value) return "";
+  const raw=String(value);
+  const d=new Date(raw.includes("T") ? raw : raw.replace(" ","T")+"Z");
+  if (Number.isNaN(d.getTime())) return raw;
+  return new Intl.DateTimeFormat("en", {timeZone:"Indian/Maldives",day:"2-digit",month:"short",year:"numeric",hour:"numeric",minute:"2-digit"}).format(d);
+}
+
 function Settings({ admin }) {
   const [settings,setSettings]=useState(null); const [admins,setAdmins]=useState([]); const [audit,setAudit]=useState([]); const [health,setHealth]=useState(null); const [closures,setClosures]=useState([]); const [errors,setErrors]=useState([]); const [message,setMessage]=useState("");
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
@@ -926,7 +934,12 @@ function Settings({ admin }) {
   const backup=async()=>{try{const data=await api.admin.backup();downloadText(`kys-fund-backup-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(data,null,2),"application/json");}catch(e){setMessage(e.message)}};
   return <>
     {message && <div className="sans" style={{fontSize:12,background:"#EAF1EE",padding:9,borderRadius:9,marginBottom:12}}>{message}</div>}
-    <SectionTitle>SYSTEM HEALTH</SectionTitle>
+    <div style={{display:"flex",gap:5,overflowX:"auto",marginBottom:16,paddingBottom:2}}>
+        {[["general","General"],["admins","Admins"],["system","System"],["audit","Audit"]].map(([k,label])=>(
+          <button key={k} onClick={()=>setSettingsSection(k)} className="sans" style={{flex:"0 0 auto",border:"1px solid "+(settingsSection===k?"#1F3D2B":"#E9E4D8"),background:settingsSection===k?"#1F3D2B":"#fff",color:settingsSection===k?"#F7F5EF":"#6B7268",borderRadius:18,padding:"6px 12px",fontSize:11,fontWeight:600,cursor:"pointer"}}>{label}</button>
+        ))}
+      </div>
+      <div style={{display:settingsSection==="system"?"block":"none"}}><SectionTitle>SYSTEM HEALTH</SectionTitle>
     <div style={cardStyle}>
       {health ? <div className="sans" style={{fontSize:12,lineHeight:1.8}}>
         <div>Database: <b>{health.db?.ok ? "✅ Online" : "❌ Error"}</b></div>
@@ -936,14 +949,14 @@ function Settings({ admin }) {
         <div>Mini App: {health.mini_app_url || "not set"}</div><div>Reminder: {health.reminder_schedule || "not set"}</div>
         {health.webhook?.last_error && <div style={{color:"#A6432F"}}>Webhook error: {health.webhook.last_error}</div>}
       </div> : <div className="sans" style={{fontSize:12,color:"#8A9086"}}>Checking…</div>}
-      <button onClick={()=>api.admin.health().then(setHealth)} style={{...compactBtn,marginTop:8}}>Refresh health</button>
+      <button onClick={()=>api.admin.health().then(setHealth)} style={{...compactBtn,marginTop:8}}>Refresh status</button>
     </div>
 
-    <SectionTitle>CONTRIBUTION & EXPENSE SETTINGS</SectionTitle>
+    </div><div style={{display:settingsSection==="general"?"block":"none"}}><SectionTitle>CONTRIBUTION & EXPENSE SETTINGS</SectionTitle>
     <div style={cardStyle}>
       <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Reminder day</div>
       <select value={settings.reminder_day} onChange={e=>saveSetting("reminder_day",e.target.value)} className="sans" style={{width:"100%",border:"1px solid #D9D3C4",borderRadius:8,padding:"9px 11px",fontSize:14,background:"#F7F5EF",marginBottom:12}}>{["1","5","10","15","off"].map(d=><option key={d} value={d}>{d==="off"?"Off — manual only":`Day ${d}`}</option>)}</select>
-      <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Expense second-approval threshold (MVR)</div>
+      <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Second-approval threshold (MVR)</div>
       <input type="number" value={settings.expense_approval_threshold || 5000} onChange={e=>setSettings({...settings,expense_approval_threshold:e.target.value})} onBlur={e=>saveSetting("expense_approval_threshold",e.target.value)} className="sans" style={{width:"100%",boxSizing:"border-box",border:"1px solid #D9D3C4",borderRadius:8,padding:"9px 11px",fontSize:14}} />
     </div>
 
@@ -954,19 +967,20 @@ function Settings({ admin }) {
       {superAdmin&&<button onClick={closeMonth} style={{...approveBtn,marginTop:10}}>Close a month</button>}
     </div>
 
-    <SectionTitle>ADMINS & ROLES</SectionTitle>
+    </div><div style={{display:settingsSection==="admins"?"block":"none"}}><SectionTitle>ADMINS & ROLES</SectionTitle>
     <div style={cardStyle}>
       {admins.map(a=><div key={a.id} className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #F0EDE3",fontSize:13}}><span>{a.name}</span>{superAdmin?<select value={a.role==="owner"?"super_admin":a.role} onChange={e=>api.settings.updateAdmin(a.id,{role:e.target.value}).then(load)} style={{border:"1px solid #D9D3C4",borderRadius:8,padding:5}}><option value="super_admin">Super Admin</option><option value="treasurer">Treasurer</option><option value="viewer">Viewer</option></select>:<span>{a.role}</span>}</div>)}
       <div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:8}}>Super Admin: full control · Treasurer: financial operations · Viewer: read-only.</div>
     </div>
 
-    {superAdmin&&<><SectionTitle>DATABASE BACKUP</SectionTitle><div style={cardStyle}><div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:8}}>Download a JSON snapshot before schema or data changes. For a full D1 SQL export, use the included worker backup script.</div><button onClick={backup} style={approveBtn}>Download backup</button></div></>}
+    {superAdmin&&<></div><div style={{display:settingsSection==="system"?"block":"none"}}><SectionTitle>DATABASE BACKUP</SectionTitle><div style={cardStyle}><div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:8}}>Create a backup before important schema or financial data changes.</div><button onClick={backup} style={approveBtn}>Create backup</button></div></>}
 
-    <SectionTitle>AUDIT LOG</SectionTitle>
+    </div><div style={{display:settingsSection==="audit"?"block":"none"}}><SectionTitle>AUDIT LOG</SectionTitle>
     <div style={cardStyle}>{audit.slice(0,100).map(a=><AuditEntry key={a.id} a={a}/>)}{!audit.length&&<EmptyLine>No audit entries.</EmptyLine>}</div>
 
-    {superAdmin&&<><SectionTitle>RECENT ERRORS</SectionTitle><div style={cardStyle}>{errors.length>0&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}><button onClick={()=>{if(confirm("Clear all logged errors?")) api.admin.clearErrors().then(()=>setErrors([])).catch(e=>setMessage(e.message));}} style={compactBtn}>Clear errors</button></div>}{errors.slice(0,50).map(e=><div key={e.id} className="sans" style={{padding:"7px 0",borderBottom:"1px solid #F0EDE3",fontSize:11}}><b>{e.source}</b> · {e.message}<div style={{color:"#B5AE9C"}}>{e.created_at}</div></div>)}{!errors.length&&<EmptyLine>No logged errors.</EmptyLine>}</div></>}
-  </>;
+    {superAdmin&&<></div><div style={{display:settingsSection==="system"?"block":"none"}}><SectionTitle>RECENT ERRORS</SectionTitle><div style={cardStyle}>{errors.length>0&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}><button onClick={()=>{if(confirm("Clear all logged errors?")) api.admin.clearErrors().then(()=>setErrors([])).catch(e=>setMessage(e.message));}} style={compactBtn}>Clear errors</button></div>}{errors.slice(0,50).map(e=><div key={e.id} className="sans" style={{padding:"7px 0",borderBottom:"1px solid #F0EDE3",fontSize:11}}><b>{e.source}</b> · {e.message}<div style={{color:"#B5AE9C"}}>{formatLocalDateTime(e.created_at)}</div></div>)}{!errors.length&&<EmptyLine>No logged errors.</EmptyLine>}</div></>}
+        </div>
+    </>;
 }
 
 /* ---------- Shared UI bits ---------- */
