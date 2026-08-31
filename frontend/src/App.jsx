@@ -356,7 +356,7 @@ function Members({ isAdmin, admin }) {
 
   const addMember = async () => {
     if (!form.name.trim()) return;
-    await api.members.create(form);
+    await api.members.create({ ...form, monthly_amount: Number(form.monthly_amount) });
     setForm({ name: "", phone: "", monthly_amount: 250 });
     setShowAdd(false);
     load();
@@ -490,7 +490,7 @@ function Members({ isAdmin, admin }) {
         <Modal onClose={() => setShowAdd(false)} title="Add member">
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
           <Field label="Phone (optional)" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
-          <Field label="Monthly amount (MVR)" type="number" value={form.monthly_amount} onChange={(v) => setForm({ ...form, monthly_amount: Number(v) })} />
+          <Field label="Monthly amount" type="number" prefix="MVR" value={form.monthly_amount} onChange={(v) => setForm({ ...form, monthly_amount: v })} />
           <PrimaryButton onClick={addMember}>Add member</PrimaryButton>
         </Modal>
       )}
@@ -529,7 +529,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   useEffect(() => { api.members.statement(member.id).then(setDetail).catch(() => {}); }, [member.id]);
 
   const save = async () => {
-    await api.members.update(member.id, form);
+    await api.members.update(member.id, { ...form, monthly_amount: Number(form.monthly_amount) });
     setEditing(false);
     onChanged();
     onClose();
@@ -630,7 +630,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
         <>
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
           <Field label="Phone" value={form.phone || ""} onChange={(v) => setForm({ ...form, phone: v })} />
-          <Field label="Monthly amount" type="number" value={form.monthly_amount} onChange={(v) => setForm({ ...form, monthly_amount: Number(v) })} />
+          <Field label="Monthly amount" type="number" prefix="MVR" value={form.monthly_amount} onChange={(v) => setForm({ ...form, monthly_amount: v })} />
           <PrimaryButton onClick={save}>Save changes</PrimaryButton>
         </>
       ) : (
@@ -1023,7 +1023,7 @@ function Activity({ isAdmin }) {
           {editingExpense.txn_id || `Expense #${editingExpense.id}`} · Changes are saved to the audit log. Use Void instead of permanently deleting a financial record.
         </div>
         <Field label="Description" value={editingExpense.description || ""} onChange={(v)=>setEditingExpense({...editingExpense,description:v})}/>
-        <Field label="Amount (MVR)" type="number" value={editingExpense.amount} onChange={(v)=>setEditingExpense({...editingExpense,amount:v})}/>
+        <Field label="Amount" type="number" prefix="MVR" value={editingExpense.amount} onChange={(v)=>setEditingExpense({...editingExpense,amount:v})}/>
         <label className="sans" style={{display:"block",fontSize:11,color:"#6B7268",marginBottom:10}}>
           <span style={{display:"block",marginBottom:5}}>Category</span>
           <select value={editingExpense.category_id || ""} onChange={(e)=>setEditingExpense({...editingExpense,category_id:e.target.value})}
@@ -1256,7 +1256,7 @@ function ExpenseModal({ onClose, onSaved }) {
         <option value="">Select category</option>
         {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
-      <Field label="Amount (MVR)" type="number" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
+      <Field label="Amount" type="number" prefix="MVR" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
       <PrimaryButton onClick={save}>Save expense</PrimaryButton>
     </Modal>
   );
@@ -1273,7 +1273,7 @@ function DonationModal({ onClose, onSaved }) {
   return (
     <Modal onClose={onClose} title="Log donation">
       <Field label="Donor name" value={form.donor_name} onChange={(v) => setForm({ ...form, donor_name: v })} />
-      <Field label="Amount (MVR)" type="number" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
+      <Field label="Amount" type="number" prefix="MVR" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
       <Field label="Note (optional)" value={form.note} onChange={(v) => setForm({ ...form, note: v })} />
       <PrimaryButton onClick={save}>Save donation</PrimaryButton>
     </Modal>
@@ -1439,7 +1439,7 @@ function PendingApprovals() {
       <div className="sans" style={{fontSize:11,color:"#6B7268",background:"#F7F5EF",padding:9,borderRadius:8,marginBottom:10}}>
         Verify the bank slip details before approval. Correct any OCR mistakes first.
       </div>
-      <Field label="Amount (MVR)" type="number" value={editing.amount} onChange={(v)=>setEditing({...editing,amount:Number(v)})}/>
+      <Field label="Amount" type="number" prefix="MVR" value={editing.amount} onChange={(v)=>setEditing({...editing,amount:v})}/>
       <Field label="Bank reference" value={editing.ref_number || ""} onChange={(v)=>setEditing({...editing,ref_number:v})}/>
       <Field label="Bank date (YYYY-MM-DD)" value={editing.bank_date || ""} onChange={(v)=>setEditing({...editing,bank_date:v})}/>
       <Field label="Contribution month (YYYY-MM)" value={editing.month || ""} onChange={(v)=>setEditing({...editing,month:v})}/>
@@ -1886,7 +1886,7 @@ function Settings({ admin }) {
         <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:5}}>Default monthly contribution</div>
         <div style={{display:"flex",alignItems:"center",border:"1px solid #D9D3C4",borderRadius:8,background:"#fff"}}>
           <span className="sans" style={{paddingLeft:11,fontSize:12,color:"#8A9086"}}>MVR</span>
-          <input disabled={!superAdmin} type="number" value={settings.default_monthly_amount||250} onChange={e=>setSettings({...settings,default_monthly_amount:e.target.value})} onBlur={e=>superAdmin&&saveSetting("default_monthly_amount",e.target.value)} className="sans" style={{flex:1,border:0,outline:"none",padding:"9px 11px",fontSize:14,background:"transparent"}}/>
+          <input disabled={!superAdmin} type="number" value={settings.default_monthly_amount ?? ""} onChange={e=>setSettings({...settings,default_monthly_amount:e.target.value})} onBlur={e=>superAdmin&&saveSetting("default_monthly_amount",e.target.value)} className="sans" style={{flex:1,border:0,outline:"none",padding:"9px 11px",fontSize:14,background:"transparent"}}/>
         </div>
         <div className="sans" style={{fontSize:10,color:"#9A9384",marginTop:6}}>Used automatically for new members. Existing member amounts are not changed.</div>
       </div>
@@ -1944,7 +1944,7 @@ function Settings({ admin }) {
         <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Second-approval threshold</div>
         <div style={{display:"flex",alignItems:"center",border:"1px solid #D9D3C4",borderRadius:8,background:"#fff",overflow:"hidden"}}>
           <span className="sans" style={{padding:"0 0 0 11px",fontSize:12,color:"#8A9086"}}>MVR</span>
-          <input type="number" value={settings.expense_approval_threshold || 5000}
+          <input type="number" value={settings.expense_approval_threshold ?? ""}
             onChange={e=>setSettings({...settings,expense_approval_threshold:e.target.value})}
             onBlur={e=>saveSetting("expense_approval_threshold",e.target.value)}
             className="sans" style={{flex:1,minWidth:0,border:0,outline:"none",padding:"9px 11px",fontSize:14,background:"transparent"}} />
@@ -2091,13 +2091,56 @@ function Modal({ title, onClose, action, children }) {
   );
 }
 
-function Field({ label, value, onChange, type = "text" }) {
+function Field({ label, value, onChange, type = "text", prefix = null, placeholder = "" }) {
+  const external = value === null || value === undefined ? "" : String(value);
+  const [draft, setDraft] = useState(external);
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setDraft(external);
+  }, [external, focused]);
+
+  const input = (
+    <input
+      value={draft}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => {
+        const next = e.target.value;
+        setDraft(next);
+        onChange(next);
+      }}
+      onBlur={() => {
+        setFocused(false);
+        onChange(draft);
+      }}
+      type={type}
+      inputMode={type === "number" ? "decimal" : undefined}
+      placeholder={placeholder}
+      className="sans"
+      style={{
+        width: "100%",
+        minWidth: 0,
+        border: prefix ? 0 : "1px solid #D9D3C4",
+        outline: "none",
+        borderRadius: prefix ? 0 : 10,
+        padding: "10px 12px",
+        fontSize: 14,
+        boxSizing: "border-box",
+        background: "#fff"
+      }}
+    />
+  );
+
   return (
-    <>
+    <div style={{ marginBottom: 12 }}>
       <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 4 }}>{label}</div>
-      <input value={value} onChange={(e) => onChange(e.target.value)} type={type} className="sans"
-        style={{ width: "100%", border: "1px solid #D9D3C4", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, boxSizing: "border-box" }} />
-    </>
+      {prefix ? (
+        <div style={{ display:"flex", alignItems:"center", border:"1px solid #D9D3C4", borderRadius:10, background:"#fff", overflow:"hidden" }}>
+          <span className="sans" style={{ paddingLeft:12, fontSize:12, color:"#8A9086", flex:"0 0 auto" }}>{prefix}</span>
+          {input}
+        </div>
+      ) : input}
+    </div>
   );
 }
 
