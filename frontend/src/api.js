@@ -14,20 +14,54 @@ function initData() {
   return window.Telegram?.WebApp?.initData || "";
 }
 
+const GET_CACHE_TTL_MS = 20_000;
+const responseCache = new Map();
+const inFlightGets = new Map();
+
+function clearGetCache() {
+  responseCache.clear();
+}
+
+function cacheKey(path) {
+  return `${initData()}::${path}`;
+}
+
 async function request(path, options = {}) {
-  const res = await fetch(apiUrl(path), {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Telegram-Init-Data": initData(),
-      ...(options.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+  const method = String(options.method || "GET").toUpperCase();
+  const isGet = method === "GET";
+  const key = isGet ? cacheKey(path) : null;
+
+  if (isGet) {
+    const cached = responseCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+    if (cached) responseCache.delete(key);
+    const pending = inFlightGets.get(key);
+    if (pending) return pending;
   }
-  return res.json();
+
+  const run = async () => {
+    const res = await fetch(apiUrl(path), {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Init-Data": initData(),
+        ...(options.headers || {}),
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `Request failed: ${res.status}`);
+    }
+    const data = await res.json();
+    if (isGet) responseCache.set(key, { data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
+    else clearGetCache();
+    return data;
+  };
+
+  if (!isGet) return run();
+  const promise = run().finally(() => inFlightGets.delete(key));
+  inFlightGets.set(key, promise);
+  return promise;
 }
 
 async function upload(path, formData) {
@@ -40,7 +74,9 @@ async function upload(path, formData) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Request failed: ${res.status}`);
   }
-  return res.json();
+  const data = await res.json();
+  clearGetCache();
+  return data;
 }
 
 export const api = {

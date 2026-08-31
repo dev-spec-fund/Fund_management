@@ -4,7 +4,6 @@ import { api } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
 import { currentMonthValue, shiftMonthValue } from "../utils/date";
-import { exportFundPdf, sendExportToTelegram } from "../utils/exports";
 import { fmt } from "../utils/format";
 
 export default function Reports({ setTab }) {
@@ -64,7 +63,7 @@ export default function Reports({ setTab }) {
       return `"${/^[=+\-@]/.test(safe) ? "'" + safe : safe}"`;
     }).join(",")).join("\n");
     const filename=`fund-report-${month}.csv`;
-    await sendExportToTelegram(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename, `${monthLabel} · Fund report CSV`);
+    await (await import("../utils/exports")).sendExportToTelegram(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename, `${monthLabel} · Fund report CSV`);
   };
 
   return (
@@ -72,7 +71,7 @@ export default function Reports({ setTab }) {
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#1F3D2B", letterSpacing: .4 }}>REPORTS</div>
         <div style={{ display: "flex", gap: 6, position: "relative" }}>
-          <button onClick={()=>exportFundPdf({month,monthLabel,summary}).catch(e=>alert(e.message))} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
+          <button onClick={async()=>{try{const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month,monthLabel,summary})}catch(e){alert(e.message)}}} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
           <button onClick={exportCsv} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>
           <button onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Add</button>
           {showAdd && (

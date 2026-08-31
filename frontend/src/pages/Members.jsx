@@ -4,7 +4,6 @@ import { api } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, PrimaryButton, smallBtn } from "../components/Shared";
 import { currentMonthValue, formatLocalDateTime } from "../utils/date";
-import { exportStatementCsv, exportStatementPdf } from "../utils/exports";
 import { fmt } from "../utils/format";
 
 export default function Members({ isAdmin, admin }) {
@@ -359,8 +358,8 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
 
           <div className="sans" style={{fontSize:10,color:"#8A9086",fontWeight:700,marginTop:12,marginBottom:6}}>EXPORT STATEMENT</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn()}>PDF</button>
-            <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn()}>CSV</button>
+            <button className="sans" onClick={async () => { const { exportStatementPdf } = await import("../utils/exports"); return exportStatementPdf(member); }} style={smallBtn()}>PDF</button>
+            <button className="sans" onClick={async () => { const { exportStatementCsv } = await import("../utils/exports"); return exportStatementCsv(member); }} style={smallBtn()}>CSV</button>
           </div>
 
           {member.active && canRemind && currentDue > 0 && <button className="sans" disabled={reminding} onClick={async()=>{

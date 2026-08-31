@@ -210,7 +210,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
 
-  const [income,allocatedContributions,advanceAllocated,donationTotal,expenseTotal,byCategory,outstanding,totalBalance] = await Promise.all([
+  const [income,allocatedContributions,advanceAllocated,donationTotal,expenseTotal,byCategory,outstanding,totalBalance,recentActivity] = await Promise.all([
     c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month=?").bind(month).first<{total:number}>(),
     allocatedTotalForMonth(c.env,month),
     advanceAllocatedForMonth(c.env,month),
@@ -229,7 +229,25 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
         CASE WHEN ex.member_id IS NOT NULL THEN 'exempt' WHEN COALESCE(p.paid,0)<=0 THEN 'unpaid' WHEN COALESCE(p.paid,0)<m.monthly_amount THEN 'partial' ELSE 'paid' END payment_status
       FROM members m LEFT JOIN paid p ON p.member_id=m.id LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=? WHERE m.active=1
     `).bind(month,month,month).all<any>(),
-    c.env.DB.prepare(`SELECT (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved')+(SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active')-(SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') balance`).first<{balance:number}>()
+    c.env.DB.prepare(`SELECT (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved')+(SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active')-(SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') balance`).first<{balance:number}>(),
+    c.env.DB.prepare(`
+      SELECT * FROM (
+        SELECT c.id,c.txn_id,m.name who,m.member_code,'contribution' kind,c.amount,c.month,NULL ref,
+               COALESCE(c.approved_at,c.submitted_at) at,a.name by_name,NULL category
+        FROM contributions c JOIN members m ON m.id=c.member_id LEFT JOIN admins a ON a.id=c.approved_by
+        WHERE c.status='approved'
+        UNION ALL
+        SELECT e.id,e.txn_id,e.description,NULL,'expense',e.amount,e.transaction_month,NULL,
+               COALESCE(e.approved_at,e.created_at),a.name,cat.name
+        FROM expenses e LEFT JOIN admins a ON a.id=e.logged_by LEFT JOIN expense_categories cat ON cat.id=e.category_id
+        WHERE COALESCE(e.status,'approved')='approved'
+        UNION ALL
+        SELECT d.id,d.txn_id,d.donor_name,NULL,'donation',d.amount,d.transaction_month,NULL,
+               d.created_at,a.name,NULL
+        FROM donations d LEFT JOIN admins a ON a.id=d.logged_by
+        WHERE COALESCE(d.status,'active')='active'
+      ) ORDER BY at DESC LIMIT 4
+    `).all<any>()
   ]);
 
   return c.json({
@@ -246,6 +264,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
       members: outstanding.results.filter((m:any)=>m.payment_status!=='paid'),
     },
     fundBalance: totalBalance?.balance ?? 0,
+    recentActivity: recentActivity.results,
   });
 });
 

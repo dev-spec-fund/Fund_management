@@ -1,23 +1,28 @@
-import React, { useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import { api } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
-import Members from "./pages/Members";
-import { MyHistory, FundView, Activity } from "./pages/MemberViews";
-import Reports from "./pages/Reports";
-import PendingApprovals from "./pages/PendingApprovals";
-import Meetings from "./pages/Meetings";
-import Settings from "./pages/Settings";
+const Members = lazy(() => import("./pages/Members"));
+const Reports = lazy(() => import("./pages/Reports"));
+const PendingApprovals = lazy(() => import("./pages/PendingApprovals"));
+const Meetings = lazy(() => import("./pages/Meetings"));
+const Settings = lazy(() => import("./pages/Settings"));
+const MyHistory = lazy(() => import("./pages/MemberViews").then((m) => ({ default: m.MyHistory })));
+const FundView = lazy(() => import("./pages/MemberViews").then((m) => ({ default: m.FundView })));
+const Activity = lazy(() => import("./pages/MemberViews").then((m) => ({ default: m.Activity })));
 
 export default function App() {
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [bootstrapSummary, setBootstrapSummary] = useState(null);
   const [tab, setTab] = useState("overview");
   const [mode, setMode] = useState("member");
 
   useEffect(() => {
+    // Start the safe overview request immediately so it overlaps the /me round-trip.
+    api.reports.publicSummary().then(setBootstrapSummary).catch(() => {});
     api.me()
       .then((data) => { setMe(data); setMode(data?.admin ? "admin" : "member"); })
       .catch((e) => setError(e.message))
@@ -58,15 +63,17 @@ export default function App() {
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>
-        {tab === "overview" && <Overview isAdmin={adminView} canFinance={canFinance} setTab={setTab} />}
-        {tab === "pending" && canFinance && <PendingApprovals />}
-        {tab === "members" && adminView && <Members isAdmin admin={me.admin} />}
-        {tab === "history" && memberView && <MyHistory member={me.member} />}
-        {tab === "fund" && memberView && <FundView />}
-        {tab === "activity" && <Activity isAdmin={adminView} canFinance={canFinance} />}
-        {tab === "reports" && adminView && <Reports setTab={setTab} />}
-        {tab === "meetings" && adminView && <Meetings />}
-        {tab === "settings" && adminView && <Settings admin={me.admin} />}
+        <Suspense fallback={<Center>Loading…</Center>}>
+          {tab === "overview" && <Overview isAdmin={adminView} canFinance={canFinance} setTab={setTab} bootstrapSummary={bootstrapSummary} />}
+          {tab === "pending" && canFinance && <PendingApprovals />}
+          {tab === "members" && adminView && <Members isAdmin admin={me.admin} />}
+          {tab === "history" && memberView && <MyHistory member={me.member} />}
+          {tab === "fund" && memberView && <FundView />}
+          {tab === "activity" && <Activity isAdmin={adminView} canFinance={canFinance} />}
+          {tab === "reports" && adminView && <Reports setTab={setTab} />}
+          {tab === "meetings" && adminView && <Meetings />}
+          {tab === "settings" && adminView && <Settings admin={me.admin} />}
+        </Suspense>
       </div>
     </Shell>
   );

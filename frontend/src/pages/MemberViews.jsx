@@ -4,7 +4,6 @@ import { api } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, formatLocalDateTime } from "../utils/date";
-import { exportStatementCsv, exportStatementPdf } from "../utils/exports";
 import { fmt } from "../utils/format";
 import { ActivityRow, activityDayLabel } from "../components/ActivityRow";
 
@@ -30,7 +29,7 @@ export function MyHistory({ member }) {
       <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"#8A9086"}}>TOTAL CONTRIBUTED</div><b className="sans">MVR {fmt(total)}</b></div>
       <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"#8A9086"}}>PAYMENTS</div><b className="sans">{approved.length} approved</b></div>
     </div>
-    <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}><b style={{fontSize:13,color:"#6B7268"}}>CONTRIBUTION HISTORY</b><div style={{display:"flex",gap:6}}><button onClick={()=>exportStatementPdf(member)} style={smallBtn()}>PDF</button><button onClick={()=>exportStatementCsv(member)} style={smallBtn()}>CSV</button></div></div>
+    <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}><b style={{fontSize:13,color:"#6B7268"}}>CONTRIBUTION HISTORY</b><div style={{display:"flex",gap:6}}><button onClick={async()=>{const {exportStatementPdf}=await import("../utils/exports");return exportStatementPdf(member)}} style={smallBtn()}>PDF</button><button onClick={async()=>{const {exportStatementCsv}=await import("../utils/exports");return exportStatementCsv(member)}} style={smallBtn()}>CSV</button></div></div>
     {rows.map((h)=><div key={h.id} style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:"13px 16px",marginBottom:8}}>
       <div style={{display:"flex",justifyContent:"space-between",gap:10}}><div><div className="sans" style={{fontSize:14,fontWeight:600}}>{monthLabel(h.month)}</div><div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:3}}>{h.txn_id} · Bank ref: {h.ref_number||"—"}</div></div><div style={{textAlign:"right"}}><div className="sans" style={{fontSize:14,fontWeight:600}}>MVR {fmt(h.amount)}</div><span className="sans" style={{...statusStyle(h.status),fontSize:10,fontWeight:600,padding:"3px 7px",borderRadius:99,display:"inline-block",marginTop:4,textTransform:"capitalize"}}>{h.status||"pending"}</span></div></div>
       {Array.isArray(h.allocations)&&h.allocations.length>0&&<div className="sans" style={{background:"#F7F5EF",borderRadius:9,padding:9,marginTop:10,fontSize:11}}><b>Applied to</b>{h.allocations.map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",marginTop:4}}><span>{monthLabel(x.month)}</span><span>MVR {fmt(x.amount)}</span></div>)}</div>}

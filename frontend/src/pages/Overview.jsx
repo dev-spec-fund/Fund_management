@@ -6,15 +6,23 @@ import { fmt } from "../utils/format";
 import { Center } from "../components/Shared";
 import { ActivityRow } from "../components/ActivityRow";
 
-export default function Overview({ isAdmin, canFinance, setTab }) {
-  const [summary, setSummary] = useState(null);
+export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null }) {
+  const [summary, setSummary] = useState(bootstrapSummary);
   const [activity, setActivity] = useState([]);
   const [pendingCount, setPendingCount] = useState(null);
 
   useEffect(() => {
+    if (!bootstrapSummary) return;
+    setSummary((current) => current || bootstrapSummary);
+    setActivity((current) => current.length ? current : normalizeRecentActivity(bootstrapSummary.recentActivity));
+  }, [bootstrapSummary]);
+
+  useEffect(() => {
     const summaryRequest = isAdmin ? api.reports.summary() : api.reports.publicSummary();
-    summaryRequest.then(setSummary).catch(() => {});
-    api.reports.activity().then((a) => setActivity(a.slice(0, 4))).catch(() => {});
+    summaryRequest.then((data) => {
+      setSummary(data);
+      setActivity(normalizeRecentActivity(data?.recentActivity));
+    }).catch(() => {});
     if (canFinance) {
       api.admin.pending().then((p) => {
         const count =
@@ -108,6 +116,15 @@ export default function Overview({ isAdmin, canFinance, setTab }) {
       {activity.length === 0 && <div className="sans" style={{ fontSize: 12, color: "#8A9086" }}>No activity yet.</div>}
     </>
   );
+}
+
+function normalizeRecentActivity(rows) {
+  return (Array.isArray(rows) ? rows : []).slice(0, 4).map((row, index) => ({
+    ...row,
+    id: row.id ?? `recent-${index}`,
+    who: row.who ?? row.label ?? "Fund activity",
+    at: row.at ?? row.event_at ?? null,
+  }));
 }
 
 function StatCard({ icon, label, value }) {
