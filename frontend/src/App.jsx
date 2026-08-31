@@ -72,7 +72,7 @@ export default function App() {
   const memberView = isMember && mode === "member";
 
   const tabs = adminView
-    ? ["overview", "pending", "members", "activity", "reports", "settings"]
+    ? ["overview", "pending", "members", "activity", "reports", "meetings", "settings"]
     : ["overview", "history", "fund", "activity"];
 
   const changeMode = (nextMode) => {
@@ -117,6 +117,7 @@ export default function App() {
         {tab === "fund" && memberView && <FundView />}
         {tab === "activity" && <Activity isAdmin={adminView} />}
         {tab === "reports" && adminView && <Reports setTab={setTab} />}
+        {tab === "meetings" && adminView && <Meetings />}
         {tab === "settings" && adminView && <Settings admin={me.admin} />}
       </div>
     </Shell>
@@ -1359,6 +1360,72 @@ function AuditEntry({a}) {
     {rows.map((r,i)=><div key={`${r.label}-${i}`} style={{fontSize:11,color:"#6B7268",marginTop:3}}><span style={{color:"#9A9384"}}>{r.label}:</span> {r.value}</div>)}
     <div style={{fontSize:10,color:"#B5AE9C",marginTop:4}}>by {a.admin_name || "system"}</div>
   </div>;
+}
+
+
+/* ---------- Meetings (admin) ---------- */
+function Meetings(){
+  const [rows,setRows]=useState(null);
+  const [showCreate,setShowCreate]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [message,setMessage]=useState("");
+  const [form,setForm]=useState({title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:""});
+  const load=()=>api.admin.meetings().then(setRows).catch(e=>setMessage(e.message));
+  useEffect(()=>{load()},[]);
+  const create=async()=>{
+    setBusy(true);setMessage("");
+    try{
+      const meeting=await api.admin.createMeeting(form);
+      setShowCreate(false);
+      setForm({title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:""});
+      await load();
+      if(window.confirm("Meeting created. Send Telegram invitations to all active linked members now?")){
+        const r=await api.admin.sendMeetingInvites(meeting.id);
+        setMessage(`Invitations sent: ${r.sent}${r.unlinked?` · ${r.unlinked} member(s) not linked to Telegram`:""}${r.failed?` · ${r.failed} failed`:""}`);
+        await load();
+      }
+    }catch(e){setMessage(e.message||"Could not create meeting")}finally{setBusy(false)}
+  };
+  const send=async(m)=>{
+    if(!window.confirm(`Send "${m.title}" invitation to all active Telegram-linked members?`))return;
+    setBusy(true);setMessage("");
+    try{const r=await api.admin.sendMeetingInvites(m.id);setMessage(`Invitations sent: ${r.sent}${r.unlinked?` · ${r.unlinked} unlinked`:""}${r.failed?` · ${r.failed} failed`:""}`);await load()}
+    catch(e){setMessage(e.message||"Could not send invitations")}finally{setBusy(false)}
+  };
+  return <>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+      <div><div className="sans" style={{fontSize:15,fontWeight:700,color:"#1F3D2B"}}>Meetings</div><div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:2}}>Create invitations and track member RSVP</div></div>
+      <button onClick={()=>setShowCreate(true)} style={{...approveBtn,padding:"9px 12px"}}>+ New meeting</button>
+    </div>
+    {message&&<div className="sans" style={{fontSize:11,padding:10,borderRadius:9,background:"#EAF1EE",color:"#1F3D2B",marginBottom:12}}>{message}</div>}
+    {rows===null?<Center>Loading…</Center>:rows.length===0?<div className="sans" style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:18,color:"#8A9086",fontSize:12}}>No meetings created yet.</div>:
+      rows.map(m=>{
+        const answered=Number(m.going||0)+Number(m.maybe||0)+Number(m.declined||0);
+        return <div key={m.id} style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:14,marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
+            <div><div style={{fontWeight:700,fontSize:15}}>{m.title}</div><div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:4}}>{m.meeting_date} · {m.meeting_time}{m.venue?` · ${m.venue}`:""}</div></div>
+            <span className="sans" style={{fontSize:10,padding:"5px 8px",height:"fit-content",borderRadius:99,background:m.status==="sent"?"#EAF1EE":"#F3F0E7",color:m.status==="sent"?"#315C35":"#6B7268"}}>{m.status==="sent"?"Sent":"Draft"}</span>
+          </div>
+          {m.agenda&&<div className="sans" style={{fontSize:11,color:"#6B7268",marginTop:9,lineHeight:1.45}}>{m.agenda}</div>}
+          <div className="sans" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginTop:12,textAlign:"center"}}>
+            <div><b>{m.going||0}</b><div style={{fontSize:9,color:"#8A9086"}}>Going</div></div>
+            <div><b>{m.maybe||0}</b><div style={{fontSize:9,color:"#8A9086"}}>Maybe</div></div>
+            <div><b>{m.declined||0}</b><div style={{fontSize:9,color:"#8A9086"}}>Declined</div></div>
+            <div><b>{answered}</b><div style={{fontSize:9,color:"#8A9086"}}>Responded</div></div>
+          </div>
+          <button disabled={busy} onClick={()=>send(m)} style={{...approveBtn,width:"100%",marginTop:12,padding:"9px 10px",opacity:busy?.6:1}}>{m.status==="sent"?"Resend invitation":"Send invitation"}</button>
+        </div>
+      })}
+    {showCreate&&<Modal title="New meeting" onClose={()=>!busy&&setShowCreate(false)}>
+      <Field label="Meeting title" value={form.title} onChange={v=>setForm({...form,title:v})}/>
+      <Field label="Date" type="date" value={form.meeting_date} onChange={v=>setForm({...form,meeting_date:v})}/>
+      <Field label="Time" type="time" value={form.meeting_time} onChange={v=>setForm({...form,meeting_time:v})}/>
+      <Field label="Venue / location" value={form.venue} onChange={v=>setForm({...form,venue:v})}/>
+      <label className="sans" style={{display:"block",fontSize:11,color:"#6B7268",marginBottom:10}}><span style={{display:"block",marginBottom:5}}>Agenda / message</span><textarea value={form.agenda} onChange={e=>setForm({...form,agenda:e.target.value})} rows={4} style={{width:"100%",padding:"10px 11px",border:"1px solid #DED8CA",borderRadius:9,background:"#fff",fontSize:13,resize:"vertical"}}/></label>
+      <Field label="RSVP deadline (optional)" value={form.rsvp_deadline} onChange={v=>setForm({...form,rsvp_deadline:v})}/>
+      <button disabled={busy} onClick={create} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:busy?.6:1}}>{busy?"Creating…":"Create meeting"}</button>
+    </Modal>}
+  </>
 }
 
 /* ---------- Settings (admin) ---------- */
