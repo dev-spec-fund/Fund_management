@@ -169,39 +169,93 @@ function Center({ children }) {
 function Overview({ isAdmin, setTab }) {
   const [summary, setSummary] = useState(null);
   const [activity, setActivity] = useState([]);
+  const [pendingCount, setPendingCount] = useState(null);
 
   useEffect(() => {
     const summaryRequest = isAdmin ? api.reports.summary() : api.reports.publicSummary();
     summaryRequest.then(setSummary).catch(() => {});
-    api.reports.activity().then((a) => setActivity(a.slice(0, 5))).catch(() => {});
+    api.reports.activity().then((a) => setActivity(a.slice(0, 4))).catch(() => {});
+    if (isAdmin) {
+      api.admin.pending().then((p) => {
+        const count =
+          (p?.registrations?.length || 0) +
+          (p?.contributions?.length || 0) +
+          (p?.expenses?.length || 0);
+        setPendingCount(count);
+      }).catch(() => setPendingCount(null));
+    }
   }, [isAdmin]);
 
   if (!summary) return <Center>Loading overview…</Center>;
 
+  const contributions = Number(summary.memberIncome || 0);
+  const donations = Number(summary.donationIncome || 0);
+  const expenses = Number(summary.expenses || 0);
+  const netMonth = contributions + donations - expenses;
+  const outstandingTotal = Number(summary.outstanding?.total || 0);
+  const outstandingMembers = (summary.outstanding?.members || []).length;
+  const expected = contributions + outstandingTotal;
+  const collectionPct = expected > 0 ? Math.min(100, Math.round((contributions / expected) * 100)) : 0;
+
   return (
     <>
-      <div style={{ background: "#1F3D2B", borderRadius: 16, padding: "26px 22px", color: "#F7F5EF" }}>
-        <div className="sans" style={{ fontSize: 12, opacity: 0.6, letterSpacing: 1 }}>TOTAL FUND BALANCE</div>
-        <div style={{ fontSize: 40, fontWeight: 600, marginTop: 4 }}>MVR {fmt(summary.fundBalance)}</div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
-        <StatCard icon={<ArrowUpRight size={16} color="#3A6B3E" />} label="Income (mo.)" value={fmt(summary.memberIncome + summary.donationIncome)} />
-        <StatCard icon={<ArrowDownRight size={16} color="#A6432F" />} label="Expenses (mo.)" value={fmt(summary.expenses)} />
-      </div>
-
-      {isAdmin && (summary.outstanding?.total || 0) > 0 && (
-        <div onClick={() => setTab("members")}
-          style={{ background: "#FBF1EE", border: "1px solid #F2D6D0", borderRadius: 12, padding: 14, marginTop: 14, cursor: "pointer" }}>
-          <div className="sans" style={{ fontSize: 13, color: "#A6432F", fontWeight: 600 }}>
-            Outstanding dues: MVR {fmt(summary.outstanding?.total)} · {(summary.outstanding?.members || []).length} members
-          </div>
+      <div style={{ background: "#1F3D2B", borderRadius: 16, padding: "23px 22px", color: "#F7F5EF" }}>
+        <div className="sans" style={{ fontSize: 11, opacity: 0.62, letterSpacing: 1.1 }}>FUND BALANCE</div>
+        <div style={{ fontSize: 39, fontWeight: 600, marginTop: 4 }}>MVR {fmt(summary.fundBalance)}</div>
+        <div className="sans" style={{ fontSize: 11, opacity: 0.7, marginTop: 5 }}>
+          {netMonth >= 0 ? "+" : "−"} MVR {fmt(Math.abs(netMonth))} this month
         </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+        <StatCard icon={<ArrowUpRight size={15} color="#3A6B3E" />} label="Contributions" value={`MVR ${fmt(contributions)}`} />
+        <StatCard icon={<ArrowDownRight size={15} color="#A6432F" />} label="Expenses this month" value={`MVR ${fmt(expenses)}`} />
+      </div>
+
+      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 13, padding: "12px 14px", marginTop: 10 }}>
+        <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+          <span style={{ color: "#6B7268" }}>Donations this month</span>
+          <strong style={{ color: "#3A6B3E" }}>+ MVR {fmt(donations)}</strong>
+        </div>
+      </div>
+
+      <div className="sans" style={{ fontSize: 11, color: "#6B7268", marginTop: 18, marginBottom: 7, fontWeight: 700, letterSpacing: .5 }}>MONTHLY COLLECTION</div>
+      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 13, padding: "13px 14px" }}>
+        <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12 }}>
+          <span><b style={{ color: "#1F3D2B" }}>MVR {fmt(contributions)}</b> <span style={{ color: "#9A9384" }}>/ MVR {fmt(expected)}</span></span>
+          <b style={{ color: "#3A6B3E" }}>{collectionPct}% collected</b>
+        </div>
+        <div style={{ height: 6, background: "#ECE8DE", borderRadius: 999, overflow: "hidden", marginTop: 8 }}>
+          <div style={{ width: `${collectionPct}%`, height: "100%", background: "#3A6B3E", borderRadius: 999 }} />
+        </div>
+      </div>
+
+      {isAdmin && outstandingTotal > 0 && (
+        <button onClick={() => setTab("members")}
+          style={{ width: "100%", background: "#FBF1EE", border: "1px solid #F2D6D0", borderRadius: 12, padding: "12px 14px", marginTop: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", color: "#A6432F" }}>
+          <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>Outstanding</span>
+          <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>
+            MVR {fmt(outstandingTotal)} · {outstandingMembers} {outstandingMembers === 1 ? "member" : "members"} ›
+          </span>
+        </button>
       )}
 
-      <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginTop: 22, marginBottom: 8, fontWeight: 600 }}>RECENT ACTIVITY</div>
+      {isAdmin && pendingCount !== null && (
+        <button onClick={() => setTab("pending")}
+          style={{ width: "100%", background: pendingCount > 0 ? "#FFF7E8" : "#EEF4F0", border: `1px solid ${pendingCount > 0 ? "#E8D7A8" : "#D3E3D9"}`, borderRadius: 12, padding: "12px 14px", marginTop: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", color: pendingCount > 0 ? "#7A5A18" : "#3A6B3E" }}>
+          <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>Pending approvals</span>
+          <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>
+            {pendingCount > 0 ? `${pendingCount} waiting ›` : "✓ None waiting"}
+          </span>
+        </button>
+      )}
+
+      <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 8 }}>
+        <span style={{ fontSize: 12, color: "#6B7268", fontWeight: 700, letterSpacing: .5 }}>RECENT ACTIVITY</span>
+        {activity.length > 0 && <button onClick={() => setTab("activity")} style={{ border: 0, background: "transparent", padding: 0, color: "#3A6B3E", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>View all →</button>}
+      </div>
       {activity.map((a) => <ActivityRow key={`${a.kind}-${a.id}`} a={a} isAdmin={isAdmin} />)}
-      {activity.length === 0 && <div className="sans" style={{ fontSize: 13, color: "#8A9086" }}>No activity yet.</div>}
+      {activity.length === 0 && <div className="sans" style={{ fontSize: 12, color: "#8A9086" }}>No activity yet.</div>}
     </>
   );
 }
