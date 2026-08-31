@@ -1835,20 +1835,48 @@ function Settings({ admin }) {
   const financeAdmin = superAdmin || role === "treasurer";
   const currentMonth = currentMonthValue();
 
-  const load=()=>{
-    api.settings.get().then(setSettings).catch(()=>{});
-    api.settings.admins().then(setAdmins).catch(()=>{});
-    api.settings.auditLog().then(setAudit).catch(()=>{});
-    api.expenses.categories().then(setCategories).catch(()=>{});
-    if(superAdmin) api.members.list().then(setMembersForAdmin).catch(()=>{});
-    api.admin.health().then(setHealth).catch(()=>{});
-    api.admin.monthClosures().then(setClosures).catch(()=>{});
-    if(superAdmin) api.admin.errors().then(setErrors).catch(()=>{});
+  const [settingsLoading,setSettingsLoading]=useState(true);
+  const [settingsError,setSettingsError]=useState("");
+
+  const load=async()=>{
+    setSettingsLoading(true);
+    setSettingsError("");
+    try{
+      // Settings itself is the only request required to render this page.
+      // Load it first so a slow audit/health/admin request cannot leave the
+      // entire Settings screen stuck behind a loading state.
+      const core=await api.settings.get();
+      setSettings(core || {});
+    }catch(e){
+      setSettingsError(e?.message || "Unable to load settings");
+      setSettings({});
+    }finally{
+      setSettingsLoading(false);
+    }
+
+    // Secondary panels are independent and may fail without blocking Settings.
+    const jobs=[
+      api.settings.admins().then(setAdmins),
+      api.settings.auditLog().then(setAudit),
+      api.expenses.categories().then(setCategories),
+      api.admin.health().then(setHealth),
+      api.admin.monthClosures().then(setClosures),
+    ];
+    if(superAdmin){
+      jobs.push(api.members.list().then(setMembersForAdmin));
+      jobs.push(api.admin.errors().then(setErrors));
+    }
+    await Promise.allSettled(jobs);
   };
 
-  useEffect(load,[admin]);
+  useEffect(()=>{ load(); },[admin?.id,role]);
 
-  if(!settings)return <Center>Loading settings…</Center>;
+  if(settingsLoading)return <Center>Loading settings…</Center>;
+  if(settingsError && !Object.keys(settings||{}).length) return <div style={{...cardStyle,textAlign:"center"}}>
+    <div className="sans" style={{fontSize:13,fontWeight:700,color:"#A6432F"}}>Settings could not load</div>
+    <div className="sans" style={{fontSize:11,color:"#6B7268",marginTop:6}}>{settingsError}</div>
+    <button onClick={load} className="sans" style={{...primaryBtn,marginTop:12}}>Retry</button>
+  </div>;
 
   const saveSetting=async(key,value)=>{
     try{
