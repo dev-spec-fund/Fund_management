@@ -10,13 +10,13 @@ export function Modal({ title, onClose, action, children }) {
 
   useEffect(() => {
     const vv = window.visualViewport;
-    const appRoot = document.querySelector(".app-scroll-root");
+    const appRoot = document.querySelector(".app-page-content");
     const previousOverflowY = appRoot?.style.overflowY || "";
     const previousTouchAction = appRoot?.style.touchAction || "";
     const previousScrollTop = appRoot?.scrollTop || 0;
 
-    // A modal is the only intentionally nested vertical scroller. Lock the page
-    // beneath it so iOS/Telegram cannot transfer the gesture to the background.
+    // Normal navigation scrolls only inside the content viewport. Lock that viewport
+    // while a modal is open so iOS/Telegram cannot transfer gestures behind it.
     if (appRoot) {
       appRoot.style.overflowY = "hidden";
       appRoot.style.touchAction = "none";
