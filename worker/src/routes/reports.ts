@@ -87,6 +87,37 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
       (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') as balance
   `).first<{ balance: number }>();
 
+  const lifetime = await c.env.DB.prepare(`
+    SELECT
+      (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved') +
+      (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active') AS total_received,
+      (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') AS total_spent
+  `).first<any>();
+
+  const recent = await c.env.DB.prepare(`
+    SELECT kind,label,amount,event_at FROM (
+      SELECT 'contribution' kind,'Member contribution' label,amount,
+        COALESCE(approved_at,submitted_at) event_at
+      FROM contributions
+      WHERE status='approved'
+      UNION ALL
+      SELECT 'donation' kind,
+        CASE WHEN TRIM(COALESCE(source_name,''))<>'' THEN 'Donation · '||source_name ELSE 'Donation' END label,
+        amount,created_at event_at
+      FROM donations
+      WHERE COALESCE(status,'active')='active'
+      UNION ALL
+      SELECT 'expense' kind,
+        COALESCE(NULLIF(TRIM(description),''),'Expense') label,
+        amount,created_at event_at
+      FROM expenses
+      WHERE COALESCE(status,'approved')='approved'
+    )
+    WHERE event_at IS NOT NULL
+    ORDER BY event_at DESC
+    LIMIT 5
+  `).all<any>();
+
   return c.json({
     month,
     memberIncome: income?.total ?? 0,
@@ -97,6 +128,9 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     net: (income?.total ?? 0) + (donationTotal?.total ?? 0) - (expenseTotal?.total ?? 0),
     byCategory: byCategory.results,
     fundBalance: totalBalance?.balance ?? 0,
+    totalReceived: lifetime?.total_received ?? 0,
+    totalSpent: lifetime?.total_spent ?? 0,
+    recentActivity: recent.results,
   });
 });
 
