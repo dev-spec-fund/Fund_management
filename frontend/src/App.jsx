@@ -1442,12 +1442,22 @@ function Meetings(){
     try{
       const result=await api.admin.updateMeeting(details.id,form);
       setEditing(false);await load();await openDetails(result);
+      if(!result.changed){
+        setMessage("No changes to save.");
+        return;
+      }
+      const label=result.rescheduled?"Meeting rescheduled.":"Meeting updated.";
       if(details.status==="sent"&&window.confirm(result.rescheduled
         ?"Meeting rescheduled. Notify members of the new date/time now?"
         :"Meeting updated. Notify members of the changes now?")){
-        const r=await api.admin.notifyMeetingUpdate(details.id);
-        setMessage(`Update sent: ${r.sent}${r.unlinked?` · ${r.unlinked} unlinked`:""}${r.failed?` · ${r.failed} failed`:""}`);
-      }else setMessage(result.rescheduled?"Meeting rescheduled.":"Meeting updated.");
+        const r=await api.admin.notifyMeetingUpdate(details.id,{
+          rescheduled:result.rescheduled,
+          previous_date:result.previous_date,
+          previous_time:result.previous_time,
+          changed_fields:result.changed_fields
+        });
+        setMessage(`${result.rescheduled?"Reschedule":"Update"} sent: ${r.sent}${r.unlinked?` · ${r.unlinked} unlinked`:""}${r.failed?` · ${r.failed} failed`:""}`);
+      }else setMessage(label);
     }catch(e){setMessage(e.message||"Could not update meeting")}finally{setBusy(false)}
   };
 
@@ -1617,11 +1627,11 @@ function Meetings(){
               {details.sent_at&&<button disabled={busy} onClick={async()=>{
                 setBusy(true);setMessage("");
                 try{
-                  const r=await api.admin.notifyMeetingUpdate(details.id);
-                  setMessage(`Update sent to ${r.sent} member${Number(r.sent)===1?"":"s"}.`);
+                  setMessage("Edit the meeting first. Member notifications are offered automatically after a real change.");
+                  return;
                   setDetails(await api.admin.meeting(details.id));await load();
                 }catch(e){setMessage(e.message)}finally{setBusy(false)}
-              }} style={{...compactBtn,width:"100%",padding:10,marginTop:8}}>Notify members of changes</button>}
+              }} style={{...compactBtn,width:"100%",padding:10,marginTop:8}}>Changes notify after saving</button>}
               <button disabled={busy} onClick={cancelMeeting} style={{...rejectBtn,width:"100%",padding:10,marginTop:8}}>Cancel meeting</button>
             </>}
           </>;
