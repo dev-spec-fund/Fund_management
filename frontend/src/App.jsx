@@ -737,11 +737,19 @@ function MyHistory({ member }) {
 function FundView() {
   const [month, setMonth] = useState(currentMonthValue());
   const [summary, setSummary] = useState(null);
+  const [summaryError, setSummaryError] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
 
-  useEffect(() => {
+  const loadSummary = () => {
     setSummary(null);
-    api.reports.publicSummary(month).then(setSummary).catch(() => setSummary({}));
+    setSummaryError("");
+    api.reports.publicSummary(month)
+      .then(setSummary)
+      .catch((err) => setSummaryError(err?.message || "Could not load fund information."));
+  };
+
+  useEffect(() => {
+    loadSummary();
   }, [month]);
 
   const shiftMonth = (delta) => {
@@ -757,6 +765,13 @@ function FundView() {
     } catch { return month; }
   })();
 
+  if (summaryError) return (
+    <div className="sans" style={{background:"#FFF7F3",border:"1px solid #E9CFC5",borderRadius:12,padding:16,color:"#8E3F2E"}}>
+      <div style={{fontWeight:700,marginBottom:5}}>Fund information unavailable</div>
+      <div style={{fontSize:12,marginBottom:12}}>{summaryError}</div>
+      <button onClick={loadSummary} style={compactBtn}>Try again</button>
+    </div>
+  );
   if (!summary) return <Center>Loading…</Center>;
 
   const categories = summary.byCategory || [];
