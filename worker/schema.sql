@@ -217,7 +217,11 @@ CREATE TABLE IF NOT EXISTS meetings (
   status TEXT NOT NULL DEFAULT 'draft',
   created_by INTEGER REFERENCES admins(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  sent_at TEXT
+  updated_at TEXT,
+  sent_at TEXT,
+  cancelled_at TEXT,
+  cancelled_by INTEGER REFERENCES admins(id),
+  cancel_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS meeting_rsvps (
