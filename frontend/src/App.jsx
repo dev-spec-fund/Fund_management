@@ -7,6 +7,7 @@ import { api } from "./api";
 import { jsPDF } from "jspdf";
 
 const fmt = (n) => Number(n || 0).toLocaleString();
+const currentMonthValue = () => new Date().toISOString().slice(0, 7);
 
 function downloadText(filename, text, type = "text/plain") {
   const blob = new Blob([text], { type });
@@ -81,7 +82,7 @@ export default function App() {
   return (
     <Shell isAdmin={isAdmin} isMember={isMember} mode={mode} me={me}>
       {isAdmin && isMember && (
-        <div style={{ padding: "14px 20px 0", maxWidth: 480, margin: "0 auto" }}>
+        <div style={{ flexShrink: 0, padding: "14px 20px 0", maxWidth: 480, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
           <div className="sans" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "#E9E4D8", borderRadius: 12, padding: 3 }}>
             <button onClick={() => changeMode("admin")} style={modeButton(mode === "admin")}>Admin View</button>
             <button onClick={() => changeMode("member")} style={modeButton(mode === "member")}>My Account</button>
@@ -90,12 +91,12 @@ export default function App() {
       )}
 
       {isAdmin && !isMember && (
-        <div className="sans" style={{ margin: "14px 20px 0", maxWidth: 440, background: "#FFF6E5", border: "1px solid #EFD9A9", color: "#7A5A18", borderRadius: 10, padding: "9px 12px", fontSize: 12 }}>
+        <div className="sans" style={{ flexShrink: 0, margin: "14px auto 0", width: "calc(100% - 40px)", maxWidth: 440, boxSizing: "border-box", background: "#FFF6E5", border: "1px solid #EFD9A9", color: "#7A5A18", borderRadius: 10, padding: "9px 12px", fontSize: 12 }}>
           You are an admin but not yet linked to a member account. Send /start to the bot and choose “Register Myself as Member”.
         </div>
       )}
 
-      <div className="sans" style={{ display: "flex", gap: 18, padding: "0 20px", marginTop: 18, overflowX: "auto" }}>
+      <div className="sans" style={{ flexShrink: 0, display: "flex", gap: 18, padding: "0 20px", marginTop: 18, overflowX: "auto" }}>
         {tabs.map((t) => (
           <button key={t} onClick={() => setTab(t)}
             style={{
@@ -107,7 +108,7 @@ export default function App() {
             }}>{t}</button>
         ))}
       </div>
-      <div style={{ padding: 20, maxWidth: 480, margin: "0 auto" }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>
         {tab === "overview" && <Overview isAdmin={adminView} setTab={setTab} />}
         {tab === "pending" && adminView && <PendingApprovals />}
         {tab === "members" && adminView && <Members isAdmin />}
@@ -136,19 +137,21 @@ function modeButton(active) {
 
 function Shell({ children, isAdmin, isMember, mode, me }) {
   return (
-    <div style={{ fontFamily: "'Fraunces','Georgia',serif", background: "#F7F5EF", minHeight: "100vh", color: "#1F2A22" }}>
+    <div style={{ fontFamily: "'Fraunces','Georgia',serif", background: "#F7F5EF", height: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column", color: "#1F2A22" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap');
+        html, body, #root { height: 100%; }
+        body { margin: 0; overflow: hidden; }
         .sans { font-family: 'Inter', sans-serif; }
       `}</style>
-      <div className="sans" style={{ background: "#17212B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", fontSize: 14 }}>
+      <div className="sans" style={{ flexShrink: 0, background: "#17212B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", fontSize: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <ChevronLeft size={18} />
           <span style={{ fontWeight: 600 }}>Fund Bot</span>
         </div>
         {me && <div style={{ opacity: 0.75, fontSize: 12 }}>{isAdmin && isMember ? (mode === "admin" ? "Admin View" : "My Account") : isAdmin ? "Admin" : "Member"}</div>}
       </div>
-      <div style={{ background: "#1F3D2B", padding: "24px 24px 6px", color: "#F7F5EF" }}>
+      <div style={{ flexShrink: 0, background: "#1F3D2B", padding: "24px 24px 6px", color: "#F7F5EF" }}>
         <div className="sans" style={{ fontSize: 12, letterSpacing: 2, opacity: 0.65, textTransform: "uppercase" }}>Fund</div>
         <div style={{ fontSize: 28, fontWeight: 600, marginTop: 2 }}>Ledger</div>
       </div>
@@ -186,11 +189,11 @@ function Overview({ isAdmin, setTab }) {
         <StatCard icon={<ArrowDownRight size={16} color="#A6432F" />} label="Expenses (mo.)" value={fmt(summary.expenses)} />
       </div>
 
-      {isAdmin && summary.outstanding.total > 0 && (
+      {isAdmin && (summary.outstanding?.total || 0) > 0 && (
         <div onClick={() => setTab("members")}
           style={{ background: "#FBF1EE", border: "1px solid #F2D6D0", borderRadius: 12, padding: 14, marginTop: 14, cursor: "pointer" }}>
           <div className="sans" style={{ fontSize: 13, color: "#A6432F", fontWeight: 600 }}>
-            Outstanding dues: MVR {fmt(summary.outstanding.total)} · {summary.outstanding.members.length} members
+            Outstanding dues: MVR {fmt(summary.outstanding?.total)} · {(summary.outstanding?.members || []).length} members
           </div>
         </div>
       )}
@@ -243,13 +246,18 @@ function ActivityRow({ a, isAdmin }) {
 /* ---------- Members (admin) ---------- */
 function Members({ isAdmin }) {
   const [members, setMembers] = useState([]);
+  const [month, setMonth] = useState(currentMonthValue());
+  const [monthlySummary, setMonthlySummary] = useState(null);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", monthly_amount: 250 });
 
-  const load = () => api.members.list().then(setMembers).catch(() => {});
-  useEffect(() => { if (isAdmin) load(); }, [isAdmin]);
+  const load = () => Promise.all([
+    api.members.list().then(setMembers),
+    api.reports.summary(month).then(setMonthlySummary),
+  ]).catch(() => {});
+  useEffect(() => { if (isAdmin) load(); }, [isAdmin, month]);
 
   if (!isAdmin) return <Center>Member directory is admin-only in this view.</Center>;
 
@@ -262,6 +270,10 @@ function Members({ isAdmin }) {
   };
 
   const filtered = members.filter((m) => m.name.toLowerCase().includes(search.toLowerCase()));
+  const unpaidByMember = new Map((monthlySummary?.outstanding?.members || []).map((m) => [Number(m.id), m]));
+  const activeMembers = members.filter((m) => m.active);
+  const unpaidCount = activeMembers.filter((m) => unpaidByMember.has(Number(m.id))).length;
+  const paidCount = activeMembers.length - unpaidCount;
 
   return (
     <>
@@ -272,18 +284,36 @@ function Members({ isAdmin }) {
       <div className="sans" style={{ display: "flex", alignItems: "center", gap: 6, background: "#EAF1EE", color: "#1F3D2B", fontSize: 12, borderRadius: 10, padding: "9px 12px", marginBottom: 12 }}>
         Payments are submitted by members via Telegram — approve slips there.
       </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "end", gap: 10, marginBottom: 12 }}>
+        <div>
+          <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 4 }}>Subscription month</div>
+          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="sans"
+            style={{ width: "100%", border: "1px solid #D9D3C4", borderRadius: 10, padding: "9px 11px", fontSize: 14, boxSizing: "border-box", background: "#fff" }} />
+        </div>
+        <div className="sans" style={{ textAlign: "right", fontSize: 12, color: "#6B7268", paddingBottom: 9 }}>
+          <b style={{ color: "#3A6B3E" }}>{paidCount}</b> paid · <b style={{ color: "#A6432F" }}>{unpaidCount}</b> due
+        </div>
+      </div>
       <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search members…" className="sans"
         style={{ width: "100%", border: "1px solid #D9D3C4", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, boxSizing: "border-box" }} />
 
-      {filtered.map((m) => (
-        <div key={m.id} onClick={() => setSelected(m)}
-          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: m.active ? "#fff" : "#F1EFE7", opacity: m.active ? 1 : 0.65, border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 16px", marginBottom: 8, cursor: "pointer" }}>
-          <div>
-            <div className="sans" style={{ fontSize: 14, fontWeight: 500 }}>{m.name} <span style={{ fontSize: 11, color: "#B5AE9C", fontWeight: 500 }}>{m.member_code}</span> {!m.active && <span style={{ fontSize: 10, color: "#8A9086" }}>(inactive)</span>}</div>
-            <div className="sans" style={{ fontSize: 12, color: "#8A9086" }}>{m.phone || "no phone"} · MVR {m.monthly_amount}/mo · Since {m.joined_at}</div>
+      {filtered.map((m) => {
+        const monthly = unpaidByMember.get(Number(m.id));
+        const status = !m.active ? "inactive" : monthly?.payment_status || "paid";
+        const paid = Number(monthly?.paid || (status === "paid" ? m.monthly_amount : 0));
+        const due = status === "exempt" || status === "inactive" ? 0 : Math.max(0, Number(m.monthly_amount) - paid);
+        return (
+          <div key={m.id} onClick={() => setSelected(m)}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: m.active ? "#fff" : "#F1EFE7", opacity: m.active ? 1 : 0.65, border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 16px", marginBottom: 8, cursor: "pointer" }}>
+            <div>
+              <div className="sans" style={{ fontSize: 14, fontWeight: 500 }}>{m.name} <span style={{ fontSize: 11, color: "#B5AE9C", fontWeight: 500 }}>{m.member_code}</span> {!m.active && <span style={{ fontSize: 10, color: "#8A9086" }}>(inactive)</span>}</div>
+              <div className="sans" style={{ fontSize: 12, color: "#8A9086" }}>{m.phone || "no phone"} · MVR {m.monthly_amount}/mo · Since {m.joined_at}</div>
+              {due > 0 && <div className="sans" style={{ fontSize: 11, color: "#A6432F", marginTop: 3 }}>Due for {month}: MVR {fmt(due)}</div>}
+            </div>
+            <StatusBadge status={status} />
           </div>
-        </div>
-      ))}
+        );
+      })}
       {filtered.length === 0 && <div className="sans" style={{ fontSize: 13, color: "#8A9086" }}>No members yet.</div>}
 
       {selected && <MemberPopup member={selected} onClose={() => setSelected(null)} onChanged={load} />}
@@ -297,6 +327,22 @@ function Members({ isAdmin }) {
         </Modal>
       )}
     </>
+  );
+}
+
+function StatusBadge({ status }) {
+  const styles = {
+    paid: { label: "Paid", color: "#1F3D2B", bg: "#EAF1EE", border: "#CFE0D6" },
+    partial: { label: "Partial", color: "#7A5A18", bg: "#FFF6E5", border: "#EFD9A9" },
+    unpaid: { label: "Unpaid", color: "#A6432F", bg: "#FDEDE8", border: "#F2D6D0" },
+    exempt: { label: "Exempt", color: "#51606A", bg: "#EEF1F3", border: "#D7DEE3" },
+    inactive: { label: "Inactive", color: "#6B7268", bg: "#F1EFE7", border: "#DED8CA" },
+  };
+  const s = styles[status] || styles.unpaid;
+  return (
+    <div className="sans" style={{ flexShrink: 0, minWidth: 58, textAlign: "center", color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999, padding: "5px 8px", fontSize: 11, fontWeight: 700 }}>
+      {s.label}
+    </div>
   );
 }
 
@@ -344,8 +390,8 @@ function MemberPopup({ member, onClose, onChanged }) {
           ))}
           {(!detail || detail.contributions?.length === 0) && <div className="sans" style={{ fontSize: 13, color: "#8A9086" }}>No contributions recorded yet.</div>}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
-            <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn}>PDF statement</button>
-            <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn}>CSV statement</button>
+            <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn()}>PDF statement</button>
+            <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn()}>CSV statement</button>
           </div>
           <button onClick={toggleActive} className="sans"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "none", color: member.active ? "#A6432F" : "#3A6B3E", border: "1px solid " + (member.active ? "#F2D6D0" : "#DDECD9"), borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 12 }}>
@@ -373,8 +419,8 @@ function MyHistory({ member }) {
         <div style={{ fontSize: 24, fontWeight: 600, marginTop: 3 }}>{member?.member_code || "—"}</div>
         <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginTop: 3 }}>{member?.name} · MVR {fmt(member?.monthly_amount)}/month</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
-          <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn}>PDF statement</button>
-          <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn}>CSV statement</button>
+          <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn()}>PDF statement</button>
+          <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn()}>CSV statement</button>
         </div>
       </div>
       <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>YOUR CONTRIBUTIONS</div>
@@ -495,15 +541,15 @@ function Reports() {
         </div>
       </div>
 
-      {summary.outstanding.total > 0 && (
+      {(summary.outstanding?.total || 0) > 0 && (
         <div style={{ background: "#FBF1EE", border: "1px solid #F2D6D0", borderRadius: 12, padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
           <span className="sans" style={{ fontSize: 13, color: "#A6432F", fontWeight: 600 }}>Outstanding dues</span>
-          <span style={{ fontWeight: 700, color: "#A6432F" }}>MVR {fmt(summary.outstanding.total)} · {summary.outstanding.members.length} members</span>
+          <span style={{ fontWeight: 700, color: "#A6432F" }}>MVR {fmt(summary.outstanding?.total)} · {(summary.outstanding?.members || []).length} members</span>
         </div>
       )}
 
       <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>SPENDING BY CATEGORY</div>
-      {summary.byCategory.map((c, i) => (
+      {(summary.byCategory || []).map((c, i) => (
         <div key={i} style={{ display: "flex", justifyContent: "space-between", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 16px", marginBottom: 8 }}>
           <span className="sans" style={{ fontSize: 14, fontWeight: 500 }}>{c.category}</span>
           <span className="sans" style={{ fontSize: 14, fontWeight: 600, color: "#A6432F" }}>MVR {fmt(c.spent)}</span>
@@ -581,14 +627,14 @@ function PendingApprovals() {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState("");
   const load = () => api.admin.pending().then(setData).catch((e) => setError(e.message));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   if (!data) return <Center>{error || "Loading approvals…"}</Center>;
   const count = (data.registrations?.length || 0) + (data.contributions?.length || 0) + (data.expenses?.length || 0);
   const act = async (fn) => { try { setError(""); await fn(); await load(); } catch (e) { setError(e.message); } };
   return <>
     <div className="sans" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
       <div><div style={{fontWeight:600}}>Pending approvals</div><div style={{fontSize:12,color:"#8A9086"}}>{count} item{count===1?"":"s"} waiting</div></div>
-      <button onClick={load} style={smallBtn}>Refresh</button>
+      <button onClick={load} style={compactBtn}>Refresh</button>
     </div>
     {error && <div className="sans" style={{background:"#FDEDE8",color:"#A6432F",padding:10,borderRadius:10,fontSize:12,marginBottom:12}}>{error}</div>}
 
@@ -597,7 +643,7 @@ function PendingApprovals() {
       <div className="sans" style={{fontWeight:600,fontSize:14}}>{r.name}</div>
       <div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:3}}>Telegram {r.telegram_id}{r.username ? ` · @${r.username}` : ""}</div>
       {(r.possible_matches || []).map((m) => <div key={m.id} className="sans" style={{fontSize:12,background:"#FFF6E5",padding:8,borderRadius:8,marginTop:8}}>Possible existing: <b>{m.member_code}</b> — {m.name}
-        <button onClick={() => act(() => api.admin.approveRegistration(r.id, m.id))} style={{...smallBtn,marginLeft:8}}>Link</button></div>)}
+        <button onClick={() => act(() => api.admin.approveRegistration(r.id, m.id))} style={{...compactBtn,marginLeft:8}}>Link</button></div>)}
       <div style={{display:"flex",gap:8,marginTop:10}}>
         <button onClick={() => act(() => api.admin.approveRegistration(r.id))} style={approveBtn}>Create & approve</button>
         <button onClick={() => act(() => api.admin.rejectRegistration(r.id, "Rejected by admin"))} style={rejectBtn}>Reject</button>
@@ -609,7 +655,7 @@ function PendingApprovals() {
     {(data.contributions || []).map((c) => <div key={c.id} style={cardStyle}>
       <div style={{display:"flex",justifyContent:"space-between",gap:8}}><div><div className="sans" style={{fontWeight:600,fontSize:14}}>{c.member_name} <span style={{fontSize:11,color:"#8A9086"}}>{c.member_code}</span></div><div className="sans" style={{fontSize:11,color:"#8A9086"}}>{c.txn_id} · {c.month} · Ref {c.ref_number || "not detected"}</div></div><div className="sans" style={{fontWeight:700}}>MVR {fmt(c.amount)}</div></div>
       <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
-        <button onClick={() => setEditing({...c})} style={smallBtn}>✏️ Correct OCR</button>
+        <button onClick={() => setEditing({...c})} style={compactBtn}>✏️ Correct OCR</button>
         <button onClick={() => act(() => api.admin.approveContribution(c.id))} style={approveBtn}>Approve</button>
         <button onClick={() => act(() => api.admin.rejectContribution(c.id, "Rejected by admin"))} style={rejectBtn}>Reject</button>
       </div>
@@ -636,9 +682,9 @@ function PendingApprovals() {
 function SectionTitle({children}) { return <div className="sans" style={{fontSize:12,color:"#6B7268",fontWeight:700,letterSpacing:.7,margin:"18px 0 8px"}}>{children}</div>; }
 function EmptyLine({children}) { return <div className="sans" style={{fontSize:12,color:"#8A9086",padding:"8px 2px 14px"}}>{children}</div>; }
 const cardStyle={background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:14,marginBottom:8};
-const smallBtn={background:"#F1EFE7",border:"1px solid #DED8CA",borderRadius:8,padding:"7px 10px",fontSize:12,cursor:"pointer"};
-const approveBtn={...smallBtn,background:"#EAF1EE",color:"#1F3D2B",border:"1px solid #CFE0D6",fontWeight:600};
-const rejectBtn={...smallBtn,background:"#FDEDE8",color:"#A6432F",border:"1px solid #F2D6D0",fontWeight:600};
+const compactBtn={background:"#F1EFE7",border:"1px solid #DED8CA",borderRadius:8,padding:"7px 10px",fontSize:12,cursor:"pointer"};
+const approveBtn={...compactBtn,background:"#EAF1EE",color:"#1F3D2B",border:"1px solid #CFE0D6",fontWeight:600};
+const rejectBtn={...compactBtn,background:"#FDEDE8",color:"#A6432F",border:"1px solid #F2D6D0",fontWeight:600};
 
 /* ---------- Settings (admin) ---------- */
 function Settings({ admin }) {
@@ -665,7 +711,7 @@ function Settings({ admin }) {
         <div>Mini App: {health.mini_app_url || "not set"}</div><div>Reminder: {health.reminder_schedule || "not set"}</div>
         {health.webhook?.last_error && <div style={{color:"#A6432F"}}>Webhook error: {health.webhook.last_error}</div>}
       </div> : <div className="sans" style={{fontSize:12,color:"#8A9086"}}>Checking…</div>}
-      <button onClick={()=>api.admin.health().then(setHealth)} style={{...smallBtn,marginTop:8}}>Refresh health</button>
+      <button onClick={()=>api.admin.health().then(setHealth)} style={{...compactBtn,marginTop:8}}>Refresh health</button>
     </div>
 
     <SectionTitle>CONTRIBUTION & EXPENSE SETTINGS</SectionTitle>
@@ -678,7 +724,7 @@ function Settings({ admin }) {
 
     <SectionTitle>MONTH CLOSE</SectionTitle>
     <div style={cardStyle}>
-      {closures.slice(0,6).map(x=><div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"6px 0",borderBottom:"1px solid #F0EDE3"}}><span><b>{x.month}</b> · closed by {x.closed_by_name || "admin"}</span>{superAdmin&&<button onClick={()=>api.admin.reopenMonth(x.month).then(load)} style={smallBtn}>Reopen</button>}</div>)}
+      {closures.slice(0,6).map(x=><div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"6px 0",borderBottom:"1px solid #F0EDE3"}}><span><b>{x.month}</b> · closed by {x.closed_by_name || "admin"}</span>{superAdmin&&<button onClick={()=>api.admin.reopenMonth(x.month).then(load)} style={compactBtn}>Reopen</button>}</div>)}
       {!closures.length&&<div className="sans" style={{fontSize:12,color:"#8A9086"}}>No months closed yet.</div>}
       {superAdmin&&<button onClick={closeMonth} style={{...approveBtn,marginTop:10}}>Close a month</button>}
     </div>
