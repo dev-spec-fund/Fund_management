@@ -23,6 +23,16 @@ async function allocatedTotalForMonth(env:any, month:string){
   return Number(row?.total||0);
 }
 
+async function advanceAllocatedForMonth(env:any, month:string){
+  const row=await env.DB.prepare(`
+    SELECT COALESCE(SUM(ca.amount),0) total
+    FROM contribution_allocations ca
+    JOIN contributions c ON c.id=ca.contribution_id
+    WHERE ca.month=? AND c.status='approved' AND c.month<>ca.month
+  `).bind(month).first<any>();
+  return Number(row?.total||0);
+}
+
 /** Combined activity feed: one indexed query instead of three full-table reads + JS sorting. */
 reportsRoute.get("/activity", requireMemberOrAdmin, async (c) => {
   const rows = await c.env.DB.prepare(`
@@ -53,6 +63,7 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
   ).bind(month).first<{ total: number }>();
 
   const allocatedContributions = await allocatedTotalForMonth(c.env,month);
+  const advanceAllocated = await advanceAllocatedForMonth(c.env,month);
 
   const donationTotal = await c.env.DB.prepare(
     "SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = ?"
@@ -80,6 +91,7 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     month,
     memberIncome: income?.total ?? 0,
     allocatedContributions,
+    advanceAllocated,
     donationIncome: donationTotal?.total ?? 0,
     expenses: expenseTotal?.total ?? 0,
     net: (income?.total ?? 0) + (donationTotal?.total ?? 0) - (expenseTotal?.total ?? 0),
@@ -98,6 +110,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
   ).bind(month).first<{ total: number }>();
 
   const allocatedContributions = await allocatedTotalForMonth(c.env,month);
+  const advanceAllocated = await advanceAllocatedForMonth(c.env,month);
 
   const donationTotal = await c.env.DB.prepare(
     "SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE COALESCE(status,'active')='active' AND COALESCE(transaction_month,strftime('%Y-%m', created_at)) = ?"
@@ -137,6 +150,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
     month,
     memberIncome: income?.total ?? 0,
     allocatedContributions,
+    advanceAllocated,
     donationIncome: donationTotal?.total ?? 0,
     expenses: expenseTotal?.total ?? 0,
     net: (income?.total ?? 0) + (donationTotal?.total ?? 0) - (expenseTotal?.total ?? 0),
