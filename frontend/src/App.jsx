@@ -725,10 +725,10 @@ function MyHistory({ member }) {
   const monthLabel = (m) => { if (!m) return "—"; const [y,mo]=String(m).split("-"); return new Date(Number(y),Number(mo)-1,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"}); };
   const statusStyle = (status) => { const x=String(status||"").toLowerCase(); return {color:x==="approved"?"#3A6B3E":x==="rejected"?"#A6432F":"#8A6B24",background:x==="approved"?"#EAF1EE":x==="rejected"?"#FAECE8":"#FBF4DF"}; };
   return <>
-    <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:14,padding:16,marginBottom:12}}>
-      <div className="sans" style={{fontSize:11,color:"#8A9086",letterSpacing:1}}>MY MEMBER ACCOUNT</div>
-      <div style={{fontSize:24,fontWeight:600,marginTop:3}}>{member?.member_code||"—"}</div>
-      <div className="sans" style={{fontSize:13,color:"#6B7268",marginTop:3}}>{member?.name} · MVR {fmt(member?.monthly_amount)}/month</div>
+    <div style={{background:"#1F3D2B",borderRadius:16,padding:"20px 22px",marginBottom:12,color:"#F7F5EF"}}>
+      <div className="sans" style={{fontSize:11,opacity:.62,letterSpacing:1.1}}>MY MEMBER ACCOUNT</div>
+      <div style={{fontSize:28,fontWeight:600,marginTop:4}}>{member?.member_code||"—"}</div>
+      <div className="sans" style={{fontSize:13,opacity:.72,marginTop:4}}>{member?.name} · MVR {fmt(member?.monthly_amount)}/month</div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
       <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"#8A9086"}}>TOTAL CONTRIBUTED</div><b className="sans">MVR {fmt(total)}</b></div>
