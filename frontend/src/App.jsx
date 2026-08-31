@@ -294,11 +294,12 @@ function activityTime(a) {
   return d ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
 }
 
-function ActivityRow({ a, isAdmin }) {
+function ActivityRow({ a, isAdmin, onExpenseClick }) {
   const isIn = a.kind === "contribution" || a.kind === "donation";
   const type = a.kind === "contribution" ? "Contribution" : a.kind === "donation" ? "Donation" : "Expense";
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "11px 14px", marginBottom: 7 }}>
+    <div onClick={() => a.kind === "expense" && isAdmin && onExpenseClick?.(a)}
+      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "11px 14px", marginBottom: 7, cursor: a.kind === "expense" && isAdmin ? "pointer" : "default" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
         <div style={{ width: 32, height: 32, flex: "0 0 32px", borderRadius: 10, background: isIn ? "#DDECD9" : "#F2D6D0", display: "flex", alignItems: "center", justifyContent: "center" }}>
           {isIn ? <ArrowUpRight size={16} color="#3A6B3E" /> : <ArrowDownRight size={16} color="#A6432F" />}
@@ -315,7 +316,8 @@ function ActivityRow({ a, isAdmin }) {
         </div>
       </div>
       <div className="sans" style={{ flex: "0 0 auto", marginLeft: 10, fontSize: 14, fontWeight: 700, color: isIn ? "#3A6B3E" : "#A6432F" }}>
-        {isIn ? "+" : "−"} MVR {fmt(a.amount)}
+        <div>{isIn ? "+" : "−"} MVR {fmt(a.amount)}</div>
+        {a.kind === "expense" && isAdmin && <div style={{fontSize:10,fontWeight:500,color:"#8A9086",marginTop:3,textAlign:"right"}}><Pencil size={10} style={{verticalAlign:"-1px",marginRight:3}}/>Edit</div>}
       </div>
     </div>
   );
@@ -766,8 +768,59 @@ function FundView() {
 function Activity({ isAdmin }) {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [expenseCategories, setExpenseCategories] = useState([]);
+  const [expenseBusy, setExpenseBusy] = useState(false);
+  const [expenseError, setExpenseError] = useState("");
 
-  useEffect(() => { api.reports.activity().then(setRows).catch(() => setRows([])); }, []);
+  const loadActivity = () => api.reports.activity().then(setRows).catch(() => setRows([]));
+  useEffect(() => { loadActivity(); }, []);
+  useEffect(() => { if (isAdmin) api.expenses.categories().then(setExpenseCategories).catch(() => {}); }, [isAdmin]);
+
+  const openExpense = (row) => {
+    if (!isAdmin || row.kind !== "expense") return;
+    setExpenseError("");
+    setEditingExpense({
+      ...row,
+      description: row.description || row.who || "",
+      category_id: row.category_id || "",
+      transaction_month: row.transaction_month || String(row.created_at || "").slice(0, 7),
+      amount: Number(row.amount || 0),
+    });
+  };
+
+  const saveExpense = async () => {
+    if (!editingExpense) return;
+    if (!editingExpense.description?.trim()) return setExpenseError("Description is required.");
+    if (!(Number(editingExpense.amount) > 0)) return setExpenseError("Enter a valid amount.");
+    setExpenseBusy(true); setExpenseError("");
+    try {
+      await api.expenses.update(editingExpense.id, {
+        description: editingExpense.description.trim(),
+        category_id: editingExpense.category_id ? Number(editingExpense.category_id) : null,
+        amount: Number(editingExpense.amount),
+        transaction_month: editingExpense.transaction_month,
+      });
+      setEditingExpense(null);
+      await loadActivity();
+    } catch (e) { setExpenseError(e.message || "Could not update expense."); }
+    finally { setExpenseBusy(false); }
+  };
+
+  const voidExpense = async () => {
+    if (!editingExpense) return;
+    const reason = window.prompt("Reason for voiding this expense:");
+    if (reason === null) return;
+    if (!reason.trim()) return setExpenseError("A void reason is required.");
+    if (!window.confirm(`Void ${editingExpense.txn_id || "this expense"}? The record will remain in the audit history.`)) return;
+    setExpenseBusy(true); setExpenseError("");
+    try {
+      await api.expenses.remove(editingExpense.id, reason.trim());
+      setEditingExpense(null);
+      await loadActivity();
+    } catch (e) { setExpenseError(e.message || "Could not void expense."); }
+    finally { setExpenseBusy(false); }
+  };
   if (rows === null) return <Center>Loading…</Center>;
 
   const filtered = rows.filter((r) => filter === "all" || r.kind === filter);
@@ -804,10 +857,34 @@ function Activity({ isAdmin }) {
           <div className="sans" style={{ display: "flex", alignItems: "center", gap: 8, margin: "13px 2px 7px", fontSize: 10, fontWeight: 700, letterSpacing: 1.1, textTransform: "uppercase", color: "#8A9086" }}>
             <span>{group.label}</span><span style={{ height: 1, flex: 1, background: "#E9E4D8" }} />
           </div>
-          {group.rows.map((a) => <ActivityRow key={`${a.kind}-${a.id}`} a={a} isAdmin={isAdmin} />)}
+          {group.rows.map((a) => <ActivityRow key={`${a.kind}-${a.id}`} a={a} isAdmin={isAdmin} onExpenseClick={openExpense} />)}
         </div>
       ))}
       {filtered.length === 0 && <div className="sans" style={{ fontSize: 13, color: "#8A9086" }}>Nothing here yet.</div>}
+
+      {editingExpense && <Modal title="Edit expense" onClose={() => !expenseBusy && setEditingExpense(null)}>
+        <div className="sans" style={{fontSize:11,color:"#6B7268",background:"#EAF1EE",padding:"9px 10px",borderRadius:9,marginBottom:12,lineHeight:1.45}}>
+          {editingExpense.txn_id || `Expense #${editingExpense.id}`} · Changes are saved to the audit log. Use Void instead of permanently deleting a financial record.
+        </div>
+        <Field label="Description" value={editingExpense.description || ""} onChange={(v)=>setEditingExpense({...editingExpense,description:v})}/>
+        <Field label="Amount (MVR)" type="number" value={editingExpense.amount} onChange={(v)=>setEditingExpense({...editingExpense,amount:v})}/>
+        <label className="sans" style={{display:"block",fontSize:11,color:"#6B7268",marginBottom:10}}>
+          <span style={{display:"block",marginBottom:5}}>Category</span>
+          <select value={editingExpense.category_id || ""} onChange={(e)=>setEditingExpense({...editingExpense,category_id:e.target.value})}
+            style={{width:"100%",padding:"10px 11px",border:"1px solid #DED8CA",borderRadius:9,background:"#fff",fontSize:13}}>
+            <option value="">Uncategorised</option>
+            {expenseCategories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+        <Field label="Expense month (YYYY-MM)" value={editingExpense.transaction_month || ""} onChange={(v)=>setEditingExpense({...editingExpense,transaction_month:v})}/>
+        {expenseError && <div className="sans" style={{fontSize:11,color:"#A6432F",background:"#FDEDE8",padding:9,borderRadius:8,marginBottom:10}}>{expenseError}</div>}
+        <button disabled={expenseBusy} onClick={saveExpense} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:expenseBusy?.6:1}}>
+          {expenseBusy ? "Saving…" : "Save changes"}
+        </button>
+        <button disabled={expenseBusy} onClick={voidExpense} style={{...rejectBtn,width:"100%",padding:"10px 12px",marginTop:8,opacity:expenseBusy?.6:1}}>
+          Void expense
+        </button>
+      </Modal>}
     </>
   );
 }
