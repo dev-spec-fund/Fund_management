@@ -15,3 +15,11 @@ export function shiftMonthValue(month, delta) {
   const nextMonth = ((total % 12) + 12) % 12 + 1;
   return `${nextYear}-${String(nextMonth).padStart(2, "0")}`;
 }
+
+export function formatLocalDateTime(value) {
+  if (!value) return "";
+  const raw = String(value);
+  const d = new Date(raw.includes("T") ? raw : raw.replace(" ", "T") + "Z");
+  if (Number.isNaN(d.getTime())) return raw;
+  return new Intl.DateTimeFormat("en", { timeZone: FUND_TIMEZONE, day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }).format(d);
+}
