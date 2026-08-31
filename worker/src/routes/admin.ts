@@ -164,7 +164,11 @@ async function ensureMeetingsSchema(env:any){
       status TEXT NOT NULL DEFAULT 'draft',
       created_by INTEGER REFERENCES admins(id),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      sent_at TEXT
+      updated_at TEXT,
+      sent_at TEXT,
+      cancelled_at TEXT,
+      cancelled_by INTEGER REFERENCES admins(id),
+      cancel_reason TEXT
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS meeting_rsvps (
       meeting_id INTEGER NOT NULL REFERENCES meetings(id),
@@ -212,12 +216,138 @@ adminRoute.post('/meetings', requireFinance, async c => {
   return c.json(meeting,201);
 });
 
+
+adminRoute.get('/meetings/:id', requireAdmin, async c => {
+  const id=Number(c.req.param('id'));
+  await ensureMeetingsSchema(c.env);
+  const meeting=await c.env.DB.prepare(`
+    SELECT m.*,a.name created_by_name,ca.name cancelled_by_name
+    FROM meetings m
+    LEFT JOIN admins a ON a.id=m.created_by
+    LEFT JOIN admins ca ON ca.id=m.cancelled_by
+    WHERE m.id=?
+  `).bind(id).first<any>();
+  if(!meeting) return c.json({error:'Meeting not found'},404);
+
+  const members=await c.env.DB.prepare(`
+    SELECT m.id,m.member_code,m.name,m.telegram_id,
+      r.response,r.responded_at
+    FROM members m
+    LEFT JOIN meeting_rsvps r ON r.member_id=m.id AND r.meeting_id=?
+    WHERE m.active=1
+    ORDER BY
+      CASE r.response WHEN 'yes' THEN 1 WHEN 'maybe' THEN 2 WHEN 'no' THEN 3 ELSE 4 END,
+      m.name
+  `).bind(id).all<any>();
+
+  const responses={yes:[],maybe:[],no:[],pending:[] as any[]};
+  for(const member of members.results){
+    if(member.response==='yes') responses.yes.push(member);
+    else if(member.response==='maybe') responses.maybe.push(member);
+    else if(member.response==='no') responses.no.push(member);
+    else responses.pending.push(member);
+  }
+  return c.json({...meeting,responses,total_members:members.results.length});
+});
+
+adminRoute.patch('/meetings/:id', requireFinance, async c => {
+  const adminUser=c.get('admin')!;
+  const id=Number(c.req.param('id'));
+  const before=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
+  if(!before) return c.json({error:'Meeting not found'},404);
+  if(before.status==='cancelled') return c.json({error:'Cancelled meetings cannot be edited'},409);
+
+  const b=await c.req.json().catch(()=>({})) as any;
+  const title=String(b.title??before.title).trim().slice(0,120);
+  const meetingDate=String(b.meeting_date??before.meeting_date);
+  const meetingTime=String(b.meeting_time??before.meeting_time);
+  const venue=String(b.venue??before.venue??'').trim().slice(0,180)||null;
+  const agenda=String(b.agenda??before.agenda??'').trim().slice(0,1200)||null;
+  const deadline=String(b.rsvp_deadline??before.rsvp_deadline??'').trim().slice(0,40)||null;
+
+  if(!title) return c.json({error:'Meeting title is required'},400);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(meetingDate)) return c.json({error:'Meeting date is required'},400);
+  if(!/^\d{2}:\d{2}$/.test(meetingTime)) return c.json({error:'Meeting time is required'},400);
+
+  const rescheduled=meetingDate!==before.meeting_date || meetingTime!==before.meeting_time;
+  await c.env.DB.prepare(`
+    UPDATE meetings
+    SET title=?,meeting_date=?,meeting_time=?,venue=?,agenda=?,rsvp_deadline=?,updated_at=datetime('now')
+    WHERE id=?
+  `).bind(title,meetingDate,meetingTime,venue,agenda,deadline,id).run();
+
+  const after=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
+  await auditEntity(c.env,adminUser.id,rescheduled?'meeting_rescheduled':'meeting_updated','meeting',id,before,after);
+  return c.json({...after,rescheduled});
+});
+
+adminRoute.post('/meetings/:id/notify-update', requireFinance, async c => {
+  const adminUser=c.get('admin')!;
+  const id=Number(c.req.param('id'));
+  const m=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
+  if(!m) return c.json({error:'Meeting not found'},404);
+  if(m.status==='cancelled') return c.json({error:'Meeting is cancelled'},409);
+
+  const members=await c.env.DB.prepare("SELECT id,telegram_id FROM members WHERE active=1").all<any>();
+  let sent=0,unlinked=0,failed=0;
+  for(const member of members.results){
+    if(!member.telegram_id){unlinked++;continue;}
+    const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
+    const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
+    const agenda=m.agenda?`\n\n${meetingEsc(m.agenda)}`:'';
+    try{
+      await sendMessage(c.env,member.telegram_id,
+        `🔄 <b>Meeting updated</b>\n\n<b>${meetingEsc(m.title)}</b>\nNew date/time: <b>${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}</b>${venue}${deadline}${agenda}\n\nYour previous RSVP is still recorded. You can change it below.`,
+        {reply_markup:{inline_keyboard:[[
+          {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
+          {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
+          {text:'❌ No',callback_data:`meeting_rsvp:${id}:no`}
+        ]]}}
+      ); sent++;
+    }catch(e){failed++;await safeLogError(c.env,'meeting.update_notice',e,{meeting_id:id,member_id:member.id});}
+  }
+  await auditEntity(c.env,adminUser.id,'meeting_update_notified','meeting',id,m,{sent,unlinked,failed});
+  return c.json({ok:true,sent,unlinked,failed});
+});
+
+adminRoute.post('/meetings/:id/cancel', requireFinance, async c => {
+  const adminUser=c.get('admin')!;
+  const id=Number(c.req.param('id'));
+  const body=await c.req.json().catch(()=>({})) as any;
+  const reason=String(body.reason||'').trim().slice(0,500)||'Cancelled by admin';
+  const before=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
+  if(!before) return c.json({error:'Meeting not found'},404);
+  if(before.status==='cancelled') return c.json({error:'Meeting already cancelled'},409);
+
+  await c.env.DB.prepare(`
+    UPDATE meetings
+    SET status='cancelled',cancelled_at=datetime('now'),cancelled_by=?,cancel_reason=?,updated_at=datetime('now')
+    WHERE id=?
+  `).bind(adminUser.id,reason,id).run();
+
+  const members=await c.env.DB.prepare("SELECT id,telegram_id FROM members WHERE active=1").all<any>();
+  let sent=0,unlinked=0,failed=0;
+  for(const member of members.results){
+    if(!member.telegram_id){unlinked++;continue;}
+    try{
+      await sendMessage(c.env,member.telegram_id,
+        `🚫 <b>Meeting cancelled</b>\n\n<b>${meetingEsc(before.title)}</b>\n${meetingEsc(before.meeting_date)} · ${meetingEsc(before.meeting_time)}\n\nReason: ${meetingEsc(reason)}`
+      ); sent++;
+    }catch(e){failed++;await safeLogError(c.env,'meeting.cancel_notice',e,{meeting_id:id,member_id:member.id});}
+  }
+
+  const after=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
+  await auditEntity(c.env,adminUser.id,'meeting_cancelled','meeting',id,before,{...after,notified:{sent,unlinked,failed}});
+  return c.json({ok:true,meeting:after,sent,unlinked,failed});
+});
+
 adminRoute.post('/meetings/:id/send', requireFinance, async c => {
   const adminUser=c.get('admin')!;
   const id=Number(c.req.param('id'));
   await ensureMeetingsSchema(c.env);
   const m=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   if(!m) return c.json({error:'Meeting not found'},404);
+  if(m.status==='cancelled') return c.json({error:'Cancelled meetings cannot send invitations'},409);
   const members=await c.env.DB.prepare("SELECT id,name,telegram_id FROM members WHERE active=1 ORDER BY name").all<any>();
   let sent=0,unlinked=0,failed=0;
   for(const member of members.results){
