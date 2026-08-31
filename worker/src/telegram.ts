@@ -27,6 +27,31 @@ export function sendPhoto(env: Env, chatId: string | number, photo: string, capt
   return tg(env, "sendPhoto", { chat_id: chatId, photo, caption, parse_mode: "HTML", ...extra });
 }
 
+export async function sendDocument(
+  env: Env,
+  chatId: string | number,
+  filename: string,
+  data: Blob,
+  caption = ""
+) {
+  const form = new FormData();
+  form.set("chat_id", String(chatId));
+  if (caption) form.set("caption", caption.slice(0, 1024));
+  form.set("document", new File([data], filename, { type: data.type || "application/octet-stream" }));
+  const res = await fetch(API(env.TELEGRAM_BOT_TOKEN, "sendDocument"), { method: "POST", body: form });
+  if (!res.ok) {
+    const detail = await res.text();
+    await safeLogError(env, "telegram.sendDocument", new Error(`Telegram API ${res.status}`), detail);
+    throw new Error("Could not send document to Telegram chat");
+  }
+  const json:any = await res.json().catch(() => null);
+  if (!json?.ok) {
+    await safeLogError(env, "telegram.sendDocument.response", new Error("Telegram rejected document"), json);
+    throw new Error("Could not send document to Telegram chat");
+  }
+  return json;
+}
+
 export function editMessageCaption(env: Env, chatId: string | number, messageId: number, caption: string, extra: Record<string, unknown> = {}) {
   return tg(env, "editMessageCaption", { chat_id: chatId, message_id: messageId, caption, parse_mode: "HTML", ...extra });
 }
