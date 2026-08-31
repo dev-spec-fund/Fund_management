@@ -180,9 +180,7 @@ async function handleMessage(env: Env, message: any) {
     const member = await env.DB.prepare("SELECT * FROM members WHERE telegram_id = ?").bind(telegramId).first<any>();
     if (!member) return sendMessage(env, chatId, "You're not registered as a member yet. Contact an admin.");
     const month = currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");
-    const paidRow = await env.DB.prepare(
-      "SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE member_id = ? AND month = ? AND status = 'approved'"
-    ).bind(member.id, month).first<any>();
+    const paidTotal = await paidForMonth(env, member.id, month);
     const exemption = await env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(member.id,month).first<any>();
     const paid = Number(paidTotal || 0); const due = Math.max(0, Number(member.monthly_amount)-paid);
     const status = exemption ? `✅ Exempt for ${month}.` : paid<=0 ? `⏳ Unpaid for ${month}. Due: MVR ${member.monthly_amount}.` : due>0.004 ? `🟡 Partial for ${month}: MVR ${paid} paid, MVR ${due.toFixed(2)} due.` : `✅ Paid for ${month}.`;
@@ -212,10 +210,9 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
   const caption: string = message.caption || "";
   const largestPhoto = message.photo[message.photo.length - 1];
   const fileId = largestPhoto.file_id;
-  // Use a smaller Telegram-generated photo for OCR when available. The original
-  // file_id is still kept/sent to admins, so review image quality is unchanged.
-  const ocrPhoto = [...message.photo].reverse().find((p: any) => Math.max(Number(p.width || 0), Number(p.height || 0)) <= 1280) || largestPhoto;
-  const ocrFileId = ocrPhoto.file_id;
+  // Accuracy first: bank reference numbers are often small text.
+  // Use Telegram's largest available photo for OCR.
+  const ocrFileId = largestPhoto.file_id;
 
   if (caption.startsWith("/expense")) {
     const admin = await getAdminByTelegramId(env, telegramId);
