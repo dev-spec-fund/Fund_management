@@ -20,7 +20,7 @@ export function MyHistory({ member }) {
   const monthLabel = (m) => { if (!m) return "—"; const [y,mo]=String(m).split("-"); return new Date(Number(y),Number(mo)-1,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"}); };
   const statusStyle = (status) => { const x=String(status||"").toLowerCase(); return {color:x==="approved"?"var(--success)":x==="rejected"?"var(--danger)":"var(--warning-2)",background:x==="approved"?"var(--success-bg)":x==="rejected"?"var(--danger-bg-2)":"var(--warning-bg-3)"}; };
   return <>
-    <div style={{background:"var(--primary)",borderRadius:16,padding:"20px 22px",marginBottom:12,color:"var(--bg)"}}>
+    <div className="theme-brand-surface" style={{background:"var(--primary)",borderRadius:16,padding:"20px 22px",marginBottom:12,color:"var(--on-primary)"}}>
       <div className="sans" style={{fontSize:11,opacity:.62,letterSpacing:1.1}}>MY MEMBER ACCOUNT</div>
       <div style={{fontSize:28,fontWeight:600,marginTop:4}}>{member?.member_code||"—"}</div>
       <div className="sans" style={{fontSize:13,opacity:.72,marginTop:4}}>{member?.name} · MVR {fmt(member?.monthly_amount)}/month</div>
@@ -109,7 +109,7 @@ export function FundView() {
         <Eye size={13} /> Fund information is read-only and visible to all members
       </div>
 
-      <div style={{ background:"var(--primary)", borderRadius:16, padding:22, color:"var(--bg)", marginBottom:10 }}>
+      <div className="theme-brand-surface" style={{ background:"var(--primary)", borderRadius:16, padding:22, color:"var(--on-primary)", marginBottom:10 }}>
         <div className="sans" style={{ fontSize:12, opacity:.6, letterSpacing:1 }}>TOTAL FUND BALANCE</div>
         <div style={{ fontSize:34, fontWeight:600, marginTop:4 }}>MVR {fmt(summary.fundBalance)}</div>
       </div>
@@ -298,7 +298,7 @@ export function Activity({ isAdmin, canFinance = false }) {
       <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
         {filters.map(([value, label]) => (
           <button key={value} onClick={() => setFilter(value)} className="sans"
-            style={{ flex: "0 0 auto", background: filter === value ? "var(--primary)" : "var(--card)", color: filter === value ? "var(--bg)" : "var(--muted)", border: "1px solid " + (filter === value ? "var(--primary)" : "var(--border)"), borderRadius: 20, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+            style={{ flex: "0 0 auto", background: filter === value ? "var(--primary)" : "var(--card)", color: filter === value ? "var(--on-primary)" : "var(--muted)", border: "1px solid " + (filter === value ? "var(--primary)" : "var(--border)"), borderRadius: 20, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
             {label}
           </button>
         ))}

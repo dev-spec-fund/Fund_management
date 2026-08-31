@@ -31,7 +31,7 @@ export function Center({ children }) {
 export function PrimaryButton({ onClick, children }) {
   return (
     <button onClick={onClick} className="sans"
-      style={{ width: "100%", background: "var(--primary)", color: "var(--bg)", border: "none", borderRadius: 10, padding: 13, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+      style={{ width: "100%", background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 10, padding: 13, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
       {children}
     </button>
   );

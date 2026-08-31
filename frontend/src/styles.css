@@ -8,6 +8,12 @@
   --text-strong: #222222;
   --primary: #1F3D2B;
   --topbar: #17212B;
+  --on-primary: #F7F5EF;
+  --on-topbar: #FFFFFF;
+  --overlay: rgba(31,42,34,0.50);
+  --shadow: rgba(31,61,43,0.12);
+  --focus-ring: rgba(47,90,61,0.10);
+  --shimmer: rgba(255,255,255,0.52);
   --muted: #6B7268;
   --muted-2: #7A8078;
   --soft: #8A9086;
@@ -66,66 +72,90 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #101511;
-    --card: #182019;
-    --text: #ECF1EC;
-    --text-strong: #F6F8F6;
-    --primary: #284B35;
-    --topbar: #0B1115;
-    --muted: #B0BAB0;
-    --muted-2: #9DA89E;
-    --soft: #929D93;
-    --soft-2: #858F86;
-    --soft-3: #768078;
-    --soft-4: #69736B;
-    --border: #303B32;
-    --border-strong: #3A473D;
-    --border-strong-2: #354137;
-    --border-2: #2C372E;
-    --divider: #273129;
-    --divider-2: #2B352D;
-    --divider-3: #222B24;
-    --surface-2: #202920;
-    --skeleton: #263029;
-    --button-soft: #222C24;
-    --toggle-off: #49534B;
-    --surface-warm: #252B22;
-    --focus-bg: #1C2A20;
-    --surface-cool: #1D2721;
-    --surface-success-soft: #1B2D20;
-    --surface-neutral-soft: #20282B;
-    --surface-neutral: #21292B;
-    --surface-neutral-2: #28322C;
-    --surface-neutral-3: #313A3E;
-    --neutral-text: #AAB6BD;
-    --neutral-text-2: #A8B2AA;
-    --focus: #7EBC8B;
-    --success: #7FBE82;
-    --success-strong: #8BCA8F;
-    --success-bg: #1D3223;
-    --success-bg-2: #223B27;
-    --success-bg-3: #26382A;
-    --success-border: #34553B;
-    --success-border-2: #3B6043;
-    --danger: #E28270;
-    --danger-strong: #EF9685;
-    --danger-bg: #38211E;
-    --danger-bg-2: #33201D;
-    --danger-bg-3: #30201E;
-    --danger-bg-4: #2B1E1B;
-    --danger-border: #5A332C;
-    --danger-border-2: #624038;
-    --danger-border-3: #573932;
-    --warning: #E0BE72;
-    --warning-2: #D6B56A;
-    --warning-3: #D5A95F;
-    --warning-4: #C9A45F;
-    --warning-bg: #302817;
-    --warning-bg-2: #2E2819;
-    --warning-bg-3: #2C281B;
-    --warning-border: #5A4822;
-    --warning-border-2: #594A28;
-    --accent: #D69A5B;
+    /* Neutral charcoal foundation: green is an accent, not the page tint. */
+    --bg: #111310;
+    --card: #1A1D19;
+    --text: #E7EAE5;
+    --text-strong: #F5F6F2;
+    --primary: #244832;
+    --topbar: #11171B;
+    --on-primary: #F4F1E8;
+    --on-topbar: #F5F7F8;
+
+    --muted: #AAB0A8;
+    --muted-2: #949B93;
+    --soft: #858C84;
+    --soft-2: #7A8179;
+    --soft-3: #70776F;
+    --soft-4: #666D66;
+
+    --border: #30342E;
+    --border-strong: #3A4038;
+    --border-strong-2: #353B34;
+    --border-2: #2C312B;
+    --divider: #292D28;
+    --divider-2: #2D312B;
+    --divider-3: #242824;
+
+    --surface-2: #20241F;
+    --skeleton: #252A24;
+    --button-soft: #222621;
+    --toggle-off: #4A5049;
+    --surface-warm: #25251F;
+    --focus-bg: #202821;
+    --surface-cool: #202522;
+    --surface-success-soft: #1D2920;
+    --surface-neutral-soft: #202422;
+    --surface-neutral: #222624;
+    --surface-neutral-2: #2A2F2B;
+    --surface-neutral-3: #333936;
+    --neutral-text: #A8B1B4;
+    --neutral-text-2: #A7AEA7;
+
+    --focus: #86B592;
+    --success: #83BB82;
+    --success-strong: #91C790;
+    --success-bg: #1E2C21;
+    --success-bg-2: #233326;
+    --success-bg-3: #273329;
+    --success-border: #3B513E;
+    --success-border-2: #435B46;
+
+    --danger: #E28C78;
+    --danger-strong: #F09A86;
+    --danger-bg: #33231F;
+    --danger-bg-2: #30211E;
+    --danger-bg-3: #2D211E;
+    --danger-bg-4: #291E1B;
+    --danger-border: #5A3A32;
+    --danger-border-2: #634239;
+    --danger-border-3: #573A33;
+
+    --warning: #D9BA78;
+    --warning-2: #D1B16F;
+    --warning-3: #D0A865;
+    --warning-4: #C19B5B;
+    --warning-bg: #2E281C;
+    --warning-bg-2: #2B261B;
+    --warning-bg-3: #29251B;
+    --warning-border: #554728;
+    --warning-border-2: #554829;
+
+    --accent: #C8945E;
+    --overlay: rgba(0,0,0,0.68);
+    --shadow: rgba(0,0,0,0.34);
+    --focus-ring: rgba(134,181,146,0.20);
+    --shimmer: rgba(255,255,255,0.08);
+  }
+
+  /* Native controls can otherwise retain a bright platform surface. */
+  input, textarea, select, option {
+    color-scheme: dark;
+  }
+
+  /* Keep cards distinct from the page without adding a green glow. */
+  [style*="box-shadow"], [style*="boxShadow"] {
+    --theme-shadow: var(--shadow);
   }
 }
 
@@ -162,7 +192,7 @@ button:disabled { cursor: not-allowed !important; opacity: .55; }
 input:focus, textarea:focus, select:focus {
   border-color: var(--focus) !important;
   background: var(--focus-bg) !important;
-  box-shadow: 0 0 0 2px rgba(47,90,61,0.10) !important;
+  box-shadow: 0 0 0 2px var(--focus-ring) !important;
   outline: none !important;
 }
 
@@ -209,7 +239,7 @@ input:focus, textarea:focus, select:focus {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.52), transparent);
+  background: linear-gradient(90deg, transparent, var(--shimmer), transparent);
   animation: skeleton-shimmer 1.15s ease-in-out infinite;
 }
 
@@ -220,4 +250,27 @@ input:focus, textarea:focus, select:focus {
 @media (prefers-reduced-motion: reduce) {
   .page-panel--active { animation: none !important; }
   .skeleton-block::after { animation: none !important; display: none; }
+}
+
+
+/* System dark-theme refinement */
+::selection { background: color-mix(in srgb, var(--primary) 55%, transparent); color: var(--text-strong); }
+
+@media (prefers-color-scheme: dark) {
+  body { background: var(--bg); }
+
+  /* Make the two main green brand surfaces feel deliberate rather than luminous. */
+  .theme-brand-surface {
+    background: linear-gradient(145deg, #274B35 0%, #213D2C 100%) !important;
+    color: var(--on-primary) !important;
+  }
+
+  /* Safari autofill can otherwise flash a light field in Telegram WebView. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--text) !important;
+    -webkit-box-shadow: 0 0 0 1000px var(--card) inset !important;
+    transition: background-color 9999s ease-out 0s;
+  }
 }

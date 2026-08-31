@@ -42,7 +42,7 @@ export function Modal({ title, onClose, action, children }) {
         width: "100%",
         maxWidth: "100vw",
         overflow: "hidden",
-        background: "rgba(31,42,34,0.5)",
+        background: "var(--overlay)",
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
@@ -129,7 +129,7 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
         fontSize: 14,
         boxSizing: "border-box",
         background: focused ? "var(--focus-bg)" : "var(--card)",
-        boxShadow: focused ? "0 0 0 2px rgba(47,90,61,0.10)" : "none",
+        boxShadow: focused ? "0 0 0 2px var(--focus-ring)" : "none",
         transition: "border-color .15s ease, background .15s ease, box-shadow .15s ease"
       }}
     />
@@ -152,7 +152,7 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
           borderRadius:10,
           background: focused ? "var(--focus-bg)" : "var(--card)",
           overflow:"hidden",
-          boxShadow: focused ? "0 0 0 2px rgba(47,90,61,0.10)" : "none",
+          boxShadow: focused ? "0 0 0 2px var(--focus-ring)" : "none",
           transition:"border-color .15s ease, background .15s ease, box-shadow .15s ease"
         }}>
           <span className="sans" style={{

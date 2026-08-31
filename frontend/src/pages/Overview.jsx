@@ -57,7 +57,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
   return (
     <>
-      <div style={{ background: "var(--primary)", borderRadius: 16, padding: "23px 22px", color: "var(--bg)" }}>
+      <div className="theme-brand-surface" style={{ background: "var(--primary)", borderRadius: 16, padding: "23px 22px", color: "var(--on-primary)" }}>
         <div className="sans" style={{ fontSize: 11, opacity: 0.62, letterSpacing: 1.1 }}>FUND BALANCE</div>
         <div style={{ fontSize: 39, fontWeight: 600, marginTop: 4 }}>MVR {fmt(summary.fundBalance)}</div>
         <div className="sans" style={{ fontSize: 11, opacity: 0.7, marginTop: 5 }}>

@@ -78,7 +78,7 @@ export default function PendingApprovals() {
         <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:3,marginBottom:16}}>
           {filters.map(([key,label,n]) => (
             <button key={key} onClick={()=>setFilter(key)} className="sans"
-              style={{flex:"0 0 auto",border:`1px solid ${filter===key?"var(--primary)":"var(--border-2)"}`,background:filter===key?"var(--primary)":"var(--card)",color:filter===key?"var(--bg)":"var(--muted)",borderRadius:20,padding:"6px 11px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+              style={{flex:"0 0 auto",border:`1px solid ${filter===key?"var(--primary)":"var(--border-2)"}`,background:filter===key?"var(--primary)":"var(--card)",color:filter===key?"var(--on-primary)":"var(--muted)",borderRadius:20,padding:"6px 11px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
               {label} {n}
             </button>
           ))}
