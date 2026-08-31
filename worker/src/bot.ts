@@ -359,6 +359,7 @@ async function handleCallback(env: Env, callback: any) {
     if(!member) return answerCallback(env,callback.id,"Your Telegram account is not linked to an active member.");
     const meeting=await env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(meetingId).first<any>();
     if(!meeting) return answerCallback(env,callback.id,"Meeting not found.");
+    if(meeting.status==="cancelled") return answerCallback(env,callback.id,"This meeting has been cancelled.");
     await env.DB.prepare(`INSERT INTO meeting_rsvps(meeting_id,member_id,response,responded_at) VALUES(?,?,?,datetime('now'))
       ON CONFLICT(meeting_id,member_id) DO UPDATE SET response=excluded.response,responded_at=datetime('now')`)
       .bind(meetingId,member.id,response).run();
