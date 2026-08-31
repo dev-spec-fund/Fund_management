@@ -1,12 +1,21 @@
-// Point this at your deployed Worker URL (see wrangler.toml / `wrangler deploy` output)
-export const API_BASE = import.meta.env.VITE_API_BASE || "https://kys-fund-worker.<your-subdomain>.workers.dev";
+// Set VITE_API_BASE to the deployed Worker URL (see frontend/.env.example).
+// Do not silently fall back to a placeholder: a missing value should fail clearly.
+const configuredApiBase = String(import.meta.env.VITE_API_BASE || "").trim();
+export const API_BASE = configuredApiBase.replace(/\/+$/, "");
+
+function apiUrl(path) {
+  if (!API_BASE) {
+    throw new Error("Frontend API is not configured. Set VITE_API_BASE to your deployed Worker URL.");
+  }
+  return `${API_BASE}${path}`;
+}
 
 function initData() {
   return window.Telegram?.WebApp?.initData || "";
 }
 
 async function request(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -22,7 +31,7 @@ async function request(path, options = {}) {
 }
 
 async function upload(path, formData) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     method: "POST",
     headers: { "X-Telegram-Init-Data": initData() },
     body: formData,
