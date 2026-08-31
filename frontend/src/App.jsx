@@ -2003,25 +2003,42 @@ function Settings({ admin }) {
           const displayRole=a.role==="owner"?"super_admin":a.role;
           const roleLabel=displayRole==="super_admin"?"Super Admin":displayRole==="treasurer"?"Treasurer":"Viewer";
           return <div key={a.id} className="sans" style={{padding:"10px 0",borderBottom:"1px solid #F0EDE3"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-              <div>
-                <div style={{fontSize:13,fontWeight:600}}>{a.name}</div>
-                <div style={{fontSize:10,color:a.active===0?"#A6432F":"#3A6B3E",marginTop:2}}>{a.active===0?"Inactive":"Active"}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600}}>{a.member_name || a.name}</div>
+                <div style={{fontSize:10,color:a.active===0?"#A6432F":"#3A6B3E",marginTop:2}}>
+                  {a.active===0?"Admin access inactive":"Admin access active"}
+                  {a.member_code ? ` · ${a.member_code} · Member + Admin` : ""}
+                </div>
               </div>
               {superAdmin
-                ? <select value={displayRole} onChange={e=>{
+                ? <select disabled={a.active===0} value={displayRole} onChange={e=>{
                     if(!confirm(`Change ${a.name}'s role to ${e.target.options[e.target.selectedIndex].text}?`)) return;
                     api.settings.updateAdmin(a.id,{role:e.target.value}).then(load).catch(err=>setMessage(err.message));
-                  }} style={{border:"1px solid #D9D3C4",borderRadius:8,padding:"6px 7px",background:"#F7F5EF",fontSize:11}}>
+                  }} style={{border:"1px solid #D9D3C4",borderRadius:8,padding:"6px 7px",background:"#F7F5EF",fontSize:11,opacity:a.active===0?.55:1}}>
                     <option value="super_admin">Super Admin</option>
                     <option value="treasurer">Treasurer</option>
                     <option value="viewer">Viewer</option>
                   </select>
                 : <span style={{fontSize:11,fontWeight:600}}>{roleLabel}</span>}
             </div>
+            {superAdmin && a.member_id && a.active!==0 && Number(a.id)!==Number(admin?.id) &&
+              <button
+                onClick={async()=>{
+                  if(!confirm(`Demote ${a.member_name || a.name} to normal member?\n\nThey will lose admin access immediately. Their member account, Telegram link, contribution history and payment obligations will remain unchanged.`)) return;
+                  try{
+                    await api.settings.demoteMember(a.id);
+                    setMessage(`${a.member_name || a.name} demoted to member`);
+                    load();
+                  }catch(e){setMessage(e.message)}
+                }}
+                style={{...rejectBtn,width:"100%",marginTop:8,padding:"8px 10px"}}
+              >
+                Demote to member
+              </button>}
           </div>
         })}
-        <div className="sans" style={{fontSize:10,color:"#8A9086",marginTop:9}}>Super Admin: full control · Treasurer: financial operations · Viewer: read-only.</div>
+        <div className="sans" style={{fontSize:10,color:"#8A9086",marginTop:9,lineHeight:1.45}}>Super Admin: full control · Treasurer: financial operations · Viewer: read-only. Promoted members remain normal contributing members; demotion removes only admin access.</div>
       </div>
     </>}
 

@@ -69,6 +69,7 @@ export const api = {
     admins: () => request("/api/settings/admins"),
     addAdmin: (data) => request("/api/settings/admins", { method: "POST", body: JSON.stringify(data) }),
     promoteMember: (member_id, role) => request("/api/settings/admins/promote-member", { method: "POST", body: JSON.stringify({ member_id, role }) }),
+    demoteMember: (id) => request(`/api/settings/admins/${id}/demote-member`, { method: "POST" }),
     removeAdmin: (id) => request(`/api/settings/admins/${id}`, { method: "DELETE" }),
     updateAdmin: (id, data) => request(`/api/settings/admins/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     auditLog: () => request("/api/settings/audit-log"),

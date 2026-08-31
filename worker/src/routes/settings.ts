@@ -32,7 +32,16 @@ settingsRoute.patch("/", requireFinance, async (c) => {
   await logAudit(c.env,admin.id,"settings_updated",JSON.stringify({keys:Object.keys(body)})); return c.json({ok:true});
 });
 
-settingsRoute.get("/admins", requireAdmin, async(c)=>c.json((await c.env.DB.prepare("SELECT id,telegram_id,name,role,COALESCE(active,1) active,created_at,deactivated_at FROM admins ORDER BY name").all()).results));
+settingsRoute.get("/admins", requireAdmin, async(c)=>{
+  const rows=await c.env.DB.prepare(`
+    SELECT a.id,a.telegram_id,a.name,a.role,COALESCE(a.active,1) active,a.created_at,a.deactivated_at,
+           m.id member_id,m.member_code,m.name member_name,COALESCE(m.active,1) member_active
+    FROM admins a
+    LEFT JOIN members m ON m.telegram_id=a.telegram_id
+    ORDER BY a.name
+  `).all<any>();
+  return c.json(rows.results);
+});
 settingsRoute.post("/admins", requireSuperAdmin, async(c)=>{
   const admin=c.get("admin")!; const b=await c.req.json<any>();
   const role=b.role||"treasurer"; if(!["super_admin","treasurer","viewer"].includes(role))return c.json({error:"Invalid role"},400);
@@ -63,6 +72,39 @@ settingsRoute.patch("/admins/:id", requireSuperAdmin, async(c)=>{
   if(['owner','super_admin'].includes(before.role) && !['owner','super_admin'].includes(role) && await activeSuperCount(c,id)===0) return c.json({error:'At least one active Super Admin must remain'},409);
   const name=b.name===undefined?before.name:boundedText(b.name,120,true); if(!name)return c.json({error:'Valid admin name required'},400);
   await c.env.DB.prepare("UPDATE admins SET name=?,role=? WHERE id=?").bind(name,role,id).run();const after=await c.env.DB.prepare("SELECT * FROM admins WHERE id=?").bind(id).first<any>();await auditEntity(c.env,admin.id,"admin_updated","admin",id,before,after);return c.json({ok:true});
+});
+
+
+settingsRoute.post("/admins/:id/demote-member", requireSuperAdmin, async(c)=>{
+  const admin=c.get("admin")!;
+  const id=Number(c.req.param("id"));
+  if(id===admin.id) return c.json({error:"You cannot demote your own admin access"},409);
+
+  const before=await c.env.DB.prepare(`
+    SELECT a.*,m.id member_id,m.member_code,m.name member_name
+    FROM admins a
+    LEFT JOIN members m ON m.telegram_id=a.telegram_id
+    WHERE a.id=?
+  `).bind(id).first<any>();
+  if(!before) return c.json({error:"Admin not found"},404);
+  if(!before.member_id) return c.json({error:"This admin is not linked to an existing member account"},409);
+  if(Number(before.active||0)===0) return c.json({error:"Admin access is already inactive"},409);
+
+  if(['owner','super_admin'].includes(before.role) && await activeSuperCount(c,id)===0)
+    return c.json({error:'At least one active Super Admin must remain'},409);
+
+  await c.env.DB.prepare(`
+    UPDATE admins
+    SET active=0,deactivated_at=datetime('now'),deactivated_by=?
+    WHERE id=?
+  `).bind(admin.id,id).run();
+
+  const after=await c.env.DB.prepare("SELECT * FROM admins WHERE id=?").bind(id).first<any>();
+  await auditEntity(c.env,admin.id,"member_demoted_to_member","member",Number(before.member_id),
+    {admin_id:id,role:before.role,active:before.active},
+    {admin_id:id,role:before.role,active:0,member_code:before.member_code}
+  );
+  return c.json({ok:true,member_id:before.member_id,member_code:before.member_code});
 });
 
 settingsRoute.delete("/admins/:id", requireSuperAdmin, async(c)=>{
