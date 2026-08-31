@@ -74,7 +74,7 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
   ).bind(month).first<{ total: number }>();
 
   const byCategory = await c.env.DB.prepare(`
-    SELECT cat.name as category, COALESCE(SUM(e.amount),0) as spent
+    SELECT cat.id as category_id, cat.name as category, COALESCE(SUM(e.amount),0) as spent
     FROM expense_categories cat
     LEFT JOIN expenses e ON e.category_id = cat.id AND COALESCE(e.status,'approved')='approved' AND COALESCE(e.transaction_month,strftime('%Y-%m', e.created_at)) = ?
     GROUP BY cat.id
@@ -132,6 +132,33 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     totalSpent: lifetime?.total_spent ?? 0,
     recentActivity: recent.results,
   });
+});
+
+
+/** Member-safe read-only expense detail for the Fund transparency view. */
+reportsRoute.get("/public-expenses", requireMemberOrAdmin, async (c) => {
+  const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
+  const categoryId = Number(c.req.query("category_id"));
+  if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
+  if (!Number.isInteger(categoryId) || categoryId <= 0) return c.json({error:"Valid category_id is required"},400);
+
+  const category = await c.env.DB.prepare("SELECT id,name FROM expense_categories WHERE id=?")
+    .bind(categoryId).first<any>();
+  if (!category) return c.json({error:"Expense category not found"},404);
+
+  const rows = await c.env.DB.prepare(`
+    SELECT e.id,e.txn_id,e.description,e.amount,e.transaction_month,e.created_at,e.approved_at,
+           c.id category_id,c.name category
+    FROM expenses e
+    JOIN expense_categories c ON c.id=e.category_id
+    WHERE e.category_id=?
+      AND COALESCE(e.status,'approved')='approved'
+      AND COALESCE(e.transaction_month,strftime('%Y-%m',e.created_at))=?
+    ORDER BY COALESCE(e.approved_at,e.created_at) DESC,e.id DESC
+  `).bind(categoryId,month).all<any>();
+
+  const total = rows.results.reduce((sum:number,row:any)=>sum+Number(row.amount||0),0);
+  return c.json({month,category,total,expenses:rows.results});
 });
 
 /** Summary for a given month (YYYY-MM), or 'ytd' for year-to-date. */
