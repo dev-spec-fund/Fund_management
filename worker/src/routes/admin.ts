@@ -90,6 +90,51 @@ adminRoute.get('/month-close', requireAdmin, async c => { await ensureOperationa
 adminRoute.post('/month-close/:month', requireSuperAdmin, async c => { const admin=c.get('admin')!; const month=c.req.param('month') || ""; if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return c.json({error:'Use YYYY-MM'},400); const b=await c.req.json().catch(()=>({})) as any; await ensureOperationalSchema(c.env); await c.env.DB.prepare("INSERT OR REPLACE INTO month_closures(month,closed_by,closed_at,note) VALUES(?,?,datetime('now'),?)").bind(month,admin.id,b.note||null).run(); await auditEntity(c.env,admin.id,'month_closed','month',month,null,{note:b.note||null}); return c.json({ok:true}); });
 adminRoute.delete('/month-close/:month', requireSuperAdmin, async c => { const admin=c.get('admin')!; const month=c.req.param('month') || ""; await c.env.DB.prepare("DELETE FROM month_closures WHERE month=?").bind(month).run(); await auditEntity(c.env,admin.id,'month_reopened','month',month,null,null); return c.json({ok:true}); });
 
+
+adminRoute.post('/payment-reminders', requireFinance, async c => {
+  const admin=c.get('admin')!;
+  const body=await c.req.json().catch(()=>({})) as any;
+  const month=String(body.month || currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives'));
+  if(!validMonth(month)) return c.json({error:'Month must use YYYY-MM'},400);
+  const memberId=body.member_id===undefined||body.member_id===null ? null : Number(body.member_id);
+  if(memberId!==null && (!Number.isInteger(memberId) || memberId<=0)) return c.json({error:'Invalid member'},400);
+
+  const rows=await c.env.DB.prepare(`
+    SELECT m.id,m.member_code,m.name,m.telegram_id,m.monthly_amount,
+      COALESCE((SELECT SUM(c.amount) FROM contributions c
+        WHERE c.member_id=m.id AND c.month=? AND c.status='approved'),0) paid,
+      CASE WHEN EXISTS(SELECT 1 FROM exemptions e WHERE e.member_id=m.id AND e.month=?) THEN 1 ELSE 0 END exempt
+    FROM members m
+    WHERE m.active=1 ${memberId!==null?'AND m.id=?':''}
+    ORDER BY m.name
+  `).bind(...(memberId!==null?[month,month,memberId]:[month,month])).all<any>();
+
+  const dueMembers=rows.results
+    .map((m:any)=>({...m,paid:Number(m.paid||0),due:Math.max(0,Number(m.monthly_amount||0)-Number(m.paid||0))}))
+    .filter((m:any)=>!Number(m.exempt) && m.due>0.005);
+
+  let sent=0, unlinked=0, failed=0;
+  const results=await Promise.all(dueMembers.map(async (m:any)=>{
+    if(!m.telegram_id){unlinked++;return;}
+    const status=m.paid>0?'partially paid':'unpaid';
+    try{
+      await sendMessage(c.env,m.telegram_id,
+        `🔔 <b>Payment reminder</b>\n\n${month} is ${status}.\nPaid: <b>MVR ${m.paid.toFixed(2)}</b>\nRemaining: <b>MVR ${m.due.toFixed(2)}</b>\n\nPlease send your bank slip photo to the bot after payment.`
+      );
+      sent++;
+    }catch(e){failed++;await safeLogError(c.env,'manual.payment_reminder',e,{member_id:m.id,month});}
+  }));
+  void results;
+
+  await auditEntity(c.env,admin.id,'payment_reminders_sent','month',month,null,{
+    member_id:memberId,
+    due_members:dueMembers.length,
+    sent,unlinked,failed
+  });
+  if(memberId!==null && dueMembers.length===0) return c.json({ok:true,sent:0,unlinked:0,failed:0,reason:'Member has no outstanding payment for this month'});
+  return c.json({ok:true,month,due:dueMembers.length,sent,unlinked,failed});
+});
+
 adminRoute.get('/health', requireAdmin, async c => {
   await ensureOperationalSchema(c.env); const out:any={checked_at:new Date().toISOString(),db:{ok:false},telegram:{ok:false},webhook:{ok:false},ai:{ok:!!c.env.AI},mini_app_url:await getSetting(c.env,'mini_app_url'),reminder_schedule:await getSetting(c.env,'reminder_schedule'),month:currentMonth(c.env.FUND_TIMEZONE||'Indian/Maldives')};
   try{const x=await c.env.DB.prepare('SELECT 1 ok').first<any>();out.db={ok:Number(x?.ok)===1}}catch(e){await safeLogError(c.env,'health.db',e)}

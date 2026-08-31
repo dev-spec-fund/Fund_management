@@ -112,7 +112,7 @@ export default function App() {
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>
         {tab === "overview" && <Overview isAdmin={adminView} setTab={setTab} />}
         {tab === "pending" && adminView && <PendingApprovals />}
-        {tab === "members" && adminView && <Members isAdmin />}
+        {tab === "members" && adminView && <Members isAdmin admin={me.admin} />}
         {tab === "history" && memberView && <MyHistory member={me.member} />}
         {tab === "fund" && memberView && <FundView />}
         {tab === "activity" && <Activity isAdmin={adminView} />}
@@ -319,7 +319,7 @@ function ActivityRow({ a, isAdmin }) {
   );
 }
 /* ---------- Members (admin) ---------- */
-function Members({ isAdmin }) {
+function Members({ isAdmin, admin }) {
   const [members, setMembers] = useState([]);
   const [month, setMonth] = useState(currentMonthValue());
   const [monthlySummary, setMonthlySummary] = useState(null);
@@ -327,6 +327,8 @@ function Members({ isAdmin }) {
   const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [reminderBusy, setReminderBusy] = useState(false);
+  const [reminderMessage, setReminderMessage] = useState("");
   const [form, setForm] = useState({ name: "", phone: "", monthly_amount: 250 });
 
   const load = () => Promise.all([
@@ -336,6 +338,7 @@ function Members({ isAdmin }) {
   useEffect(() => { if (isAdmin) load(); }, [isAdmin, month]);
 
   if (!isAdmin) return <Center>Member directory is admin-only in this view.</Center>;
+  const financeAdmin = ["owner","super_admin","treasurer"].includes(admin?.role);
 
   const addMember = async () => {
     if (!form.name.trim()) return;
@@ -371,6 +374,22 @@ function Members({ isAdmin }) {
   };
   const monthLabel = new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
 
+  const sendOutstandingReminders = async () => {
+    const dueCount = counts.partial + counts.unpaid;
+    if (!dueCount) return;
+    if (!confirm(`Send Telegram payment reminders to ${dueCount} outstanding ${dueCount === 1 ? "member" : "members"} for ${monthLabel}?`)) return;
+    try {
+      setReminderBusy(true);
+      setReminderMessage("");
+      const result = await api.admin.sendPaymentReminders({ month });
+      setReminderMessage(`Sent ${result.sent || 0} reminder${Number(result.sent || 0) === 1 ? "" : "s"}${result.unlinked ? ` · ${result.unlinked} not linked to Telegram` : ""}.`);
+    } catch (e) {
+      setReminderMessage(e.message);
+    } finally {
+      setReminderBusy(false);
+    }
+  };
+
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -404,6 +423,15 @@ function Members({ isAdmin }) {
           <div><b style={{ display: "block", fontSize: 14, color: "#51606A" }}>{counts.exempt}</b>Exempt</div>
         </div>
       </div>
+
+      {financeAdmin && (counts.partial + counts.unpaid) > 0 && (
+        <button onClick={sendOutstandingReminders} disabled={reminderBusy}
+          className="sans"
+          style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, background:"#EAF1EE", color:"#1F3D2B", border:"1px solid #CFE0D6", borderRadius:11, padding:"10px 12px", fontSize:12, fontWeight:700, cursor:reminderBusy?"default":"pointer", opacity:reminderBusy?.7:1, marginBottom:8 }}>
+          <Bell size={14} /> {reminderBusy ? "Sending reminders…" : `Remind ${counts.partial + counts.unpaid} outstanding ${counts.partial + counts.unpaid === 1 ? "member" : "members"}`}
+        </button>
+      )}
+      {reminderMessage && <div className="sans" style={{fontSize:10,color:reminderMessage.startsWith("Sent")?"#3A6B3E":"#A6432F",margin:"0 2px 10px"}}>{reminderMessage}</div>}
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 3, marginBottom: 10 }}>
         {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt']].map(([key,label]) => (
@@ -443,7 +471,7 @@ function Members({ isAdmin }) {
       })}
       {filtered.length === 0 && <div className="sans" style={{ textAlign: "center", fontSize: 13, color: "#8A9086", padding: "24px 0" }}>No members match this view.</div>}
 
-      {selected && <MemberPopup member={selected} onClose={() => setSelected(null)} onChanged={load} />}
+      {selected && <MemberPopup member={selected} month={month} canRemind={financeAdmin} onClose={() => setSelected(null)} onChanged={load} />}
       {showAdd && (
         <Modal onClose={() => setShowAdd(false)} title="Add member">
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -476,9 +504,11 @@ function StatusBadge({ status }) {
   );
 }
 
-function MemberPopup({ member, onClose, onChanged }) {
+function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   const [detail, setDetail] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [reminding, setReminding] = useState(false);
+  const [reminderNote, setReminderNote] = useState("");
   const [form, setForm] = useState({ name: member.name, phone: member.phone, monthly_amount: member.monthly_amount });
 
   useEffect(() => { api.members.get(member.id).then(setDetail).catch(() => {}); }, [member.id]);
@@ -523,6 +553,17 @@ function MemberPopup({ member, onClose, onChanged }) {
             <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn()}>PDF statement</button>
             <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn()}>CSV statement</button>
           </div>
+          {member.active && canRemind && <button className="sans" disabled={reminding} onClick={async()=>{
+            if(!confirm(`Send a payment reminder to ${member.name} for ${month}?`)) return;
+            try{
+              setReminding(true); setReminderNote("");
+              const r=await api.admin.sendPaymentReminders({month,member_id:member.id});
+              setReminderNote(r.sent ? "Reminder sent." : (r.reason || "No reminder sent."));
+            }catch(e){setReminderNote(e.message)} finally{setReminding(false)}
+          }} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"#EAF1EE",color:"#1F3D2B",border:"1px solid #CFE0D6",borderRadius:10,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",marginTop:10}}>
+            <Bell size={14}/>{reminding?"Sending…":"Send payment reminder"}
+          </button>}
+          {reminderNote && <div className="sans" style={{fontSize:10,color:"#6B7268",marginTop:5,textAlign:"center"}}>{reminderNote}</div>}
           <button onClick={toggleActive} className="sans"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "none", color: member.active ? "#A6432F" : "#3A6B3E", border: "1px solid " + (member.active ? "#F2D6D0" : "#DDECD9"), borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 12 }}>
             {member.active ? "Deactivate member" : "Reactivate member"}
@@ -1101,6 +1142,7 @@ function Settings({ admin }) {
 
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
   const superAdmin = role === "super_admin";
+  const financeAdmin = superAdmin || role === "treasurer";
   const currentMonth = currentMonthValue();
 
   const load=()=>{
@@ -1158,14 +1200,45 @@ function Settings({ admin }) {
     </div>
 
     {settingsSection==="general" && <>
-      <SectionTitle>GENERAL</SectionTitle>
+      <SectionTitle>PAYMENT REMINDERS</SectionTitle>
       <div style={cardStyle}>
-        <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Reminder day</div>
-        <select value={settings.reminder_day} onChange={e=>saveSetting("reminder_day",e.target.value)}
-          className="sans" style={{width:"100%",border:"1px solid #D9D3C4",borderRadius:8,padding:"9px 11px",fontSize:14,background:"#F7F5EF",marginBottom:12}}>
-          {["1","5","10","15","off"].map(d=><option key={d} value={d}>{d==="off"?"Off — manual only":`Day ${d}`}</option>)}
-        </select>
+        <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:"#1F3D2B"}}>Automatic reminders</div>
+            <div style={{fontSize:10,color:"#8A9086",marginTop:3}}>Telegram reminder to unpaid and partially paid members.</div>
+          </div>
+          <button disabled={!financeAdmin} onClick={()=>financeAdmin&&saveSetting("reminder_day",settings.reminder_day==="off"?"5":"off")}
+            aria-label="Toggle automatic reminders"
+            style={{width:42,height:24,border:0,borderRadius:999,padding:3,background:settings.reminder_day==="off"?"#D8D4C8":"#3A6B3E",cursor:"pointer"}}>
+            <span style={{display:"block",width:18,height:18,borderRadius:999,background:"#fff",transform:settings.reminder_day==="off"?"translateX(0)":"translateX(18px)",transition:"transform .15s"}}/>
+          </button>
+        </div>
 
+        {settings.reminder_day!=="off" && <>
+          <div className="sans" style={{fontSize:11,color:"#6B7268",marginBottom:5}}>Send automatically on</div>
+          <select disabled={!financeAdmin} value={settings.reminder_day || "5"} onChange={e=>financeAdmin&&saveSetting("reminder_day",e.target.value)}
+            className="sans" style={{width:"100%",border:"1px solid #D9D3C4",borderRadius:9,padding:"10px 11px",fontSize:13,background:"#F7F5EF"}}>
+            {Array.from({length:28},(_,i)=>String(i+1)).map(d=><option key={d} value={d}>Day {d} of each month</option>)}
+          </select>
+          <div className="sans" style={{fontSize:10,color:"#9A9384",marginTop:6}}>The daily scheduler checks at 12:00 AM Maldives time and sends only to members with an outstanding balance.</div>
+        </>}
+
+        {settings.reminder_day==="off" && <div className="sans" style={{fontSize:11,color:"#8A9086",background:"#F7F5EF",borderRadius:9,padding:10}}>Automatic reminders are off. Manual reminders are still available.</div>}
+
+        {financeAdmin && <button onClick={async()=>{
+          if(!confirm("Send payment reminders now to all members with an outstanding balance for the current month?")) return;
+          try{
+            setMessage("Sending reminders…");
+            const r=await api.admin.sendPaymentReminders({month:currentMonth});
+            setMessage(`Sent ${r.sent||0} payment reminder${Number(r.sent||0)===1?"":"s"}.`);
+          }catch(e){setMessage(e.message)}
+        }} style={{...approveBtn,width:"100%",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          <Bell size={14}/> Send reminders now
+        </button>}
+      </div>
+
+      <SectionTitle>FINANCIAL APPROVALS</SectionTitle>
+      <div style={cardStyle}>
         <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Second-approval threshold</div>
         <div style={{display:"flex",alignItems:"center",border:"1px solid #D9D3C4",borderRadius:8,background:"#fff",overflow:"hidden"}}>
           <span className="sans" style={{padding:"0 0 0 11px",fontSize:12,color:"#8A9086"}}>MVR</span>
