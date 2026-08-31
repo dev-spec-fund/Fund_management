@@ -119,7 +119,7 @@ async function handleMessage(env: Env, message: any) {
       return sendMessage(
         env,
         chatId,
-        `Welcome to the fund bot! 👋\n\nSend a photo of your bank transfer slip to submit your monthly contribution.\nCaption examples:\n<code>250 2026-08</code>\n<code>250 BANKREF123 2026-08</code>\n\nUse /mybalance to check your status, /history for past payments.`,
+        `Welcome to the fund bot! 👋\n\nSend your bank transfer slip photo — no caption is needed. I will automatically read the amount, bank reference and transaction date, then send it for admin review.\n\nUse /mybalance to check your status, /history for past payments.`,
         { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: await miniAppUrl(env) } }]] } }
       );
     }
@@ -203,7 +203,7 @@ async function handleMessage(env: Env, message: any) {
     return sendMessage(env, chatId, "To log an expense, send a receipt photo captioned:\n<code>/expense Description [YYYY-MM]</code>");
   }
 
-  return sendMessage(env, chatId, "Send a payment slip photo to submit a contribution, or use /mybalance, /history.");
+  return sendMessage(env, chatId, "Send your bank transfer slip photo — no caption is needed. I will read the amount and bank reference automatically. You can also use /mybalance or /history.");
 }
 
 async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramId: string) {
@@ -261,17 +261,16 @@ Logged by: ${esc(admin.name)}`;
   if (!member) return sendMessage(env, chatId, "You're not registered as a member yet. Use /start to request registration.");
   if (!member.active) return sendMessage(env, chatId, "Your membership is currently inactive. Contact an admin if this is unexpected.");
 
-  const parsed = parseCaption(caption);
-  // A complete caption is authoritative and avoids an unnecessary AI request.
-  // OCR still runs whenever either amount or reference is missing.
+  // Member contributions are image-first: no caption is required or trusted.
+  // Always OCR the slip itself so amount/reference come from the bank image.
   let ocr: { amount: number | null; ref: string | null; raw: string } = { amount: null, ref: null, raw: "" };
-  if (parsed.amount === null || !parsed.ref) {
-    const file = await downloadTelegramFile(env, ocrFileId);
-    ocr = file ? await ocrSlip(env, file.bytes, file.mime) : ocr;
-  }
-  const amount = parsed.amount ?? ocr.amount;
-  const ref = parsed.ref ?? ocr.ref;
-  const month = parsed.month ?? currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");
+  const file = await downloadTelegramFile(env, ocrFileId);
+  if (!file) return sendMessage(env, chatId, "I couldn't download that slip image. Please resend the photo.");
+  ocr = await ocrSlip(env, file.bytes, file.mime);
+
+  const amount = ocr.amount;
+  const ref = ocr.ref;
+  const month = currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");
   let extractedDate: string | null = null;
   try {
     const structured = JSON.parse(ocr.raw || "{}");
@@ -282,7 +281,7 @@ Logged by: ${esc(admin.name)}`;
   }).format(new Date());
 
   if (!amount || amount <= 0) {
-    return sendMessage(env, chatId, "Couldn't read the amount from your slip. Please resend with a caption such as <code>250 2026-08</code> or <code>250 BANKREF123 2026-08</code>.");
+    return sendMessage(env, chatId, "⚠️ I couldn't read the payment amount from this slip. Please resend a clearer/full slip image. No caption is needed.");
   }
 
   try { await requireOpenMonth(env, month); } catch (e:any) { return sendMessage(env, chatId, `This contribution month is closed: ${esc(e.message)}`); }
@@ -307,7 +306,9 @@ Logged by: ${esc(admin.name)}`;
   ).bind(txnId, member.id, amount, month, ref, bankDate, slipReference(fileId), ocr.raw).run();
   const contributionId = Number(insertRes.meta.last_row_id);
 
-  await sendMessage(env, chatId, `Slip received (${txnId}): MVR ${amount} for ${month}${ref ? ` (bank ref: ${esc(ref)})` : ""}. Waiting for admin approval.${dupWarning}`);
+  await sendMessage(env, chatId,
+    `✅ Slip received (${txnId})\nAmount: MVR ${amount}\nBank reference: ${ref ? `<code>${esc(ref)}</code>` : "not detected — admin will review"}\nMonth: ${month}\n\nWaiting for admin approval.`
+  );
 
   const adminCaption =
     `🧾 <b>New contribution slip</b>\n\n` +
@@ -316,7 +317,8 @@ Logged by: ${esc(admin.name)}`;
     `Amount: <b>MVR ${amount}</b>\n` +
     `Month: ${month}\n` +
     `Bank ref: <code>${esc(ref || "not detected")}</code>\n` +
-    `Bank date: ${esc(bankDate)}${dupWarning}`;
+    `Bank date: ${esc(bankDate)}\n` +
+    `${ref ? "✅ OCR amount/reference detected" : "⚠️ OCR reference needs admin review"}${dupWarning}`;
 
   await notifyAdminsWithPhoto(env, fileId, adminCaption, {
     reply_markup: {
