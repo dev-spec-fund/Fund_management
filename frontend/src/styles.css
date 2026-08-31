@@ -276,3 +276,41 @@ input:focus, textarea:focus, select:focus {
     transition: background-color 9999s ease-out 0s;
   }
 }
+
+/* v22: one vertical scroll architecture for every normal screen. */
+.app-scroll-root {
+  width: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable both-edges;
+}
+
+.app-page-content {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+
+/* Hidden warm pages must never create a second scroll region. */
+.page-panel {
+  width: 100%;
+  overflow: visible;
+}
+
+/* Modal is the only nested vertical scroller in the application. */
+.app-modal-overlay {
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+
+.app-modal-sheet {
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}

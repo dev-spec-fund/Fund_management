@@ -10,6 +10,18 @@ export function Modal({ title, onClose, action, children }) {
 
   useEffect(() => {
     const vv = window.visualViewport;
+    const appRoot = document.querySelector(".app-scroll-root");
+    const previousOverflowY = appRoot?.style.overflowY || "";
+    const previousTouchAction = appRoot?.style.touchAction || "";
+    const previousScrollTop = appRoot?.scrollTop || 0;
+
+    // A modal is the only intentionally nested vertical scroller. Lock the page
+    // beneath it so iOS/Telegram cannot transfer the gesture to the background.
+    if (appRoot) {
+      appRoot.style.overflowY = "hidden";
+      appRoot.style.touchAction = "none";
+    }
+
     const update = () => setViewport(readViewport());
     update();
     vv?.addEventListener("resize", update);
@@ -19,6 +31,11 @@ export function Modal({ title, onClose, action, children }) {
       vv?.removeEventListener("resize", update);
       vv?.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
+      if (appRoot) {
+        appRoot.style.overflowY = previousOverflowY;
+        appRoot.style.touchAction = previousTouchAction;
+        appRoot.scrollTop = previousScrollTop;
+      }
     };
   }, []);
 
@@ -32,6 +49,7 @@ export function Modal({ title, onClose, action, children }) {
 
   return (
     <div
+      className="app-modal-overlay"
       onFocusCapture={keepFocusedFieldVisible}
       style={{
         position: "fixed",
@@ -51,7 +69,7 @@ export function Modal({ title, onClose, action, children }) {
         paddingTop: "max(10px, env(safe-area-inset-top))"
       }}
     >
-      <div style={{
+      <div className="app-modal-sheet" style={{
         background: "var(--bg)",
         borderRadius: "18px 18px 0 0",
         width: "100%",
