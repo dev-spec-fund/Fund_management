@@ -222,7 +222,7 @@ function Overview({ isAdmin, setTab }) {
         </div>
       </div>
 
-      <div className="sans" style={{ fontSize: 11, color: "#6B7268", marginTop: 18, marginBottom: 7, fontWeight: 700, letterSpacing: .5 }}>MONTHLY COLLECTION</div>
+      <div className="sans" style={{ fontSize: 11, color: "#6B7268", marginTop: 18, marginBottom: 7, fontWeight: 700, letterSpacing: .5 }}>MONTHLY COLLECTION · {monthLabel.toUpperCase()}</div>
       <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 13, padding: "13px 14px" }}>
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12 }}>
           <span><b style={{ color: "#1F3D2B" }}>MVR {fmt(allocatedContributions)}</b> <span style={{ color: "#9A9384" }}>/ MVR {fmt(expected)}</span></span>
@@ -737,19 +737,11 @@ function MyHistory({ member }) {
 function FundView() {
   const [month, setMonth] = useState(currentMonthValue());
   const [summary, setSummary] = useState(null);
-  const [summaryError, setSummaryError] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
 
-  const loadSummary = () => {
-    setSummary(null);
-    setSummaryError("");
-    api.reports.publicSummary(month)
-      .then(setSummary)
-      .catch((err) => setSummaryError(err?.message || "Could not load fund information."));
-  };
-
   useEffect(() => {
-    loadSummary();
+    setSummary(null);
+    api.reports.publicSummary(month).then(setSummary).catch(() => setSummary({}));
   }, [month]);
 
   const shiftMonth = (delta) => {
@@ -765,13 +757,6 @@ function FundView() {
     } catch { return month; }
   })();
 
-  if (summaryError) return (
-    <div className="sans" style={{background:"#FFF7F3",border:"1px solid #E9CFC5",borderRadius:12,padding:16,color:"#8E3F2E"}}>
-      <div style={{fontWeight:700,marginBottom:5}}>Fund information unavailable</div>
-      <div style={{fontSize:12,marginBottom:12}}>{summaryError}</div>
-      <button onClick={loadSummary} style={compactBtn}>Try again</button>
-    </div>
-  );
   if (!summary) return <Center>Loading…</Center>;
 
   const categories = summary.byCategory || [];
