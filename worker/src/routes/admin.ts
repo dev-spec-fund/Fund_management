@@ -150,6 +150,97 @@ adminRoute.post('/payment-reminders', requireFinance, async c => {
   return c.json({ok:true,month,due:dueMembers.length,sent,unlinked,failed});
 });
 
+
+async function ensureMeetingsSchema(env:any){
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS meetings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      meeting_date TEXT NOT NULL,
+      meeting_time TEXT NOT NULL,
+      venue TEXT,
+      agenda TEXT,
+      rsvp_deadline TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      created_by INTEGER REFERENCES admins(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      sent_at TEXT
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS meeting_rsvps (
+      meeting_id INTEGER NOT NULL REFERENCES meetings(id),
+      member_id INTEGER NOT NULL REFERENCES members(id),
+      response TEXT NOT NULL CHECK(response IN ('yes','maybe','no')),
+      responded_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY(meeting_id, member_id)
+    )`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(meeting_date,meeting_time)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_meeting_rsvps_meeting ON meeting_rsvps(meeting_id)`)
+  ]);
+}
+function meetingEsc(v:any){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+adminRoute.get('/meetings', requireAdmin, async c => {
+  await ensureMeetingsSchema(c.env);
+  const rows=await c.env.DB.prepare(`
+    SELECT m.*,a.name created_by_name,
+      (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id=m.id AND r.response='yes') going,
+      (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id=m.id AND r.response='maybe') maybe,
+      (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id=m.id AND r.response='no') declined
+    FROM meetings m LEFT JOIN admins a ON a.id=m.created_by
+    ORDER BY m.meeting_date DESC,m.meeting_time DESC,m.id DESC LIMIT 100
+  `).all<any>();
+  return c.json(rows.results);
+});
+
+adminRoute.post('/meetings', requireFinance, async c => {
+  const adminUser=c.get('admin')!;
+  const b=await c.req.json().catch(()=>({})) as any;
+  const title=String(b.title||'').trim().slice(0,120);
+  const meetingDate=String(b.meeting_date||'');
+  const meetingTime=String(b.meeting_time||'');
+  const venue=String(b.venue||'').trim().slice(0,180)||null;
+  const agenda=String(b.agenda||'').trim().slice(0,1200)||null;
+  const deadline=String(b.rsvp_deadline||'').trim().slice(0,40)||null;
+  if(!title) return c.json({error:'Meeting title is required'},400);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(meetingDate)) return c.json({error:'Meeting date is required'},400);
+  if(!/^\d{2}:\d{2}$/.test(meetingTime)) return c.json({error:'Meeting time is required'},400);
+  await ensureMeetingsSchema(c.env);
+  const r=await c.env.DB.prepare(`INSERT INTO meetings(title,meeting_date,meeting_time,venue,agenda,rsvp_deadline,created_by) VALUES(?,?,?,?,?,?,?)`)
+    .bind(title,meetingDate,meetingTime,venue,agenda,deadline,adminUser.id).run();
+  const meeting=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(r.meta.last_row_id).first<any>();
+  await auditEntity(c.env,adminUser.id,'meeting_created','meeting',meeting.id,null,meeting);
+  return c.json(meeting,201);
+});
+
+adminRoute.post('/meetings/:id/send', requireFinance, async c => {
+  const adminUser=c.get('admin')!;
+  const id=Number(c.req.param('id'));
+  await ensureMeetingsSchema(c.env);
+  const m=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
+  if(!m) return c.json({error:'Meeting not found'},404);
+  const members=await c.env.DB.prepare("SELECT id,name,telegram_id FROM members WHERE active=1 ORDER BY name").all<any>();
+  let sent=0,unlinked=0,failed=0;
+  for(const member of members.results){
+    if(!member.telegram_id){unlinked++;continue;}
+    const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
+    const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
+    const agenda=m.agenda?`\n\n${meetingEsc(m.agenda)}`:'';
+    try{
+      await sendMessage(c.env,member.telegram_id,
+        `📅 <b>Meeting invitation</b>\n\n<b>${meetingEsc(m.title)}</b>\n${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}${venue}${deadline}${agenda}\n\nWill you attend?`,
+        {reply_markup:{inline_keyboard:[[
+          {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
+          {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
+          {text:'❌ No',callback_data:`meeting_rsvp:${id}:no`}
+        ]]}}
+      ); sent++;
+    }catch(e){failed++;await safeLogError(c.env,'meeting.invite',e,{meeting_id:id,member_id:member.id});}
+  }
+  await c.env.DB.prepare("UPDATE meetings SET status='sent',sent_at=datetime('now') WHERE id=?").bind(id).run();
+  await auditEntity(c.env,adminUser.id,'meeting_invitations_sent','meeting',id,m,{sent,unlinked,failed});
+  return c.json({ok:true,sent,unlinked,failed,total:members.results.length});
+});
+
 adminRoute.get('/health', requireAdmin, async c => {
   await ensureOperationalSchema(c.env); const out:any={checked_at:new Date().toISOString(),db:{ok:false},telegram:{ok:false},webhook:{ok:false},ai:{ok:!!c.env.AI},mini_app_url:await getSetting(c.env,'mini_app_url'),reminder_schedule:await getSetting(c.env,'reminder_schedule'),month:currentMonth(c.env.FUND_TIMEZONE||'Indian/Maldives')};
   try{const x=await c.env.DB.prepare('SELECT 1 ok').first<any>();out.db={ok:Number(x?.ok)===1}}catch(e){await safeLogError(c.env,'health.db',e)}
