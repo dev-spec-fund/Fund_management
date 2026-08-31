@@ -102,7 +102,7 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
       WHERE status='approved'
       UNION ALL
       SELECT 'donation' kind,
-        CASE WHEN TRIM(COALESCE(source_name,''))<>'' THEN 'Donation · '||source_name ELSE 'Donation' END label,
+        CASE WHEN TRIM(COALESCE(donor_name,''))<>'' THEN 'Donation · '||donor_name ELSE 'Donation' END label,
         amount,created_at event_at
       FROM donations
       WHERE COALESCE(status,'active')='active'
