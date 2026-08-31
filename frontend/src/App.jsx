@@ -687,6 +687,50 @@ const compactBtn={background:"#F1EFE7",border:"1px solid #DED8CA",borderRadius:8
 const approveBtn={...compactBtn,background:"#EAF1EE",color:"#1F3D2B",border:"1px solid #CFE0D6",fontWeight:600};
 const rejectBtn={...compactBtn,background:"#FDEDE8",color:"#A6432F",border:"1px solid #F2D6D0",fontWeight:600};
 
+/* ---------- Audit presentation ---------- */
+const AUDIT_HIDDEN_KEYS = new Set(["ocr_raw","slip_file_id","file_id","telegram_file_id","photo_file_id","raw","ai_response","model_response","prompt"]);
+const auditLabel = (s="") => s.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+const auditValue = (v) => {
+  if (v == null || v === "") return null;
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (typeof v === "string") return v.length > 90 ? `${v.slice(0,90)}…` : v;
+  return null;
+};
+function cleanAuditObject(v, depth=0) {
+  if (!v || typeof v !== "object" || depth > 3) return v;
+  if (Array.isArray(v)) return v.slice(0,10).map(x=>cleanAuditObject(x,depth+1));
+  return Object.fromEntries(Object.entries(v).filter(([k])=>!AUDIT_HIDDEN_KEYS.has(k.toLowerCase())).map(([k,x])=>[k,cleanAuditObject(x,depth+1)]));
+}
+function auditSummary(detail) {
+  let d=detail;
+  if (typeof d === "string") { try { d=JSON.parse(d); } catch { return [{label:"Details",value:d.slice(0,140)}]; } }
+  d=cleanAuditObject(d);
+  if (!d || typeof d !== "object") return [];
+  const after=d.after && typeof d.after==="object" ? d.after : {};
+  const before=d.before && typeof d.before==="object" ? d.before : {};
+  const preferred=["member_code","txn_id","donor_name","description","amount","month","transaction_month","ref_number","status","role","name","note","reason"];
+  const rows=[];
+  if (d.entity) rows.push({label:"Record",value:`${auditLabel(String(d.entity))}${d.entity_id!=null?` #${d.entity_id}`:""}`});
+  for (const key of preferred) {
+    const av=auditValue(after[key]), bv=auditValue(before[key]);
+    if (av!=null && bv!=null && av!==bv) rows.push({label:auditLabel(key),value:`${bv} → ${av}`});
+    else if (av!=null) rows.push({label:auditLabel(key),value:av});
+    if (rows.length>=5) break;
+  }
+  return rows;
+}
+function AuditEntry({a}) {
+  const rows=auditSummary(a.detail);
+  return <div className="sans" style={{padding:"11px 0",borderBottom:"1px solid #F0EDE3"}}>
+    <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:12}}>
+      <b>{auditLabel(a.action)}</b><span style={{color:"#B5AE9C",fontSize:10,whiteSpace:"nowrap"}}>{a.created_at}</span>
+    </div>
+    {rows.map((r,i)=><div key={`${r.label}-${i}`} style={{fontSize:11,color:"#6B7268",marginTop:3}}><span style={{color:"#9A9384"}}>{r.label}:</span> {r.value}</div>)}
+    <div style={{fontSize:10,color:"#B5AE9C",marginTop:4}}>by {a.admin_name || "system"}</div>
+  </div>;
+}
+
 /* ---------- Settings (admin) ---------- */
 function Settings({ admin }) {
   const [settings,setSettings]=useState(null); const [admins,setAdmins]=useState([]); const [audit,setAudit]=useState([]); const [health,setHealth]=useState(null); const [closures,setClosures]=useState([]); const [errors,setErrors]=useState([]); const [message,setMessage]=useState("");
