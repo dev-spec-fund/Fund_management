@@ -166,6 +166,7 @@ async function ensureMeetingsSchema(env:any){
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT,
       sent_at TEXT,
+      last_notification_at TEXT,
       cancelled_at TEXT,
       cancelled_by INTEGER REFERENCES admins(id),
       cancel_reason TEXT
@@ -306,8 +307,46 @@ adminRoute.post('/meetings/:id/notify-update', requireFinance, async c => {
       ); sent++;
     }catch(e){failed++;await safeLogError(c.env,'meeting.update_notice',e,{meeting_id:id,member_id:member.id});}
   }
+  await c.env.DB.prepare("UPDATE meetings SET last_notification_at=datetime('now') WHERE id=?").bind(id).run();
   await auditEntity(c.env,adminUser.id,'meeting_update_notified','meeting',id,m,{sent,unlinked,failed});
   return c.json({ok:true,sent,unlinked,failed});
+});
+
+
+adminRoute.post('/meetings/:id/remind-pending', requireFinance, async c => {
+  const adminUser=c.get('admin')!;
+  const id=Number(c.req.param('id'));
+  const m=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
+  if(!m) return c.json({error:'Meeting not found'},404);
+  if(m.status==='cancelled') return c.json({error:'Meeting is cancelled'},409);
+
+  const members=await c.env.DB.prepare(`
+    SELECT mem.id,mem.telegram_id
+    FROM members mem
+    LEFT JOIN meeting_rsvps r ON r.member_id=mem.id AND r.meeting_id=?
+    WHERE mem.active=1 AND r.member_id IS NULL
+    ORDER BY mem.name
+  `).bind(id).all<any>();
+
+  let sent=0,unlinked=0,failed=0;
+  for(const member of members.results){
+    if(!member.telegram_id){unlinked++;continue;}
+    const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
+    const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
+    try{
+      await sendMessage(c.env,member.telegram_id,
+        `🔔 <b>Meeting RSVP reminder</b>\n\n<b>${meetingEsc(m.title)}</b>\n${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}${venue}${deadline}\n\nPlease let us know if you can attend.`,
+        {reply_markup:{inline_keyboard:[[
+          {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
+          {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
+          {text:'❌ No',callback_data:`meeting_rsvp:${id}:no`}
+        ]]}}
+      ); sent++;
+    }catch(e){failed++;await safeLogError(c.env,'meeting.pending_reminder',e,{meeting_id:id,member_id:member.id});}
+  }
+  await c.env.DB.prepare("UPDATE meetings SET last_notification_at=datetime('now') WHERE id=?").bind(id).run();
+  await auditEntity(c.env,adminUser.id,'meeting_pending_reminder_sent','meeting',id,m,{sent,unlinked,failed,pending:members.results.length});
+  return c.json({ok:true,sent,unlinked,failed,pending:members.results.length});
 });
 
 adminRoute.post('/meetings/:id/cancel', requireFinance, async c => {
@@ -366,7 +405,7 @@ adminRoute.post('/meetings/:id/send', requireFinance, async c => {
       ); sent++;
     }catch(e){failed++;await safeLogError(c.env,'meeting.invite',e,{meeting_id:id,member_id:member.id});}
   }
-  await c.env.DB.prepare("UPDATE meetings SET status='sent',sent_at=datetime('now') WHERE id=?").bind(id).run();
+  await c.env.DB.prepare("UPDATE meetings SET status='sent',sent_at=COALESCE(sent_at,datetime('now')),last_notification_at=datetime('now') WHERE id=?").bind(id).run();
   await auditEntity(c.env,adminUser.id,'meeting_invitations_sent','meeting',id,m,{sent,unlinked,failed});
   return c.json({ok:true,sent,unlinked,failed,total:members.results.length});
 });
