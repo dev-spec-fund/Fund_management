@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireFinance } from "../auth";
+import { requireAdmin, requireFinance, requireMemberOrAdmin } from "../auth";
 import { logAudit, generateMemberCode, currentMonth, getSetting } from "../db";
 import { auditEntity, ensureOperationalSchema, findDuplicateMembers, normalizeName, normalizePhone, requireOpenMonth } from "../ops";
 import { boundedText, flag, money, telegramId, validMonth } from "../validation";
@@ -46,11 +46,17 @@ membersRoute.get("/:id/monthly-status", requireAdmin, async (c) => {
   return c.json({month,status,paid:total,due:Math.max(0,Number(member.monthly_amount)-total),monthly_amount:Number(member.monthly_amount),exemption_reason:ex?.reason||null});
 });
 
-membersRoute.get("/:id/statement", requireAdmin, async (c) => {
+membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
   await ensureOperationalSchema(c.env);
   const id = Number(c.req.param("id"));
-  const admin=c.get("admin")!;
-  const viewer=admin.role==='viewer';
+  const admin=c.get("admin");
+  const user=c.get("telegramUser");
+  if (!admin) {
+    const own=await c.env.DB.prepare("SELECT id FROM members WHERE id=? AND telegram_id=? AND active=1 LIMIT 1")
+      .bind(id,String(user?.id||"")).first<any>();
+    if(!own) return c.json({error:"You can only export your own statement"},403);
+  }
+  const viewer=admin?.role==='viewer';
   const member = await c.env.DB.prepare(viewer
     ? "SELECT id,member_code,name,NULL phone,monthly_amount,active,joined_at,created_at,NULL telegram_id FROM members WHERE id=?"
     : "SELECT id,member_code,name,phone,monthly_amount,active,joined_at,created_at,telegram_id FROM members WHERE id=?").bind(id).first<any>();

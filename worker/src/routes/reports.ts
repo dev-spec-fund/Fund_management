@@ -4,8 +4,38 @@ import { requireAdmin, requireMemberOrAdmin } from "../auth";
 import { currentMonth } from "../db";
 import { validMonth } from "../validation";
 import { allocatedPaidSql } from "../allocations";
+import { sendDocument } from "../telegram";
+import { safeLogError } from "../ops";
 
 export const reportsRoute = new Hono<AppEnv>();
+
+reportsRoute.post("/send-document", requireMemberOrAdmin, async (c) => {
+  try {
+    const user = c.get("telegramUser");
+    if (!user?.id) return c.json({ error: "Telegram user is unavailable" }, 400);
+
+    const form = await c.req.raw.formData();
+    const file = form.get("file");
+    const requestedName = String(form.get("filename") || "fund-document").trim();
+    const caption = String(form.get("caption") || "").trim();
+    if (!(file instanceof File)) return c.json({ error: "Document file is required" }, 400);
+    if (file.size <= 0) return c.json({ error: "Document is empty" }, 400);
+    if (file.size > 8 * 1024 * 1024) return c.json({ error: "Document is too large" }, 413);
+
+    const safeName = requestedName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "fund-document";
+    const lower = safeName.toLowerCase();
+    if (!lower.endsWith(".pdf") && !lower.endsWith(".csv"))
+      return c.json({ error: "Only PDF and CSV documents are supported" }, 400);
+
+    const blob = new Blob([await file.arrayBuffer()], { type: file.type || (lower.endsWith(".pdf") ? "application/pdf" : "text/csv") });
+    await sendDocument(c.env, String(user.id), safeName, blob, caption || "Fund Manager export");
+    return c.json({ ok: true, filename: safeName });
+  } catch (e) {
+    await safeLogError(c.env, "reports.send_document", e);
+    return c.json({ error: e instanceof Error ? e.message : "Could not send document" }, 500);
+  }
+});
+
 
 async function allocatedTotalForMonth(env:any, month:string){
   const row=await env.DB.prepare(`
