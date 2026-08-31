@@ -116,7 +116,7 @@ export default function App() {
         {tab === "history" && memberView && <MyHistory member={me.member} />}
         {tab === "fund" && memberView && <FundView />}
         {tab === "activity" && <Activity isAdmin={adminView} />}
-        {tab === "reports" && adminView && <Reports />}
+        {tab === "reports" && adminView && <Reports setTab={setTab} />}
         {tab === "settings" && adminView && <Settings admin={me.admin} />}
       </div>
     </Shell>
@@ -588,68 +588,154 @@ function Activity({ isAdmin }) {
   );
 }
 /* ---------- Reports (admin) ---------- */
-function Reports() {
+function Reports({ setTab }) {
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const [month, setMonth] = useState(nowMonth);
   const [summary, setSummary] = useState(null);
   const [trend, setTrend] = useState([]);
   const [showExpense, setShowExpense] = useState(false);
   const [showDonation, setShowDonation] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
 
-  const load = () => api.reports.summary().then(setSummary).catch(() => {});
+  const load = () => api.reports.summary(month).then(setSummary).catch(() => {});
   useEffect(() => {
-    load();
-    api.reports.trend().then(setTrend).catch(() => {});
-  }, []);
+    setSummary(null);
+    Promise.all([
+      api.reports.summary(month).then(setSummary),
+      api.reports.trend(month).then(setTrend),
+    ]).catch(() => {});
+  }, [month]);
+
+  const shiftMonth = (delta) => {
+    const [y, m] = month.split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+    setMonth(d.toISOString().slice(0, 7));
+  };
+
+  const monthLabel = new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${month}-01T00:00:00Z`));
 
   if (!summary) return <Center>Loading reports…</Center>;
-  const maxVal = Math.max(1, ...trend.map((t) => Math.max(t.income, t.expense)));
+
+  const maxVal = Math.max(1, ...trend.map((t) => Math.max(Number(t.income || 0), Number(t.expense || 0))));
+  const members = summary.outstanding?.members || [];
+  const totalRequired = Number(summary.memberIncome || 0) + Number(summary.outstanding?.total || 0);
+  const collectionPct = totalRequired > 0 ? Math.min(100, Math.round((Number(summary.memberIncome || 0) / totalRequired) * 100)) : 0;
+  const activeCategories = (summary.byCategory || []).filter((c) => Number(c.spent || 0) > 0);
+
+  const exportCsv = () => {
+    const rows = [
+      ["Fund report", monthLabel],
+      ["Contributions", summary.memberIncome],
+      ["Donations", summary.donationIncome],
+      ["Expenses", summary.expenses],
+      ["Net change", summary.net],
+      ["Closing balance", summary.fundBalance],
+      ["Outstanding dues", summary.outstanding?.total || 0],
+      ["Outstanding members", members.length],
+      [],
+      ["Expense category", "Amount"],
+      ...activeCategories.map((c) => [c.category, c.spent]),
+    ];
+    const csv = rows.map((r) => r.map((v) => {
+      const safe = String(v ?? "").replace(/"/g, '""');
+      return `"${/^[=+\-@]/.test(safe) ? "'" + safe : safe}"`;
+    }).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `fund-report-${month}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <button onClick={() => setShowDonation(true)} className="sans" style={smallBtn("#3A6B3E")}><Plus size={13} /> Log donation</button>
-        <button onClick={() => setShowExpense(true)} className="sans" style={smallBtn("#A6432F")}><Plus size={13} /> Log expense</button>
-      </div>
-
-      <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>THIS MONTH</div>
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <Row label="Member income" value={`+${fmt(summary.memberIncome)}`} color="#3A6B3E" />
-        <Row label="Donations" value={`+${fmt(summary.donationIncome)}`} color="#3A6B3E" />
-        <Row label="Expenses" value={`−${fmt(summary.expenses)}`} color="#A6432F" />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, paddingTop: 8, borderTop: "1px solid #E9E4D8" }}>
-          <span className="sans" style={{ fontWeight: 600 }}>Net</span>
-          <span style={{ fontWeight: 700 }}>{fmt(summary.net)}</span>
+      <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#1F3D2B", letterSpacing: .4 }}>REPORTS</div>
+        <div style={{ display: "flex", gap: 6, position: "relative" }}>
+          <button onClick={exportCsv} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> Export</button>
+          <button onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Add</button>
+          {showAdd && (
+            <div style={{ position: "absolute", right: 0, top: 38, zIndex: 5, width: 160, background: "#fff", border: "1px solid #E9E4D8", borderRadius: 10, padding: 5, boxShadow: "0 8px 24px rgba(31,61,43,.12)" }}>
+              <button onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "#3A6B3E", cursor: "pointer" }}>+ Log donation</button>
+              <button onClick={() => { setShowExpense(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "#A6432F", cursor: "pointer" }}>+ Log expense</button>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>INCOME VS EXPENSES — 6 MONTHS</div>
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 100 }}>
-          {trend.map((d, i) => (
-            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-              <div style={{ width: "100%", display: "flex", gap: 2, alignItems: "flex-end", height: 80 }}>
-                <div style={{ flex: 1, height: `${(d.income / maxVal) * 100}%`, background: "#3A6B3E", borderRadius: "3px 3px 0 0" }} />
-                <div style={{ flex: 1, height: `${(d.expense / maxVal) * 100}%`, background: "#A6432F", borderRadius: "3px 3px 0 0" }} />
-              </div>
-              <div className="sans" style={{ fontSize: 10, color: "#8A9086" }}>{d.month.slice(5)}</div>
-            </div>
-          ))}
+      <div style={{ display: "grid", gridTemplateColumns: "38px 1fr 38px", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <button onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
+        <div className="sans" style={{ textAlign: "center", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 10, padding: "9px 10px", fontSize: 14, fontWeight: 600 }}>{monthLabel}</div>
+        <button onClick={() => shiftMonth(1)} aria-label="Next month" style={monthNavBtn()}><ChevronRight size={18} /></button>
+      </div>
+
+      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>MONTHLY SUMMARY</div>
+      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 16, marginBottom: 14 }}>
+        <Row label="Contributions" value={`+ MVR ${fmt(summary.memberIncome)}`} color="#3A6B3E" />
+        <Row label="Donations" value={`+ MVR ${fmt(summary.donationIncome)}`} color="#3A6B3E" />
+        <Row label="Expenses" value={`− MVR ${fmt(summary.expenses)}`} color="#A6432F" />
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, paddingTop: 9, borderTop: "1px solid #E9E4D8" }}>
+          <span className="sans" style={{ fontWeight: 700 }}>Net change</span>
+          <span style={{ fontWeight: 700, color: Number(summary.net) >= 0 ? "#3A6B3E" : "#A6432F" }}>{Number(summary.net) >= 0 ? "+" : "−"} MVR {fmt(Math.abs(Number(summary.net || 0)))}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 9 }}>
+          <span className="sans" style={{ color: "#6B7268" }}>Closing balance</span>
+          <span style={{ fontWeight: 700 }}>MVR {fmt(summary.fundBalance)}</span>
+        </div>
+      </div>
+
+      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>COLLECTION</div>
+      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+        <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 7 }}>
+          <span>MVR {fmt(summary.memberIncome)} / MVR {fmt(totalRequired)}</span>
+          <strong>{collectionPct}%</strong>
+        </div>
+        <div style={{ height: 7, borderRadius: 99, background: "#E9E4D8", overflow: "hidden" }}>
+          <div style={{ width: `${collectionPct}%`, height: "100%", background: "#3A6B3E", borderRadius: 99 }} />
         </div>
       </div>
 
       {(summary.outstanding?.total || 0) > 0 && (
-        <div style={{ background: "#FBF1EE", border: "1px solid #F2D6D0", borderRadius: 12, padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
-          <span className="sans" style={{ fontSize: 13, color: "#A6432F", fontWeight: 600 }}>Outstanding dues</span>
-          <span style={{ fontWeight: 700, color: "#A6432F" }}>MVR {fmt(summary.outstanding?.total)} · {(summary.outstanding?.members || []).length} members</span>
-        </div>
+        <button onClick={() => setTab?.("members")} style={{ width: "100%", background: "#FBF1EE", border: "1px solid #F2D6D0", borderRadius: 12, padding: "13px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", color: "#A6432F" }}>
+          <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>Outstanding dues</span>
+          <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>MVR {fmt(summary.outstanding?.total)} · {members.length} members ›</span>
+        </button>
       )}
 
-      <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>SPENDING BY CATEGORY</div>
-      {(summary.byCategory || []).map((c, i) => (
-        <div key={i} style={{ display: "flex", justifyContent: "space-between", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 16px", marginBottom: 8 }}>
-          <span className="sans" style={{ fontSize: 14, fontWeight: 500 }}>{c.category}</span>
-          <span className="sans" style={{ fontSize: 14, fontWeight: 600, color: "#A6432F" }}>MVR {fmt(c.spent)}</span>
+      <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>
+        <span>INCOME VS EXPENSES — 6 MONTHS</span>
+        <span style={{ display: "flex", gap: 8, fontSize: 10, fontWeight: 500 }}>
+          <span>● Income</span><span style={{ color: "#A6432F" }}>● Expenses</span>
+        </span>
+      </div>
+      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "14px 12px", marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 7, height: 112 }}>
+          {trend.map((d, i) => {
+            const label = new Intl.DateTimeFormat("en", { month: "short", timeZone: "UTC" }).format(new Date(`${d.month}-01T00:00:00Z`));
+            return (
+              <div key={i} title={`Income MVR ${fmt(d.income)} · Expenses MVR ${fmt(d.expense)}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                <div style={{ width: "100%", display: "flex", gap: 2, alignItems: "flex-end", height: 84 }}>
+                  <div style={{ flex: 1, minHeight: Number(d.income) > 0 ? 2 : 0, height: `${(Number(d.income || 0) / maxVal) * 100}%`, background: "#3A6B3E", borderRadius: "3px 3px 0 0" }} />
+                  <div style={{ flex: 1, minHeight: Number(d.expense) > 0 ? 2 : 0, height: `${(Number(d.expense || 0) / maxVal) * 100}%`, background: "#A6432F", borderRadius: "3px 3px 0 0" }} />
+                </div>
+                <div className="sans" style={{ fontSize: 10, color: "#8A9086" }}>{label}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>EXPENSES BY CATEGORY</div>
+      {activeCategories.map((c, i) => (
+        <div key={i} style={{ display: "flex", justifyContent: "space-between", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "11px 14px", marginBottom: 7 }}>
+          <span className="sans" style={{ fontSize: 13, fontWeight: 500 }}>{c.category}</span>
+          <span className="sans" style={{ fontSize: 13, fontWeight: 700, color: "#A6432F" }}>MVR {fmt(c.spent)}</span>
         </div>
       ))}
+      {activeCategories.length === 0 && <div className="sans" style={{ fontSize: 12, color: "#8A9086", marginBottom: 8 }}>No expenses for this month.</div>}
 
       {showExpense && <ExpenseModal onClose={() => setShowExpense(false)} onSaved={load} />}
       {showDonation && <DonationModal onClose={() => setShowDonation(false)} onSaved={load} />}

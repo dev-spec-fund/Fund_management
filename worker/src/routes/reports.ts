@@ -128,7 +128,8 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
 
 /** 6-month trend for charts. */
 reportsRoute.get("/trend", requireAdmin, async (c) => {
-  const base=currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
+  const base=c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
+  if (!validMonth(base)) return c.json({error:"Month must use YYYY-MM"},400);
   const [by,bm]=base.split('-').map(Number);
   const months=Array.from({length:6},(_,i)=>{const d=new Date(Date.UTC(by,bm-1-(5-i),1));return d.toISOString().slice(0,7);});
   const rows = await Promise.all(months.map(async (month) => {
