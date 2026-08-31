@@ -921,66 +921,201 @@ function formatLocalDateTime(value) {
 }
 
 function Settings({ admin }) {
-  const [settings,setSettings]=useState(null); const [admins,setAdmins]=useState([]); const [audit,setAudit]=useState([]); const [health,setHealth]=useState(null); const [closures,setClosures]=useState([]); const [errors,setErrors]=useState([]); const [message,setMessage]=useState("");
+  const [settings,setSettings]=useState(null);
+  const [admins,setAdmins]=useState([]);
+  const [audit,setAudit]=useState([]);
+  const [health,setHealth]=useState(null);
+  const [closures,setClosures]=useState([]);
+  const [errors,setErrors]=useState([]);
+  const [message,setMessage]=useState("");
+  const [settingsSection,setSettingsSection]=useState("general");
+
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
   const superAdmin = role === "super_admin";
+  const currentMonth = currentMonthValue();
+
   const load=()=>{
-    api.settings.get().then(setSettings).catch(()=>{}); api.settings.admins().then(setAdmins).catch(()=>{}); api.settings.auditLog().then(setAudit).catch(()=>{}); api.admin.health().then(setHealth).catch(()=>{}); api.admin.monthClosures().then(setClosures).catch(()=>{}); if(superAdmin) api.admin.errors().then(setErrors).catch(()=>{});
+    api.settings.get().then(setSettings).catch(()=>{});
+    api.settings.admins().then(setAdmins).catch(()=>{});
+    api.settings.auditLog().then(setAudit).catch(()=>{});
+    api.admin.health().then(setHealth).catch(()=>{});
+    api.admin.monthClosures().then(setClosures).catch(()=>{});
+    if(superAdmin) api.admin.errors().then(setErrors).catch(()=>{});
   };
+
   useEffect(load,[admin]);
+
   if(!settings)return <Center>Loading settings…</Center>;
-  const saveSetting=async(key,value)=>{await api.settings.update({[key]:String(value)});setSettings({...settings,[key]:String(value)});setMessage("Saved");};
-  const closeMonth=async()=>{const month=prompt("Month to close (YYYY-MM)",new Date().toISOString().slice(0,7));if(!month)return;try{await api.admin.closeMonth(month,"Closed from Fund App");load()}catch(e){setMessage(e.message)}};
-  const backup=async()=>{try{const data=await api.admin.backup();downloadText(`kys-fund-backup-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(data,null,2),"application/json");}catch(e){setMessage(e.message)}};
+
+  const saveSetting=async(key,value)=>{
+    try{
+      await api.settings.update({[key]:String(value)});
+      setSettings({...settings,[key]:String(value)});
+      setMessage("Changes saved");
+      setTimeout(()=>setMessage(""),1800);
+    }catch(e){ setMessage(e.message); }
+  };
+
+  const closeMonth=async()=>{
+    const label = new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${currentMonth}-01T00:00:00Z`));
+    if(!confirm(`Close ${label}?\n\nApproved financial records for this month will be locked until a Super Admin reopens it.`)) return;
+    try{
+      await api.admin.closeMonth(currentMonth,"Closed from Fund App");
+      load();
+      setMessage(`${label} closed`);
+    }catch(e){setMessage(e.message)}
+  };
+
+  const backup=async()=>{
+    try{
+      const data=await api.admin.backup();
+      downloadText(`kys-fund-backup-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(data,null,2),"application/json");
+    }catch(e){setMessage(e.message)}
+  };
+
+  const monthClosed = closures.some(x=>x.month===currentMonth);
+  const tabs=[["general","General"],["admins","Admins"],["system","System"],["audit","Audit"]];
+
   return <>
     {message && <div className="sans" style={{fontSize:12,background:"#EAF1EE",padding:9,borderRadius:9,marginBottom:12}}>{message}</div>}
-    <div style={{display:"flex",gap:5,overflowX:"auto",marginBottom:16,paddingBottom:2}}>
-        {[["general","General"],["admins","Admins"],["system","System"],["audit","Audit"]].map(([k,label])=>(
-          <button key={k} onClick={()=>setSettingsSection(k)} className="sans" style={{flex:"0 0 auto",border:"1px solid "+(settingsSection===k?"#1F3D2B":"#E9E4D8"),background:settingsSection===k?"#1F3D2B":"#fff",color:settingsSection===k?"#F7F5EF":"#6B7268",borderRadius:18,padding:"6px 12px",fontSize:11,fontWeight:600,cursor:"pointer"}}>{label}</button>
-        ))}
-      </div>
-      <div style={{display:settingsSection==="system"?"block":"none"}}><SectionTitle>SYSTEM HEALTH</SectionTitle>
-    <div style={cardStyle}>
-      {health ? <div className="sans" style={{fontSize:12,lineHeight:1.8}}>
-        <div>Database: <b>{health.db?.ok ? "✅ Online" : "❌ Error"}</b></div>
-        <div>Telegram bot: <b>{health.telegram?.ok ? `✅ @${health.telegram.username || "connected"}` : "❌ Error"}</b></div>
-        <div>Webhook: <b>{health.webhook?.ok && health.webhook?.url ? "✅ Configured" : "⚠️ Check webhook"}</b>{health.webhook?.pending ? ` · ${health.webhook.pending} pending` : ""}</div>
-        <div>AI/OCR binding: <b>{health.ai?.ok ? "✅ Available" : "❌ Missing"}</b></div>
-        <div>Mini App: {health.mini_app_url || "not set"}</div><div>Reminder: {health.reminder_schedule || "not set"}</div>
-        {health.webhook?.last_error && <div style={{color:"#A6432F"}}>Webhook error: {health.webhook.last_error}</div>}
-      </div> : <div className="sans" style={{fontSize:12,color:"#8A9086"}}>Checking…</div>}
-      <button onClick={()=>api.admin.health().then(setHealth)} style={{...compactBtn,marginTop:8}}>Refresh status</button>
+
+    <div style={{display:"flex",gap:6,overflowX:"auto",marginBottom:16,paddingBottom:2}}>
+      {tabs.map(([key,label])=>
+        <button key={key} onClick={()=>setSettingsSection(key)} className="sans"
+          style={{flex:"0 0 auto",border:`1px solid ${settingsSection===key?"#1F3D2B":"#E2DDD0"}`,background:settingsSection===key?"#1F3D2B":"#fff",color:settingsSection===key?"#F7F5EF":"#6B7268",borderRadius:20,padding:"7px 13px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+          {label}{key==="system" && errors.length>0 ? ` · ${errors.length}` : ""}
+        </button>
+      )}
     </div>
 
-    </div><div style={{display:settingsSection==="general"?"block":"none"}}><SectionTitle>CONTRIBUTION & EXPENSE SETTINGS</SectionTitle>
-    <div style={cardStyle}>
-      <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Reminder day</div>
-      <select value={settings.reminder_day} onChange={e=>saveSetting("reminder_day",e.target.value)} className="sans" style={{width:"100%",border:"1px solid #D9D3C4",borderRadius:8,padding:"9px 11px",fontSize:14,background:"#F7F5EF",marginBottom:12}}>{["1","5","10","15","off"].map(d=><option key={d} value={d}>{d==="off"?"Off — manual only":`Day ${d}`}</option>)}</select>
-      <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Second-approval threshold (MVR)</div>
-      <input type="number" value={settings.expense_approval_threshold || 5000} onChange={e=>setSettings({...settings,expense_approval_threshold:e.target.value})} onBlur={e=>saveSetting("expense_approval_threshold",e.target.value)} className="sans" style={{width:"100%",boxSizing:"border-box",border:"1px solid #D9D3C4",borderRadius:8,padding:"9px 11px",fontSize:14}} />
-    </div>
+    {settingsSection==="general" && <>
+      <SectionTitle>GENERAL</SectionTitle>
+      <div style={cardStyle}>
+        <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Reminder day</div>
+        <select value={settings.reminder_day} onChange={e=>saveSetting("reminder_day",e.target.value)}
+          className="sans" style={{width:"100%",border:"1px solid #D9D3C4",borderRadius:8,padding:"9px 11px",fontSize:14,background:"#F7F5EF",marginBottom:12}}>
+          {["1","5","10","15","off"].map(d=><option key={d} value={d}>{d==="off"?"Off — manual only":`Day ${d}`}</option>)}
+        </select>
 
-    <SectionTitle>MONTH CLOSE</SectionTitle>
-    <div style={cardStyle}>
-      {closures.slice(0,6).map(x=><div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"6px 0",borderBottom:"1px solid #F0EDE3"}}><span><b>{x.month}</b> · closed by {x.closed_by_name || "admin"}</span>{superAdmin&&<button onClick={()=>api.admin.reopenMonth(x.month).then(load)} style={compactBtn}>Reopen</button>}</div>)}
-      {!closures.length&&<div className="sans" style={{fontSize:12,color:"#8A9086"}}>No months closed yet.</div>}
-      {superAdmin&&<button onClick={closeMonth} style={{...approveBtn,marginTop:10}}>Close a month</button>}
-    </div>
-
-    </div><div style={{display:settingsSection==="admins"?"block":"none"}}><SectionTitle>ADMINS & ROLES</SectionTitle>
-    <div style={cardStyle}>
-      {admins.map(a=><div key={a.id} className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #F0EDE3",fontSize:13}}><span>{a.name}</span>{superAdmin?<select value={a.role==="owner"?"super_admin":a.role} onChange={e=>api.settings.updateAdmin(a.id,{role:e.target.value}).then(load)} style={{border:"1px solid #D9D3C4",borderRadius:8,padding:5}}><option value="super_admin">Super Admin</option><option value="treasurer">Treasurer</option><option value="viewer">Viewer</option></select>:<span>{a.role}</span>}</div>)}
-      <div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:8}}>Super Admin: full control · Treasurer: financial operations · Viewer: read-only.</div>
-    </div>
-
-    {superAdmin&&<></div><div style={{display:settingsSection==="system"?"block":"none"}}><SectionTitle>DATABASE BACKUP</SectionTitle><div style={cardStyle}><div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:8}}>Create a backup before important schema or financial data changes.</div><button onClick={backup} style={approveBtn}>Create backup</button></div></>}
-
-    </div><div style={{display:settingsSection==="audit"?"block":"none"}}><SectionTitle>AUDIT LOG</SectionTitle>
-    <div style={cardStyle}>{audit.slice(0,100).map(a=><AuditEntry key={a.id} a={a}/>)}{!audit.length&&<EmptyLine>No audit entries.</EmptyLine>}</div>
-
-    {superAdmin&&<></div><div style={{display:settingsSection==="system"?"block":"none"}}><SectionTitle>RECENT ERRORS</SectionTitle><div style={cardStyle}>{errors.length>0&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}><button onClick={()=>{if(confirm("Clear all logged errors?")) api.admin.clearErrors().then(()=>setErrors([])).catch(e=>setMessage(e.message));}} style={compactBtn}>Clear errors</button></div>}{errors.slice(0,50).map(e=><div key={e.id} className="sans" style={{padding:"7px 0",borderBottom:"1px solid #F0EDE3",fontSize:11}}><b>{e.source}</b> · {e.message}<div style={{color:"#B5AE9C"}}>{formatLocalDateTime(e.created_at)}</div></div>)}{!errors.length&&<EmptyLine>No logged errors.</EmptyLine>}</div></>}
+        <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Second-approval threshold</div>
+        <div style={{display:"flex",alignItems:"center",border:"1px solid #D9D3C4",borderRadius:8,background:"#fff",overflow:"hidden"}}>
+          <span className="sans" style={{padding:"0 0 0 11px",fontSize:12,color:"#8A9086"}}>MVR</span>
+          <input type="number" value={settings.expense_approval_threshold || 5000}
+            onChange={e=>setSettings({...settings,expense_approval_threshold:e.target.value})}
+            onBlur={e=>saveSetting("expense_approval_threshold",e.target.value)}
+            className="sans" style={{flex:1,minWidth:0,border:0,outline:"none",padding:"9px 11px",fontSize:14,background:"transparent"}} />
         </div>
-    </>;
+        <div className="sans" style={{fontSize:10,color:"#9A9384",marginTop:6}}>Expenses at or above this amount require a second finance admin.</div>
+      </div>
+
+      <SectionTitle>MONTH MANAGEMENT</SectionTitle>
+      <div style={cardStyle}>
+        <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginBottom:10}}>
+          <span style={{color:"#6B7268"}}>Current month</span>
+          <b>{new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${currentMonth}-01T00:00:00Z`))}</b>
+        </div>
+        <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12}}>
+          <span style={{color:"#6B7268"}}>Status</span>
+          <span style={{fontWeight:700,color:monthClosed?"#A6432F":"#3A6B3E"}}>{monthClosed?"Closed":"Open"}</span>
+        </div>
+        {superAdmin && !monthClosed && <button onClick={closeMonth} style={{...rejectBtn,marginTop:12}}>Close current month</button>}
+        {superAdmin && monthClosed && <button onClick={()=>api.admin.reopenMonth(currentMonth).then(load).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen current month</button>}
+      </div>
+
+      {closures.length>0 && <>
+        <SectionTitle>CLOSED MONTHS</SectionTitle>
+        <div style={cardStyle}>
+          {closures.slice(0,6).map(x=>
+            <div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11,padding:"7px 0",borderBottom:"1px solid #F0EDE3"}}>
+              <span><b>{x.month}</b><div style={{color:"#9A9384",marginTop:2}}>by {x.closed_by_name || "admin"}</div></span>
+              {superAdmin&&<button onClick={()=>api.admin.reopenMonth(x.month).then(load).catch(e=>setMessage(e.message))} style={compactBtn}>Reopen</button>}
+            </div>
+          )}
+        </div>
+      </>}
+    </>}
+
+    {settingsSection==="admins" && <>
+      <SectionTitle>ADMINS & ROLES</SectionTitle>
+      <div style={cardStyle}>
+        {admins.map(a=>{
+          const displayRole=a.role==="owner"?"super_admin":a.role;
+          const roleLabel=displayRole==="super_admin"?"Super Admin":displayRole==="treasurer"?"Treasurer":"Viewer";
+          return <div key={a.id} className="sans" style={{padding:"10px 0",borderBottom:"1px solid #F0EDE3"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:600}}>{a.name}</div>
+                <div style={{fontSize:10,color:a.active===0?"#A6432F":"#3A6B3E",marginTop:2}}>{a.active===0?"Inactive":"Active"}</div>
+              </div>
+              {superAdmin
+                ? <select value={displayRole} onChange={e=>{
+                    if(!confirm(`Change ${a.name}'s role to ${e.target.options[e.target.selectedIndex].text}?`)) return;
+                    api.settings.updateAdmin(a.id,{role:e.target.value}).then(load).catch(err=>setMessage(err.message));
+                  }} style={{border:"1px solid #D9D3C4",borderRadius:8,padding:"6px 7px",background:"#F7F5EF",fontSize:11}}>
+                    <option value="super_admin">Super Admin</option>
+                    <option value="treasurer">Treasurer</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                : <span style={{fontSize:11,fontWeight:600}}>{roleLabel}</span>}
+            </div>
+          </div>
+        })}
+        <div className="sans" style={{fontSize:10,color:"#8A9086",marginTop:9}}>Super Admin: full control · Treasurer: financial operations · Viewer: read-only.</div>
+      </div>
+    </>}
+
+    {settingsSection==="system" && <>
+      <SectionTitle>SYSTEM STATUS</SectionTitle>
+      <div style={cardStyle}>
+        {health ? <div className="sans" style={{fontSize:12}}>
+          {[
+            ["Database",health.db?.ok,"Online","Error"],
+            ["Telegram",health.telegram?.ok,health.telegram?.username?`@${health.telegram.username}`:"Connected","Error"],
+            ["Webhook",health.webhook?.ok && !!health.webhook?.url,"Active","Check"],
+            ["AI / OCR",health.ai?.ok,"Available","Missing"],
+          ].map(([label,ok,yes,no])=>
+            <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid #F0EDE3"}}>
+              <span style={{color:"#6B7268"}}>{label}</span>
+              <b style={{color:ok?"#3A6B3E":"#A6432F"}}>{ok?"● ":"● "}{ok?yes:no}</b>
+            </div>
+          )}
+          <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0"}}>
+            <span style={{color:"#6B7268"}}>Reminder check</span>
+            <b>{health.reminder_schedule ? "Daily" : "Not set"}</b>
+          </div>
+        </div> : <div className="sans" style={{fontSize:12,color:"#8A9086"}}>Checking…</div>}
+        <button onClick={()=>api.admin.health().then(setHealth).catch(e=>setMessage(e.message))} style={{...compactBtn,marginTop:8}}>Refresh status</button>
+      </div>
+
+      {superAdmin && <>
+        <SectionTitle>DATABASE BACKUP</SectionTitle>
+        <div style={cardStyle}>
+          <div className="sans" style={{fontSize:11,color:"#6B7268",marginBottom:10}}>Create a JSON backup before important schema or financial data changes.</div>
+          <button onClick={backup} style={approveBtn}>Create backup</button>
+        </div>
+
+        <SectionTitle>RECENT ERRORS {errors.length>0?`· ${errors.length}`:""}</SectionTitle>
+        <div style={cardStyle}>
+          {errors.length>0&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}>
+            <button onClick={()=>{if(confirm("Clear all logged errors?")) api.admin.clearErrors().then(()=>setErrors([])).catch(e=>setMessage(e.message));}} style={compactBtn}>Clear errors</button>
+          </div>}
+          {errors.slice(0,30).map(e=><div key={e.id} className="sans" style={{padding:"8px 0",borderBottom:"1px solid #F0EDE3",fontSize:11}}>
+            <b>{e.source}</b><div style={{color:"#6B7268",marginTop:2}}>{e.message}</div>
+            <div style={{color:"#B5AE9C",marginTop:3}}>{formatLocalDateTime(e.created_at)}</div>
+          </div>)}
+          {!errors.length&&<EmptyLine>No logged errors.</EmptyLine>}
+        </div>
+      </>}
+    </>}
+
+    {settingsSection==="audit" && <>
+      <SectionTitle>AUDIT LOG</SectionTitle>
+      <div style={cardStyle}>
+        {audit.slice(0,100).map(a=><AuditEntry key={a.id} a={a}/>)}
+        {!audit.length&&<EmptyLine>No audit entries.</EmptyLine>}
+      </div>
+    </>}
+  </>;
 }
 
 /* ---------- Shared UI bits ---------- */
