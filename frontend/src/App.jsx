@@ -709,36 +709,29 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
 /* ---------- Member-only views ---------- */
 function MyHistory({ member }) {
   const [rows, setRows] = useState(null);
-  useEffect(() => {
-    api.myContributions()
-      .then(setRows)
-      .catch(() => setRows([]));
-  }, []);
+  useEffect(() => { api.myContributions().then(setRows).catch(() => setRows([])); }, []);
   if (rows === null) return <Center>Loading…</Center>;
-  return (
-    <>
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 14, padding: 16, marginBottom: 16 }}>
-        <div className="sans" style={{ fontSize: 11, color: "#8A9086", letterSpacing: 1 }}>MY MEMBER ACCOUNT</div>
-        <div style={{ fontSize: 24, fontWeight: 600, marginTop: 3 }}>{member?.member_code || "—"}</div>
-        <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginTop: 3 }}>{member?.name} · MVR {fmt(member?.monthly_amount)}/month</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
-          <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn()}>PDF statement</button>
-          <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn()}>CSV statement</button>
-        </div>
-      </div>
-      <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>YOUR CONTRIBUTIONS</div>
-      {rows.map((h) => (
-        <div key={h.id} style={{ display: "flex", justifyContent: "space-between", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 16px", marginBottom: 8 }}>
-          <div>
-            <div className="sans" style={{ fontSize: 14, fontWeight: 500 }}>{h.month}</div>
-            <div className="sans" style={{ fontSize: 11, color: "#B5AE9C" }}>{h.txn_id} · Bank ref: {h.ref_number || "—"} · {h.status}</div>
-          </div>
-          <div className="sans" style={{ fontSize: 14, fontWeight: 600 }}>MVR {fmt(h.amount)}</div>
-        </div>
-      ))}
-      {rows.length === 0 && <div className="sans" style={{ fontSize: 13, color: "#8A9086" }}>No contributions yet — send a slip photo to the bot to get started.</div>}
-    </>
-  );
+  const approved = rows.filter((r) => String(r.status).toLowerCase() === "approved");
+  const total = approved.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const monthLabel = (m) => { if (!m) return "—"; const [y,mo]=String(m).split("-"); return new Date(Number(y),Number(mo)-1,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"}); };
+  const statusStyle = (status) => { const x=String(status||"").toLowerCase(); return {color:x==="approved"?"#3A6B3E":x==="rejected"?"#A6432F":"#8A6B24",background:x==="approved"?"#EAF1EE":x==="rejected"?"#FAECE8":"#FBF4DF"}; };
+  return <>
+    <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:14,padding:16,marginBottom:12}}>
+      <div className="sans" style={{fontSize:11,color:"#8A9086",letterSpacing:1}}>MY MEMBER ACCOUNT</div>
+      <div style={{fontSize:24,fontWeight:600,marginTop:3}}>{member?.member_code||"—"}</div>
+      <div className="sans" style={{fontSize:13,color:"#6B7268",marginTop:3}}>{member?.name} · MVR {fmt(member?.monthly_amount)}/month</div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+      <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"#8A9086"}}>TOTAL CONTRIBUTED</div><b className="sans">MVR {fmt(total)}</b></div>
+      <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"#8A9086"}}>PAYMENTS</div><b className="sans">{approved.length} approved</b></div>
+    </div>
+    <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}><b style={{fontSize:13,color:"#6B7268"}}>CONTRIBUTION HISTORY</b><div style={{display:"flex",gap:6}}><button onClick={()=>exportStatementPdf(member)} style={smallBtn()}>PDF</button><button onClick={()=>exportStatementCsv(member)} style={smallBtn()}>CSV</button></div></div>
+    {rows.map((h)=><div key={h.id} style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:"13px 16px",marginBottom:8}}>
+      <div style={{display:"flex",justifyContent:"space-between",gap:10}}><div><div className="sans" style={{fontSize:14,fontWeight:600}}>{monthLabel(h.month)}</div><div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:3}}>{h.txn_id} · Bank ref: {h.ref_number||"—"}</div></div><div style={{textAlign:"right"}}><div className="sans" style={{fontSize:14,fontWeight:600}}>MVR {fmt(h.amount)}</div><span className="sans" style={{...statusStyle(h.status),fontSize:10,fontWeight:600,padding:"3px 7px",borderRadius:99,display:"inline-block",marginTop:4,textTransform:"capitalize"}}>{h.status||"pending"}</span></div></div>
+      {Array.isArray(h.allocations)&&h.allocations.length>0&&<div className="sans" style={{background:"#F7F5EF",borderRadius:9,padding:9,marginTop:10,fontSize:11}}><b>Applied to</b>{h.allocations.map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",marginTop:4}}><span>{monthLabel(x.month)}</span><span>MVR {fmt(x.amount)}</span></div>)}</div>}
+    </div>)}
+    {rows.length===0&&<div className="sans" style={{fontSize:13,color:"#8A9086"}}>No contributions yet — send a slip photo to the bot to get started.</div>}
+  </>;
 }
 
 function FundView() {
