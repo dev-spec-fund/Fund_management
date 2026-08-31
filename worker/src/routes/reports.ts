@@ -11,14 +11,14 @@ reportsRoute.get("/activity", requireMemberOrAdmin, async (c) => {
   const rows = await c.env.DB.prepare(`
     SELECT * FROM (
       SELECT c.id, c.txn_id, m.name as who, m.member_code, 'contribution' as kind, c.amount, c.month, NULL as ref,
-             c.approved_at as at, a.name as by_name
+             c.approved_at as at, a.name as by_name, NULL as category
       FROM contributions c JOIN members m ON m.id=c.member_id LEFT JOIN admins a ON a.id=c.approved_by
       WHERE c.status='approved'
       UNION ALL
-      SELECT e.id, e.txn_id, e.description, NULL, 'expense', e.amount, NULL, NULL, e.created_at, a.name
-      FROM expenses e LEFT JOIN admins a ON a.id=e.logged_by WHERE COALESCE(e.status,'approved')='approved'
+      SELECT e.id, e.txn_id, e.description, NULL, 'expense', e.amount, NULL, NULL, e.created_at, a.name, cat.name as category
+      FROM expenses e LEFT JOIN admins a ON a.id=e.logged_by LEFT JOIN expense_categories cat ON cat.id=e.category_id WHERE COALESCE(e.status,'approved')='approved'
       UNION ALL
-      SELECT d.id, d.txn_id, d.donor_name, NULL, 'donation', d.amount, NULL, NULL, d.created_at, a.name
+      SELECT d.id, d.txn_id, d.donor_name, NULL, 'donation', d.amount, NULL, NULL, d.created_at, a.name, NULL as category
       FROM donations d LEFT JOIN admins a ON a.id=d.logged_by WHERE COALESCE(d.status,'active')='active'
     ) ORDER BY at DESC LIMIT 100
   `).all<any>();

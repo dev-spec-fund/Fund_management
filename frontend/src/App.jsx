@@ -216,34 +216,54 @@ function StatCard({ icon, label, value }) {
   );
 }
 
+function activityDate(a) {
+  const d = a?.at ? new Date(String(a.at).replace(" ", "T") + (String(a.at).includes("Z") ? "" : "Z")) : null;
+  return d && !Number.isNaN(d.getTime()) ? d : null;
+}
+
+function activityDayLabel(a) {
+  const d = activityDate(a);
+  if (!d) return "Earlier";
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((today - local) / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+}
+
+function activityTime(a) {
+  const d = activityDate(a);
+  return d ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
+}
+
 function ActivityRow({ a, isAdmin }) {
   const isIn = a.kind === "contribution" || a.kind === "donation";
+  const type = a.kind === "contribution" ? "Contribution" : a.kind === "donation" ? "Donation" : "Expense";
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 16px", marginBottom: 8 }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <div style={{ width: 32, height: 32, borderRadius: 10, background: isIn ? "#DDECD9" : "#F2D6D0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "11px 14px", marginBottom: 7 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
+        <div style={{ width: 32, height: 32, flex: "0 0 32px", borderRadius: 10, background: isIn ? "#DDECD9" : "#F2D6D0", display: "flex", alignItems: "center", justifyContent: "center" }}>
           {isIn ? <ArrowUpRight size={16} color="#3A6B3E" /> : <ArrowDownRight size={16} color="#A6432F" />}
         </div>
-        <div>
-          <div className="sans" style={{ fontSize: 14, fontWeight: 500 }}>{a.who}</div>
-          <div className="sans" style={{ fontSize: 12, color: "#8A9086" }}>
-            {a.kind === "contribution" ? `Contribution — ${a.month}` : a.kind === "donation" ? "Donation" : "Expense"}
+        <div style={{ minWidth: 0 }}>
+          <div className="sans" style={{ fontSize: 14, fontWeight: 600 }}>{a.who}</div>
+          <div className="sans" style={{ fontSize: 12, color: "#8A9086", marginTop: 1 }}>
+            {type}{a.kind === "contribution" && a.month ? ` · ${a.month}` : ""}{a.kind === "expense" && a.category ? ` · ${a.category}` : ""}
           </div>
-          {a.txn_id && <div className="sans" style={{ fontSize: 11, color: "#B5AE9C", marginTop: 1 }}>{a.txn_id}{a.ref ? ` · Bank ref: ${a.ref}` : ""}</div>}
-          {isAdmin && a.by_name && (
-            <div className="sans" style={{ fontSize: 11, color: "#8A9086", marginTop: 1 }}>
-              {a.kind === "contribution" ? "Approved by " : "Logged by "}{a.by_name}
-            </div>
-          )}
+          <div className="sans" style={{ fontSize: 11, color: "#AAA493", marginTop: 2 }}>
+            {[a.member_code, a.txn_id, activityTime(a)].filter(Boolean).join(" · ")}
+          </div>
+          {isAdmin && a.by_name && <div className="sans" style={{ fontSize: 11, color: "#8A9086", marginTop: 1 }}>{a.kind === "contribution" ? "Approved by " : "Logged by "}{a.by_name}</div>}
         </div>
       </div>
-      <div className="sans" style={{ fontSize: 14, fontWeight: 600, color: isIn ? "#3A6B3E" : "#A6432F" }}>
-        {isIn ? "+" : "−"}{fmt(a.amount)}
+      <div className="sans" style={{ flex: "0 0 auto", marginLeft: 10, fontSize: 14, fontWeight: 700, color: isIn ? "#3A6B3E" : "#A6432F" }}>
+        {isIn ? "+" : "−"} MVR {fmt(a.amount)}
       </div>
     </div>
   );
 }
-
 /* ---------- Members (admin) ---------- */
 function Members({ isAdmin }) {
   const [members, setMembers] = useState([]);
@@ -526,28 +546,47 @@ function Activity({ isAdmin }) {
   useEffect(() => { api.reports.activity().then(setRows).catch(() => setRows([])); }, []);
   if (rows === null) return <Center>Loading…</Center>;
 
-  const filtered = rows.filter((r) => {
-    if (filter === "all") return true;
-    if (filter === "in") return r.kind === "contribution" || r.kind === "donation";
-    return r.kind === "expense";
+  const filtered = rows.filter((r) => filter === "all" || r.kind === filter);
+  const income = filtered.filter((r) => r.kind === "contribution" || r.kind === "donation").reduce((n, r) => n + Number(r.amount || 0), 0);
+  const expenses = filtered.filter((r) => r.kind === "expense").reduce((n, r) => n + Number(r.amount || 0), 0);
+  const groups = [];
+  filtered.forEach((row) => {
+    const label = activityDayLabel(row);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.rows.push(row);
+    else groups.push({ label, rows: [row] });
   });
+
+  const filters = [
+    ["all", "All"], ["contribution", "Contributions"], ["donation", "Donations"], ["expense", "Expenses"]
+  ];
 
   return (
     <>
-      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-        {["all", "in", "out"].map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className="sans"
-            style={{ background: filter === f ? "#1F3D2B" : "#fff", color: filter === f ? "#F7F5EF" : "#6B7268", border: "1px solid " + (filter === f ? "#1F3D2B" : "#E9E4D8"), borderRadius: 20, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-            {f === "all" ? "All" : f === "in" ? "Income" : "Expenses"}
+      <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+        <div style={{ fontSize: 12, color: "#8A9086" }}>Recent activity</div>
+        <div style={{ fontSize: 12, color: income - expenses >= 0 ? "#3A6B3E" : "#A6432F", fontWeight: 700 }}>Net {income - expenses >= 0 ? "+" : "−"}MVR {fmt(Math.abs(income - expenses))}</div>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+        {filters.map(([value, label]) => (
+          <button key={value} onClick={() => setFilter(value)} className="sans"
+            style={{ flex: "0 0 auto", background: filter === value ? "#1F3D2B" : "#fff", color: filter === value ? "#F7F5EF" : "#6B7268", border: "1px solid " + (filter === value ? "#1F3D2B" : "#E9E4D8"), borderRadius: 20, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+            {label}
           </button>
         ))}
       </div>
-      {filtered.map((a) => <ActivityRow key={`${a.kind}-${a.id}`} a={a} isAdmin={isAdmin} />)}
+      {groups.map((group) => (
+        <div key={group.label}>
+          <div className="sans" style={{ display: "flex", alignItems: "center", gap: 8, margin: "13px 2px 7px", fontSize: 10, fontWeight: 700, letterSpacing: 1.1, textTransform: "uppercase", color: "#8A9086" }}>
+            <span>{group.label}</span><span style={{ height: 1, flex: 1, background: "#E9E4D8" }} />
+          </div>
+          {group.rows.map((a) => <ActivityRow key={`${a.kind}-${a.id}`} a={a} isAdmin={isAdmin} />)}
+        </div>
+      ))}
       {filtered.length === 0 && <div className="sans" style={{ fontSize: 13, color: "#8A9086" }}>Nothing here yet.</div>}
     </>
   );
 }
-
 /* ---------- Reports (admin) ---------- */
 function Reports() {
   const [summary, setSummary] = useState(null);
