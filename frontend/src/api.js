@@ -21,6 +21,19 @@ async function request(path, options = {}) {
   return res.json();
 }
 
+async function upload(path, formData) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "X-Telegram-Init-Data": initData() },
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export const api = {
   me: () => request("/api/me"),
   myContributions: () => request("/api/me/contributions"),
@@ -61,6 +74,13 @@ export const api = {
     publicSummary: (month) => request(`/api/reports/public-summary${month ? `?month=${month}` : ""}`),
     publicExpenses: (month, categoryId) => request(`/api/reports/public-expenses?month=${encodeURIComponent(month)}&category_id=${encodeURIComponent(categoryId)}`),
     trend: (month) => request(`/api/reports/trend${month ? `?month=${month}` : ""}`),
+    sendDocument: (blob, filename, caption = "") => {
+      const form = new FormData();
+      form.append("file", blob, filename);
+      form.append("filename", filename);
+      if (caption) form.append("caption", caption);
+      return upload("/api/reports/send-document", form);
+    },
   },
 
   settings: {
@@ -93,6 +113,7 @@ export const api = {
     rejectContribution: (id, reason) => request(`/api/admin/pending/contributions/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
     health: () => request("/api/admin/health"),
     errors: () => request("/api/admin/errors"),
+    clearErrors: () => request("/api/admin/errors", { method: "DELETE" }),
     monthClosures: () => request("/api/admin/month-close"),
     closeMonth: (month, note) => request(`/api/admin/month-close/${month}`, { method: "POST", body: JSON.stringify({ note }) }),
     reopenMonth: (month) => request(`/api/admin/month-close/${month}`, { method: "DELETE" }),

@@ -17,6 +17,13 @@ function downloadText(filename, text, type = "text/plain") {
   setTimeout(() => URL.revokeObjectURL(url), 500);
 }
 
+async function sendExportToTelegram(blob, filename, caption) {
+  const result = await api.reports.sendDocument(blob, filename, caption);
+  const message = `✅ ${result.filename || filename} sent to your Telegram chat.`;
+  if (window.Telegram?.WebApp?.showAlert) window.Telegram.WebApp.showAlert(message);
+  else alert(message);
+}
+
 async function exportStatementCsv(member) {
   const st = await api.members.statement(member.id);
   const rows = [["Member ID", st.member.member_code], ["Member", st.member.name], [], ["Month","Status","Paid","Due","Reason"]];
@@ -29,7 +36,8 @@ async function exportStatementCsv(member) {
   for (const x of (st.balance_history || [])) rows.push([x.at,x.txn_id,x.kind,x.amount,x.balance]);
   const safeCsv = (v) => { let x=String(v ?? ""); if (/^[=+\-@]/.test(x)) x=`'${x}`; return `"${x.replace(/"/g,'""')}"`; };
   const csv = rows.map(r => r.map(safeCsv).join(",")).join("\n");
-  downloadText(`${st.member.member_code}-statement.csv`, csv, "text/csv;charset=utf-8");
+  const filename=`${st.member.member_code}-statement.csv`;
+  await sendExportToTelegram(new Blob([csv], {type:"text/csv;charset=utf-8"}), filename, `${st.member.member_code} · Member statement CSV`);
 }
 
 async function exportStatementPdf(member) {
@@ -44,7 +52,9 @@ async function exportStatementPdf(member) {
   for (const x of st.contributions) { if(y>280){doc.addPage();y=18;} doc.text(`${x.txn_id}  ${x.month}  MVR ${fmt(x.amount)}  ${x.ref_number||"No bank ref"}  ${x.status}`,14,y); y+=5; }
   if ((st.donations || []).length) { y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Donations",14,y); y+=6; doc.setFontSize(9); for(const x of st.donations){if(y>280){doc.addPage();y=18;}doc.text(`${x.txn_id}  ${x.transaction_month||""}  MVR ${fmt(x.amount)}  ${x.note||""}`,14,y);y+=5;} }
   y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Balance history",14,y); y+=6; doc.setFontSize(9); for(const x of (st.balance_history||[])){if(y>280){doc.addPage();y=18;}doc.text(`${String(x.at||"").slice(0,10)}  ${x.txn_id}  ${x.kind}  +MVR ${fmt(x.amount)}  Balance MVR ${fmt(x.balance)}`,14,y);y+=5;}
-  doc.save(`${st.member.member_code}-statement.pdf`);
+  const filename=`${st.member.member_code}-statement.pdf`;
+  const blob=doc.output("blob");
+  await sendExportToTelegram(blob, filename, `${st.member.member_code} · Member statement PDF`);
 }
 
 export default function App() {
@@ -1094,7 +1104,7 @@ function Reports({ setTab }) {
   const collectionPct = totalRequired > 0 ? Math.min(100, Math.round((allocatedContributions / totalRequired) * 100)) : 0;
   const activeCategories = (summary.byCategory || []).filter((c) => Number(c.spent || 0) > 0);
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
     const rows = [
       ["Fund report", monthLabel],
       ["Contribution cash received", summary.memberIncome],
@@ -1114,13 +1124,8 @@ function Reports({ setTab }) {
       const safe = String(v ?? "").replace(/"/g, '""');
       return `"${/^[=+\-@]/.test(safe) ? "'" + safe : safe}"`;
     }).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `fund-report-${month}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename=`fund-report-${month}.csv`;
+    await sendExportToTelegram(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename, `${monthLabel} · Fund report CSV`);
   };
 
   return (
@@ -2118,7 +2123,15 @@ function Settings({ admin }) {
         <SectionTitle>RECENT ERRORS {errors.length>0?`· ${errors.length}`:""}</SectionTitle>
         <div style={cardStyle}>
           {errors.length>0&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}>
-            <button onClick={()=>{if(confirm("Clear all logged errors?")) api.admin.clearErrors().then(()=>setErrors([])).catch(e=>setMessage(e.message));}} style={compactBtn}>Clear errors</button>
+            <button onClick={async()=>{
+              if(!confirm("Clear all logged errors?")) return;
+              try{
+                await api.admin.clearErrors();
+                const fresh=await api.admin.errors();
+                setErrors(fresh);
+                setMessage("Error log cleared");
+              }catch(e){setMessage(e.message)}
+            }} style={compactBtn}>Clear errors</button>
           </div>}
           {errors.slice(0,30).map(e=><div key={e.id} className="sans" style={{padding:"8px 0",borderBottom:"1px solid #F0EDE3",fontSize:11}}>
             <b>{e.source}</b><div style={{color:"#6B7268",marginTop:2}}>{e.message}</div>
