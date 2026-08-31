@@ -35,7 +35,7 @@ export default function App() {
   const [tab, setTab] = useState("overview");
   const [mode, setMode] = useState("member");
   const [mountedTabs, setMountedTabs] = useState(() => new Set(["overview"]));
-  const scrollRootRef = useRef(null);
+  const contentScrollRef = useRef(null);
 
   const isAdmin = !!me?.admin;
   const isMember = !!me?.member;
@@ -86,9 +86,9 @@ export default function App() {
   // All normal screens share one scroll root. Reset it when the user intentionally
   // changes the active tab/mode so every screen opens from a predictable position.
   useEffect(() => {
-    const root = scrollRootRef.current;
-    if (!root) return;
-    root.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    const scroller = contentScrollRef.current;
+    if (!scroller) return;
+    scroller.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [tab, mode]);
 
   if (loading) return <Shell><InitialAppSkeleton /></Shell>;
@@ -125,7 +125,7 @@ export default function App() {
   };
 
   return (
-    <Shell isAdmin={isAdmin} isMember={isMember} mode={mode} me={me} scrollRef={scrollRootRef}>
+    <Shell isAdmin={isAdmin} isMember={isMember} mode={mode} me={me}>
       {isAdmin && isMember && (
         <div style={{ flexShrink: 0, padding: "14px 20px 0", maxWidth: 480, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
           <div className="sans" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "var(--border)", borderRadius: 12, padding: 3 }}>
@@ -144,7 +144,7 @@ export default function App() {
           <button key={t} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "var(--primary-text)" : "var(--muted-2)", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
         ))}
       </div>
-      <main className="app-page-content" style={{ padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>
+      <main ref={contentScrollRef} className="app-page-content" style={{ padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>
         {tabs.filter((page) => mountedTabs.has(page)).map((page) => (
           <div
             key={`${mode}:${page}`}
@@ -192,7 +192,7 @@ function InitialAppSkeleton() {
       <div style={{ flexShrink: 0, display: "flex", gap: 18, padding: "18px 20px 0", maxWidth: 480, width: "100%", margin: "0 auto" }}>
         {[64, 58, 70, 58].map((width, i) => <SkeletonBlock key={i} style={{ width, height: 18 }} />)}
       </div>
-      <div style={{ padding: 20, width: "100%", maxWidth: 480, margin: "0 auto" }}>
+      <div className="app-page-content app-page-content--loading" style={{ padding: 20, width: "100%", maxWidth: 480, margin: "0 auto" }}>
         <PageSkeleton />
       </div>
     </>
@@ -203,9 +203,9 @@ function modeButton(active) {
   return { border: "none", borderRadius: 9, padding: "9px 10px", background: active ? "var(--primary)" : "transparent", color: active ? "var(--on-primary)" : "var(--muted)", fontSize: 12, fontWeight: 600, cursor: "pointer" };
 }
 
-function Shell({ children, isAdmin, isMember, mode, me, scrollRef }) {
+function Shell({ children, isAdmin, isMember, mode, me }) {
   return (
-    <div ref={scrollRef} className="app-scroll-root" style={{ fontFamily: "'Fraunces','Georgia',serif", background: "var(--bg)", color: "var(--text)" }}>
+    <div className="app-scroll-root" style={{ fontFamily: "'Fraunces','Georgia',serif", background: "var(--bg)", color: "var(--text)" }}>
       <div className="sans" style={{ flexShrink: 0, background: "var(--topbar)", color: "var(--on-topbar)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", fontSize: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}><ChevronLeft size={18} /><span style={{ fontWeight: 600 }}>Fund Bot</span></div>
         {me && <div style={{ opacity: 0.75, fontSize: 12 }}>{isAdmin && isMember ? (mode === "admin" ? "Admin View" : "My Account") : isAdmin ? "Admin" : "Member"}</div>}
