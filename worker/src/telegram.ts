@@ -82,6 +82,19 @@ function cleanAmount(value: unknown): number | null {
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
 
+function cleanDate(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+
+  let m = raw.match(/\b(20\d{2})[-\/.](0?[1-9]|1[0-2])[-\/.]([0-2]?\d|3[01])\b/);
+  if (m) return `${m[1]}-${String(Number(m[2])).padStart(2,"0")}-${String(Number(m[3])).padStart(2,"0")}`;
+
+  m = raw.match(/\b([0-2]?\d|3[01])[-\/.](0?[1-9]|1[0-2])[-\/.](20\d{2})\b/);
+  if (m) return `${m[3]}-${String(Number(m[2])).padStart(2,"0")}-${String(Number(m[1])).padStart(2,"0")}`;
+
+  return null;
+}
+
 function parseSlipText(text: string): { amount: number | null; ref: string | null } {
   const normalized = text.replace(/\r/g, "\n");
 
@@ -119,52 +132,81 @@ function parseSlipText(text: string): { amount: number | null; ref: string | nul
 }
 
 function parseModelJson(text: string): { amount: number | null; ref: string | null; date: string | null } {
-  const raw = String(text || "");
-  const match = raw.match(/\{[\s\S]*?\}/);
+  const raw = String(text || "").trim();
 
-  if (match) {
+  // 1) Try a complete JSON object if the model returned one.
+  const firstBrace = raw.indexOf("{");
+  const lastBrace = raw.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
     try {
-      const parsed: any = JSON.parse(match[0]);
+      const parsed: any = JSON.parse(raw.slice(firstBrace, lastBrace + 1));
       const amount = cleanAmount(
         parsed.amount ?? parsed.transfer_amount ?? parsed.transaction_amount ?? parsed.paid_amount
       );
       const ref = cleanRef(
         parsed.ref ??
-          parsed.reference ??
-          parsed.reference_number ??
-          parsed.transaction_id ??
-          parsed.transaction_reference ??
-          parsed.transaction_number ??
-          parsed.txn_id ??
-          parsed.txn_ref
+        parsed.reference ??
+        parsed.reference_number ??
+        parsed.transaction_id ??
+        parsed.transaction_reference ??
+        parsed.transaction_number ??
+        parsed.txn_id ??
+        parsed.txn_ref
       );
-      const d = typeof parsed.date === "string" ? parsed.date.trim() : "";
-      const date = /^20\d{2}-\d{2}-\d{2}$/.test(d) ? d : null;
-      return { amount, ref, date };
+      const date = cleanDate(parsed.date ?? parsed.transaction_date);
+      if (amount !== null || ref || date) return { amount, ref, date };
     } catch {
-      // Vision models occasionally truncate JSON. Fall through to tolerant field extraction.
+      // Continue with tolerant parsing.
     }
   }
 
-  // Tolerant extraction for truncated/malformed JSON. Do not treat this as a system error.
-  const amountMatch = raw.match(/["']?(?:amount|transfer_amount|transaction_amount|paid_amount)["']?\s*:\s*["']?([^,"'}\n]+)/i);
-  const refMatch = raw.match(/["']?(?:ref|reference|reference_number|transaction_reference|transaction_id|transaction_number|txn_id|txn_ref)["']?\s*:\s*["']?([A-Z0-9\-_/]{4,})/i);
-  const dateMatch = raw.match(/["']?date["']?\s*:\s*["']?(20\d{2}-\d{2}-\d{2})/i);
+  // 2) Preferred non-JSON response:
+  // AMOUNT=40.00
+  // REF=BLAZ384307001924
+  // DATE=2026-08-31
+  const amountLine = raw.match(/(?:^|\n)\s*(?:AMOUNT|TRANSFER_AMOUNT|TRANSACTION_AMOUNT)\s*[:=]\s*([^\n]+)/i);
+  const refLine = raw.match(/(?:^|\n)\s*(?:REF|REFERENCE|REFERENCE_NUMBER|TRANSACTION_REFERENCE|TRANSACTION_ID)\s*[:=]\s*([^\n]+)/i);
+  const dateLine = raw.match(/(?:^|\n)\s*(?:DATE|TRANSACTION_DATE)\s*[:=]\s*([^\n]+)/i);
 
-  const amount = cleanAmount(amountMatch?.[1]);
-  const ref = cleanRef(refMatch?.[1]);
-  const date = dateMatch?.[1] || null;
+  let amount = cleanAmount(amountLine?.[1]);
+  let ref = cleanRef(refLine?.[1]);
+  let date = cleanDate(dateLine?.[1]);
 
-  if (amount !== null || ref) return { amount, ref, date };
+  // 3) Tolerate malformed/truncated JSON fields.
+  if (amount === null) {
+    const m = raw.match(/["']?(?:amount|transfer_amount|transaction_amount|paid_amount)["']?\s*:\s*["']?([^,"'}\n]+)/i);
+    amount = cleanAmount(m?.[1]);
+  }
+  if (!ref) {
+    const m = raw.match(/["']?(?:ref|reference|reference_number|transaction_reference|transaction_id|transaction_number|txn_id|txn_ref)["']?\s*:\s*["']?([A-Z0-9\-_/]{4,})/i);
+    ref = cleanRef(m?.[1]);
+  }
+  if (!date) {
+    const m = raw.match(/["']?(?:date|transaction_date)["']?\s*:\s*["']?([^,"'}\n]+)/i);
+    date = cleanDate(m?.[1]);
+  }
 
-  // Last fallback: parse any human-readable labels the model emitted.
+  // 4) Last fallback: parse human-readable labels in the response.
   const local = parseSlipText(raw);
-  const genericDate = raw.match(/\b(20\d{2})[-\/.](0[1-9]|1[0-2])[-\/.]([0-2]\d|3[01])\b/);
-  return {
-    amount: local.amount,
-    ref: local.ref,
-    date: genericDate ? `${genericDate[1]}-${genericDate[2]}-${genericDate[3]}` : null,
-  };
+  if (amount === null) amount = local.amount;
+  if (!ref) ref = local.ref;
+  if (!date) date = cleanDate(raw);
+
+  return { amount, ref, date };
+}
+
+function modelText(result: any): string {
+  const message = result?.choices?.[0]?.message;
+  const content = message?.content;
+  if (typeof content === "string" && content.trim()) return content;
+  if (Array.isArray(content)) {
+    const joined = content.map((x:any)=>typeof x==="string"?x:(x?.text||"")).filter(Boolean).join("\n");
+    if (joined.trim()) return joined;
+  }
+  if (typeof result?.response === "string") return result.response;
+  if (typeof result?.result === "string") return result.result;
+  if (typeof result?.description === "string") return result.description;
+  return "";
 }
 
 /** Encodes a Worker ArrayBuffer as a base64 data URL without spreading a large array. */
@@ -188,45 +230,54 @@ export async function ocrSlip(
   env: Env,
   imageBytes: ArrayBuffer,
   mime = "image/jpeg"
-): Promise<{ amount: number | null; ref: string | null; raw: string }> {
+): Promise<{
   let visionRaw = "";
 
-  try {
+  const runVision = async (retry = false) => {
+    const prompt = retry
+      ? "Read the bank transfer slip image. Reply with ONLY three lines: AMOUNT=<MVR transferred amount or null>\\nREF=<bank transaction/reference number or null>\\nDATE=<transaction date as YYYY-MM-DD or null>. Do not use account numbers, phone numbers, customer IDs, beneficiary IDs, or timestamps as REF."
+      : "Read this Maldivian bank transfer slip (commonly BML or MIB). Extract the actual transferred MVR amount, the BANK transaction/reference number, and transaction date. Reply ONLY as: AMOUNT=<number|null>\\nREF=<string|null>\\nDATE=<YYYY-MM-DD|null>. Do not explain anything. Never use account/card/phone/customer/beneficiary numbers as REF.";
+
     const result: any = await (env.AI as any).run(
       "@cf/google/gemma-4-26b-a4b-it" as any,
       {
         messages: [
           {
             role: "system",
-            content:
-              "You read bank transfer slip images accurately. Never invent text or values that are not visible. Return JSON only.",
+            content: "You are a precise bank-slip OCR extractor. Read only visible text. Never invent values.",
           },
-          {
-            role: "user",
-            content:
-              "Read this Maldivian bank transfer slip (commonly BML or MIB). Extract only the transferred amount in MVR, the BANK transaction/reference number, and transaction date if visible. Never use account/card/phone/customer/beneficiary IDs, timestamps, or the amount as the reference. Return exactly JSON: {\"amount\":number|null,\"ref\":string|null,\"date\":\"YYYY-MM-DD\"|null}.",
-          },
+          { role: "user", content: prompt },
         ],
         image: imageDataUrl(imageBytes, mime),
-        max_tokens: 120,
+        max_tokens: 90,
         temperature: 0,
+        chat_template_kwargs: {
+          enable_thinking: false,
+        },
       } as any
     );
 
-    visionRaw =
-      result?.choices?.[0]?.message?.content ||
-      result?.response ||
-      result?.result ||
-      result?.description ||
-      JSON.stringify(result);
+    const text = modelText(result);
+    if (text) visionRaw = text;
+    return parseModelJson(text);
+  };
 
-    const parsedVision = parseModelJson(String(visionRaw));
-    if (parsedVision.amount !== null || parsedVision.ref) {
-      return {
-        amount: parsedVision.amount,
-        ref: parsedVision.ref,
-        raw: JSON.stringify(parsedVision),
-      };
+  try {
+    const first = await runVision(false);
+    if (first.amount !== null && first.ref) {
+      return { amount: first.amount, ref: first.ref, raw: JSON.stringify(first) };
+    }
+
+    // Retry once when either critical field is missing. This is cheap compared with
+    // making the member resend a perfectly readable slip.
+    const second = await runVision(true);
+    const merged = {
+      amount: second.amount ?? first.amount,
+      ref: second.ref ?? first.ref,
+      date: second.date ?? first.date,
+    };
+    if (merged.amount !== null || merged.ref) {
+      return { amount: merged.amount, ref: merged.ref, raw: JSON.stringify(merged) };
     }
   } catch (err) {
     await safeLogError(env, "ocr.vision", err);
@@ -259,8 +310,7 @@ export async function ocrSlip(
   }
 
   const local = parseSlipText(ocrText);
-  const dateMatch = String(ocrText || visionRaw || "").match(/\b(20\d{2})[-\/.](0[1-9]|1[0-2])[-\/.]([0-2]\d|3[01])\b/);
-  const date = dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : null;
+  const date = cleanDate(String(ocrText || visionRaw || ""));
   return {
     amount: local.amount,
     ref: local.ref,
