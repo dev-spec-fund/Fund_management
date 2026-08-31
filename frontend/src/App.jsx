@@ -141,8 +141,9 @@ function Shell({ children, isAdmin, isMember, mode, me }) {
     <div style={{ fontFamily: "'Fraunces','Georgia',serif", background: "#F7F5EF", height: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column", color: "#1F2A22" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap');
-        html, body, #root { height: 100%; }
-        body { margin: 0; overflow: hidden; }
+        html, body, #root { height: 100%; width: 100%; max-width: 100%; overflow-x: hidden; }
+        *, *::before, *::after { box-sizing: border-box; }
+        body { margin: 0; overflow: hidden; overscroll-behavior-x: none; }
         .sans { font-family: 'Inter', sans-serif; }
       `}</style>
       <div className="sans" style={{ flexShrink: 0, background: "#17212B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", fontSize: 14 }}>
@@ -1525,8 +1526,8 @@ function Settings({ admin }) {
 /* ---------- Shared UI bits ---------- */
 function Modal({ title, onClose, action, children }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(31,42,34,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 }}>
-      <div style={{ background: "#F7F5EF", borderRadius: "18px 18px 0 0", padding: 22, width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, width: "100%", maxWidth: "100vw", overflow: "hidden", background: "rgba(31,42,34,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50, boxSizing: "border-box" }}>
+      <div style={{ background: "#F7F5EF", borderRadius: "18px 18px 0 0", padding: 22, width: "100%", maxWidth: 480, maxHeight: "85dvh", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box", overscrollBehavior: "contain", touchAction: "pan-y" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div style={{ fontSize: 18, fontWeight: 600 }}>{title}</div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
