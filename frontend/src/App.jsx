@@ -513,7 +513,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   const [showRejected, setShowRejected] = useState(false);
   const [form, setForm] = useState({ name: member.name, phone: member.phone, monthly_amount: member.monthly_amount });
 
-  useEffect(() => { api.members.get(member.id).then(setDetail).catch(() => {}); }, [member.id]);
+  useEffect(() => { api.members.statement(member.id).then(setDetail).catch(() => {}); }, [member.id]);
 
   const save = async () => {
     await api.members.update(member.id, form);
