@@ -56,6 +56,10 @@ export async function ensureOperationalSchema(env: Env) {
     note TEXT
   )`).run();
 
+  await addColumn(env, "admins", "active", "INTEGER NOT NULL DEFAULT 1");
+  await addColumn(env, "admins", "deactivated_at", "TEXT");
+  await addColumn(env, "admins", "deactivated_by", "INTEGER REFERENCES admins(id)");
+
   await addColumn(env, "contributions", "bank_date", "TEXT");
   await addColumn(env, "contributions", "corrected_by", "INTEGER REFERENCES admins(id)");
   await addColumn(env, "contributions", "corrected_at", "TEXT");
@@ -63,6 +67,7 @@ export async function ensureOperationalSchema(env: Env) {
   await addColumn(env, "contributions", "voided_at", "TEXT");
   await addColumn(env, "contributions", "void_reason", "TEXT");
 
+  await addColumn(env, "donations", "member_id", "INTEGER REFERENCES members(id)");
   await addColumn(env, "donations", "transaction_month", "TEXT");
   await addColumn(env, "donations", "status", "TEXT NOT NULL DEFAULT 'active'");
   await addColumn(env, "donations", "voided_by", "INTEGER REFERENCES admins(id)");

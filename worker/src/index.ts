@@ -14,7 +14,12 @@ import { ensureOperationalSchema, safeLogError } from "./ops";
 
 const app = new Hono<AppEnv>();
 
-app.use("/api/*", cors());
+app.use("/api/*", cors({
+  origin: ["https://fund-management.pages.dev", "http://localhost:5173", "http://127.0.0.1:5173"],
+  allowHeaders: ["Content-Type", "X-Telegram-Init-Data"],
+  allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  maxAge: 86400,
+}));
 
 app.onError(async (err, c) => {
   await safeLogError(c.env, `http:${c.req.method}:${c.req.path}`, err);
@@ -32,7 +37,13 @@ app.post("/telegram/webhook", async (c) => {
 
 // Mini App API — all routes require verified Telegram initData
 app.use("/api/*", telegramAuth);
-app.use("/api/*", async (c, next) => { await ensureOperationalSchema(c.env); await next(); });
+app.use("/api/*", async (c, next) => {
+  await ensureOperationalSchema(c.env);
+  const user=c.get("telegramUser");
+  const { consumeRateLimit } = await import("./ops");
+  if (!(await consumeRateLimit(c.env, "api", String(user?.id || "unknown"), 120, 60))) return c.json({error:"Too many requests"},429);
+  await next();
+});
 app.route("/api/members", membersRoute);
 app.route("/api/expenses", expensesRoute);
 app.route("/api/donations", donationsRoute);

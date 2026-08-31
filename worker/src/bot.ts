@@ -23,7 +23,8 @@ import {
 } from "./db";
 import { adminCan, consumeRateLimit, duplicateSlip, ensureOperationalSchema, requireOpenMonth, safeLogError } from "./ops";
 
-const MINI_APP_URL = "https://fund-management.pages.dev";
+const DEFAULT_MINI_APP_URL = "https://fund-management.pages.dev";
+async function miniAppUrl(env: Env) { return (await getSetting(env, "mini_app_url")) || DEFAULT_MINI_APP_URL; }
 
 function esc(value: unknown) {
   return String(value ?? "")
@@ -62,7 +63,7 @@ function parseCaption(caption: string): {
 }
 
 async function notifyAdmins(env: Env, text: string, extra: Record<string, unknown> = {}) {
-  const admins = await env.DB.prepare("SELECT telegram_id FROM admins").all<{ telegram_id: string }>();
+  const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND role IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
   for (const a of admins.results) await sendMessage(env, a.telegram_id, text, extra);
 }
 
@@ -72,7 +73,7 @@ async function notifyAdminsWithPhoto(
   caption: string,
   extra: Record<string, unknown> = {}
 ) {
-  const admins = await env.DB.prepare("SELECT telegram_id FROM admins").all<{ telegram_id: string }>();
+  const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND role IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
   for (const a of admins.results) await sendPhoto(env, a.telegram_id, photoFileId, caption, extra);
 }
 
@@ -114,7 +115,7 @@ async function handleMessage(env: Env, message: any) {
         env,
         chatId,
         `Welcome to the fund bot! 👋\n\nSend a photo of your bank transfer slip to submit your monthly contribution.\nCaption examples:\n<code>250 2026-08</code>\n<code>250 BANKREF123 2026-08</code>\n\nUse /mybalance to check your status, /history for past payments.`,
-        { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: MINI_APP_URL } }]] } }
+        { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: await miniAppUrl(env) } }]] } }
       );
     }
 
@@ -128,7 +129,7 @@ async function handleMessage(env: Env, message: any) {
           reply_markup: {
             inline_keyboard: [
               [{ text: "➕ Register Myself as Member", callback_data: "self_register_member" }],
-              [{ text: "Open Fund App", web_app: { url: MINI_APP_URL } }],
+              [{ text: "Open Fund App", web_app: { url: await miniAppUrl(env) } }],
             ],
           },
         }
@@ -142,7 +143,7 @@ async function handleMessage(env: Env, message: any) {
       const member = await env.DB.prepare("SELECT * FROM members WHERE telegram_id = ?").bind(telegramId).first<any>();
       if (member) {
         return sendMessage(env, chatId, `✅ You are registered as ${esc(member.member_code)}.`, {
-          reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: MINI_APP_URL } }]] },
+          reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: await miniAppUrl(env) } }]] },
         });
       }
     }
@@ -173,17 +174,13 @@ async function handleMessage(env: Env, message: any) {
     const member = await env.DB.prepare("SELECT * FROM members WHERE telegram_id = ?").bind(telegramId).first<any>();
     if (!member) return sendMessage(env, chatId, "You're not registered as a member yet. Contact an admin.");
     const month = currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");
-    const paid = await env.DB.prepare(
-      "SELECT * FROM contributions WHERE member_id = ? AND month = ? AND status = 'approved'"
-    ).bind(member.id, month).first();
-    return sendMessage(
-      env,
-      chatId,
-      `Member ID: ${esc(member.member_code)}\n` +
-        (paid
-          ? `✅ You're paid for ${month}.`
-          : `⏳ No approved contribution found for ${month}. Monthly amount: MVR ${member.monthly_amount}.`)
-    );
+    const paidRow = await env.DB.prepare(
+      "SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE member_id = ? AND month = ? AND status = 'approved'"
+    ).bind(member.id, month).first<any>();
+    const exemption = await env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(member.id,month).first<any>();
+    const paid = Number(paidRow?.total || 0); const due = Math.max(0, Number(member.monthly_amount)-paid);
+    const status = exemption ? `✅ Exempt for ${month}.` : paid<=0 ? `⏳ Unpaid for ${month}. Due: MVR ${member.monthly_amount}.` : due>0.004 ? `🟡 Partial for ${month}: MVR ${paid} paid, MVR ${due.toFixed(2)} due.` : `✅ Paid for ${month}.`;
+    return sendMessage(env, chatId, `Member ID: ${esc(member.member_code)}\n${status}`);
   }
 
   if (text === "/history") {
@@ -224,8 +221,8 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
     const amount = Number(ocr.amount || 0);
     if (amount <= 0) return sendMessage(env, chatId, "I couldn't read the expense amount. Please add/edit this expense in the Fund App.");
     const threshold = Number(await getSetting(env, "expense_approval_threshold")) || 5000;
-    const adminCount = await env.DB.prepare("SELECT COUNT(*) n FROM admins").first<{n:number}>();
-    const needsApproval = amount >= threshold && Number(adminCount?.n || 0) > 1;
+    const approvers = await env.DB.prepare("SELECT COUNT(*) n FROM admins WHERE id != ? AND COALESCE(active,1)=1 AND role IN ('owner','super_admin','treasurer')").bind(admin.id).first<{n:number}>();
+    const needsApproval = amount >= threshold && Number(approvers?.n || 0) > 0;
     const txnId = await generateTxnId(env, "E");
     const r = await env.DB.prepare(`INSERT INTO expenses
       (txn_id, description, amount, receipt_file_id, logged_by, transaction_month, status, approval_required, approved_by, approved_at)
@@ -300,7 +297,7 @@ Logged by: ${esc(admin.name)}`;
           { text: "✅ Approve", callback_data: `approve:${contributionId}` },
           { text: "❌ Reject", callback_data: `reject:${contributionId}` },
         ],
-        [{ text: "✏️ Review / Correct OCR", web_app: { url: `${MINI_APP_URL}?review=contribution&id=${contributionId}` } }]
+        [{ text: "✏️ Review / Correct OCR", web_app: { url: `${await miniAppUrl(env)}?review=contribution&id=${contributionId}` } }]
       ],
     },
   });
@@ -340,6 +337,7 @@ async function handleCallback(env: Env, callback: any) {
   }
 
   if (action === "member_create" || action === "member_link" || action === "member_reject" || action === "member_approve") {
+    if (!adminCan(admin, "finance")) return answerCallback(env, callback.id, "Treasurer or Super Admin required.");
     await ensureMemberRegistrationTable(env);
     const requestId = Number(parts[1]);
     const request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE id = ?").bind(requestId).first<any>();
@@ -384,12 +382,12 @@ async function handleCallback(env: Env, callback: any) {
     ).bind(admin.id, requestId).run();
     if (!reviewed.meta.changes) return answerCallback(env, callback.id, "Already reviewed.");
 
-    await logAudit(env, admin.id, action === "member_link" ? "link_member_registration" : "approve_member_registration", `${member.member_code} — ${member.name} (${request.telegram_id})`);
+    await logAudit(env, admin.id, action === "member_link" ? "member_linked" : "member_registration_approved", `${member.member_code} — ${member.name} (${request.telegram_id})`);
     await sendMessage(
       env,
       request.telegram_id,
       `✅ Your membership has been approved!\n\nMember ID: <b>${esc(member.member_code)}</b>\nName: ${esc(member.name)}\n\nYou can now submit contribution slips and use the Fund App.`,
-      { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: MINI_APP_URL } }]] } }
+      { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: await miniAppUrl(env) } }]] } }
     );
     await finishRegistrationMessage(env, callback, `${callback.message.caption || callback.message.text}\n\n✅ Approved by ${esc(admin.name)}\nMember ID: ${esc(member.member_code)}`);
     return answerCallback(env, callback.id, `Registered as ${member.member_code}`);
@@ -424,6 +422,7 @@ async function handleCallback(env: Env, callback: any) {
   }
 
   if (action !== "approve" && action !== "reject") return answerCallback(env, callback.id, "Unknown action.");
+  if (!adminCan(admin, "finance")) return answerCallback(env, callback.id, "Treasurer or Super Admin required.");
 
   const contributionId = Number(parts[1]);
   const contribution = await env.DB.prepare("SELECT * FROM contributions WHERE id = ?").bind(contributionId).first<any>();
@@ -438,7 +437,7 @@ async function handleCallback(env: Env, callback: any) {
       "UPDATE contributions SET status = 'approved', approved_by = ?, approved_at = datetime('now') WHERE id = ? AND status = 'pending'"
     ).bind(admin.id, contributionId).run();
     if (!changed.meta.changes) return answerCallback(env, callback.id, "Already reviewed.");
-    await logAudit(env, admin.id, "approve_payment", `${contribution.txn_id} approved`);
+    await logAudit(env, admin.id, "contribution_approved", `${contribution.txn_id} approved`);
     const member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(contribution.member_id).first<any>();
     if (member?.telegram_id) await sendMessage(env, member.telegram_id, `✅ Your MVR ${contribution.amount} contribution for ${contribution.month} was approved. Thank you!`);
     const previous = callback.message.caption || callback.message.text || "Contribution";
@@ -450,7 +449,7 @@ async function handleCallback(env: Env, callback: any) {
     "UPDATE contributions SET status = 'rejected', approved_by = ?, approved_at = datetime('now') WHERE id = ? AND status = 'pending'"
   ).bind(admin.id, contributionId).run();
   if (!changed.meta.changes) return answerCallback(env, callback.id, "Already reviewed.");
-  await logAudit(env, admin.id, "reject_payment", `${contribution.txn_id} rejected`);
+  await logAudit(env, admin.id, "contribution_rejected", `${contribution.txn_id} rejected`);
   const member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(contribution.member_id).first<any>();
   if (member?.telegram_id) await sendMessage(env, member.telegram_id, `❌ Your slip for ${contribution.month} was rejected. Please check the amount/reference and resend.`);
   const previous = callback.message.caption || callback.message.text || "Contribution";

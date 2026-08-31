@@ -7,7 +7,7 @@ import { api } from "./api";
 import { jsPDF } from "jspdf";
 
 const fmt = (n) => Number(n || 0).toLocaleString();
-const currentMonthValue = () => new Date().toISOString().slice(0, 7);
+const currentMonthValue = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Indian/Maldives", year: "numeric", month: "2-digit" }).format(new Date());
 
 function downloadText(filename, text, type = "text/plain") {
   const blob = new Blob([text], { type });
@@ -26,7 +26,8 @@ async function exportStatementCsv(member) {
   for (const x of (st.donations || [])) rows.push([x.txn_id,x.transaction_month||"",x.amount,x.note||"",x.created_at]);
   rows.push([], ["Balance date","Transaction","Type","Amount","Running balance"]);
   for (const x of (st.balance_history || [])) rows.push([x.at,x.txn_id,x.kind,x.amount,x.balance]);
-  const csv = rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const safeCsv = (v) => { let x=String(v ?? ""); if (/^[=+\-@]/.test(x)) x=`'${x}`; return `"${x.replace(/"/g,'""')}"`; };
+  const csv = rows.map(r => r.map(safeCsv).join(",")).join("\n");
   downloadText(`${st.member.member_code}-statement.csv`, csv, "text/csv;charset=utf-8");
 }
 

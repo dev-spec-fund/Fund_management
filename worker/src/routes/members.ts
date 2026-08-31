@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance } from "../auth";
-import { logAudit, generateMemberCode } from "../db";
+import { logAudit, generateMemberCode, currentMonth } from "../db";
 import { auditEntity, ensureOperationalSchema, findDuplicateMembers, requireOpenMonth } from "../ops";
+import { boundedText, flag, money, telegramId, validMonth } from "../validation";
 
 export const membersRoute = new Hono<AppEnv>();
 
@@ -25,7 +26,8 @@ membersRoute.get("/:id", requireAdmin, async (c) => {
 
 membersRoute.get("/:id/monthly-status", requireAdmin, async (c) => {
   const id = Number(c.req.param("id"));
-  const month = c.req.query("month") || new Date().toISOString().slice(0, 7);
+  const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
+  if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
   const member = await c.env.DB.prepare("SELECT id,monthly_amount FROM members WHERE id=?").bind(id).first<any>();
   if (!member) return c.json({error:"Not found"},404);
   const ex = await c.env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(id,month).first<any>();
@@ -43,14 +45,14 @@ membersRoute.get("/:id/statement", requireAdmin, async (c) => {
   const contributions = await c.env.DB.prepare(`SELECT txn_id,amount,month,ref_number,status,submitted_at,approved_at FROM contributions WHERE member_id=? ORDER BY month,submitted_at`).bind(id).all<any>();
   const exemptions = await c.env.DB.prepare("SELECT month,reason,created_at FROM exemptions WHERE member_id=? ORDER BY month").bind(id).all<any>();
   const donations = await c.env.DB.prepare(`SELECT txn_id,donor_name,amount,note,transaction_month,status,created_at FROM donations
-    WHERE COALESCE(status,'active')='active' AND lower(trim(donor_name))=lower(trim(?)) ORDER BY created_at`).bind(member.name).all<any>();
+    WHERE COALESCE(status,'active')='active' AND member_id=? ORDER BY created_at`).bind(id).all<any>();
   const approved = contributions.results.filter((x:any)=>x.status==='approved');
   const balanceItems=[...approved.map((r:any)=>({at:r.approved_at||r.submitted_at,txn_id:r.txn_id,amount:Number(r.amount||0),kind:'contribution'})),...donations.results.map((r:any)=>({at:r.created_at,txn_id:r.txn_id,amount:Number(r.amount||0),kind:'donation'}))].sort((a:any,b:any)=>String(a.at).localeCompare(String(b.at)));
   const balanceHistory:any[]=[];
   let running=0;
   for (const r of balanceItems) { running += Number(r.amount||0); balanceHistory.push({...r,balance:running}); }
-  const firstMonth = member.joined_at?.slice(0,7) || new Date().toISOString().slice(0,7);
-  const nowMonth = new Date().toISOString().slice(0,7);
+  const firstMonth = member.joined_at?.slice(0,7) || currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
+  const nowMonth = currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
   const months:string[]=[]; let [y,m]=firstMonth.split('-').map(Number); const [ey,em]=nowMonth.split('-').map(Number);
   while (y<ey || (y===ey && m<=em)) { months.push(`${y}-${String(m).padStart(2,'0')}`); m++; if(m>12){m=1;y++;} }
   const exSet = new Map(exemptions.results.map((x:any)=>[x.month,x]));
@@ -65,26 +67,30 @@ membersRoute.get("/:id/statement", requireAdmin, async (c) => {
 
 membersRoute.post("/", requireFinance, async (c) => {
   const admin = c.get("admin")!;
-  const body = await c.req.json<{ name: string; phone?: string; monthly_amount?: number; telegram_id?:string }>();
-  const duplicates = await findDuplicateMembers(c.env, body.name, body.phone, body.telegram_id);
+  const body = await c.req.json<any>();
+  const name=boundedText(body.name,120,true); const phone=boundedText(body.phone,40); const monthly=money(body.monthly_amount ?? 250,1000000); const tg=body.telegram_id ? telegramId(body.telegram_id) : null;
+  if(!name || monthly===null || (body.telegram_id && !tg)) return c.json({error:"Invalid member data"},400);
+  const duplicates = await findDuplicateMembers(c.env, name, phone, tg);
   if (duplicates.length) return c.json({error:"Possible duplicate member",duplicates},409);
   const memberCode = await generateMemberCode(c.env);
   const res = await c.env.DB.prepare(
     "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount) VALUES (?, ?, ?, ?, ?)"
-  ).bind(memberCode, body.telegram_id || null, body.name.trim(), body.phone || null, body.monthly_amount || 250).run();
+  ).bind(memberCode, tg, name, phone || null, monthly).run();
   await auditEntity(c.env, admin.id, "member_created", "member", Number(res.meta.last_row_id), null, {member_code:memberCode,...body});
   return c.json({ id: res.meta.last_row_id, member_code: memberCode }, 201);
 });
 
 membersRoute.patch("/:id", requireFinance, async (c) => {
   const admin = c.get("admin")!; const id = Number(c.req.param("id"));
-  const body = await c.req.json<{ name?: string; phone?: string; monthly_amount?: number; active?: number; telegram_id?:string|null }>();
+  const body = await c.req.json<any>();
   const before = await c.env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(id).first<any>();
   if (!before) return c.json({ error: "Not found" }, 404);
-  const duplicates = await findDuplicateMembers(c.env, body.name ?? before.name, body.phone ?? before.phone, body.telegram_id ?? before.telegram_id, id);
+  const name=boundedText(body.name ?? before.name,120,true); const phone=boundedText(body.phone ?? before.phone,40); const monthly=money(body.monthly_amount ?? before.monthly_amount,1000000); const active=body.active===undefined?Number(before.active):flag(body.active); const tg=body.telegram_id===undefined?before.telegram_id:(body.telegram_id===null||body.telegram_id===''?null:telegramId(body.telegram_id));
+  if(!name || monthly===null || active===null || (body.telegram_id && !tg)) return c.json({error:"Invalid member data"},400);
+  const duplicates = await findDuplicateMembers(c.env, name, phone, tg, id);
   if (duplicates.length) return c.json({error:"Possible duplicate member",duplicates},409);
   await c.env.DB.prepare("UPDATE members SET name=?,phone=?,monthly_amount=?,active=?,telegram_id=? WHERE id=?")
-    .bind(body.name??before.name,body.phone??before.phone,body.monthly_amount??before.monthly_amount,body.active??before.active,body.telegram_id===undefined?before.telegram_id:body.telegram_id,id).run();
+    .bind(name,phone||null,monthly,active,tg,id).run();
   const after = await c.env.DB.prepare("SELECT * FROM members WHERE id=?").bind(id).first<any>();
   await auditEntity(c.env,admin.id,body.active!==undefined&&body.active!==before.active?(body.active?"member_reactivated":"member_deactivated"):"member_updated","member",id,before,after);
   return c.json({ok:true});

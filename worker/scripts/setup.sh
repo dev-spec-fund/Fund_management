@@ -12,10 +12,12 @@ set -euo pipefail
 WORKER_URL="${1:?Usage: setup.sh <worker-url> <telegram-id> <your-name>}"
 TELEGRAM_ID="${2:?Missing your Telegram ID}"
 NAME="${3:?Missing your name}"
+[[ "$TELEGRAM_ID" =~ ^[0-9]{1,20}$ ]] || { echo "Invalid Telegram ID" >&2; exit 1; }
+SQL_NAME=${NAME//\'/\'\'}
 
 echo "Seeding owner admin..."
 wrangler d1 execute kys-fund-db --remote --command \
-  "INSERT OR IGNORE INTO admins (telegram_id, name, role) VALUES ('${TELEGRAM_ID}', '${NAME}', 'owner');"
+  "INSERT OR IGNORE INTO admins (telegram_id, name, role) VALUES ('${TELEGRAM_ID}', '${SQL_NAME}', 'owner');"
 
 echo "Registering Telegram webhook at ${WORKER_URL}/telegram/webhook ..."
 BOT_TOKEN=$(wrangler secret list | grep -q TELEGRAM_BOT_TOKEN && echo "(set as secret — set curl call manually if needed)")

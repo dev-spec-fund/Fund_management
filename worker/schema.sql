@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS admins (
   telegram_id TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'treasurer',
+  active INTEGER NOT NULL DEFAULT 1,
+  deactivated_at TEXT,
+  deactivated_by INTEGER REFERENCES admins(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -68,6 +71,7 @@ CREATE TABLE IF NOT EXISTS donations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   txn_id TEXT UNIQUE,
   donor_name TEXT NOT NULL,
+  member_id INTEGER REFERENCES members(id),
   amount REAL NOT NULL,
   note TEXT,
   slip_file_id TEXT,

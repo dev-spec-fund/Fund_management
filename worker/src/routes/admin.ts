@@ -5,6 +5,7 @@ import { auditEntity, duplicateSlip, ensureOperationalSchema, requireOpenMonth, 
 import { currentMonth, getSetting, generateMemberCode } from "../db";
 import { findDuplicateMembers } from "../ops";
 import { sendMessage } from "../telegram";
+import { money, validDate, validMonth, boundedText } from "../validation";
 
 export const adminRoute = new Hono<AppEnv>();
 
@@ -54,8 +55,9 @@ adminRoute.patch('/pending/contributions/:id', requireFinance, async c => {
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const body=await c.req.json<{amount?:number;ref_number?:string|null;bank_date?:string|null;month?:string}>();
   const before=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
   if(!before) return c.json({error:'Not found'},404); if(before.status!=='pending') return c.json({error:`Already ${before.status}`},409);
-  const month=body.month??before.month; try{await requireOpenMonth(c.env,month)}catch(e:any){return c.json({error:e.message},409)}
-  const amount=Number(body.amount??before.amount); const ref=body.ref_number===undefined?before.ref_number:body.ref_number; const bankDate=body.bank_date===undefined?before.bank_date:body.bank_date;
+  const month=body.month??before.month; if(!validMonth(month)) return c.json({error:'Month must use YYYY-MM'},400); try{await requireOpenMonth(c.env,month)}catch(e:any){return c.json({error:e.message},409)}
+  const amount=money(body.amount??before.amount); const ref=body.ref_number===undefined?before.ref_number:boundedText(body.ref_number,120); const bankDate=body.bank_date===undefined?before.bank_date:body.bank_date;
+  if(amount===null || !validDate(bankDate)) return c.json({error:'Invalid amount or bank date'},400);
   const dup=await duplicateSlip(c.env,ref,amount,bankDate,id); if(dup) return c.json({error:`Duplicate slip matches ${dup.txn_id}`,duplicate:dup},409);
   await c.env.DB.prepare(`UPDATE contributions SET amount=?,ref_number=?,bank_date=?,month=?,corrected_by=?,corrected_at=datetime('now') WHERE id=? AND status='pending'`)
     .bind(amount,ref||null,bankDate||null,month,admin.id,id).run();
@@ -67,7 +69,7 @@ adminRoute.post('/pending/contributions/:id/approve', requireFinance, async c =>
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const row=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
   if(!row)return c.json({error:'Not found'},404); if(row.status!=='pending')return c.json({error:`Already ${row.status}`},409); try{await requireOpenMonth(c.env,row.month)}catch(e:any){return c.json({error:e.message},409)}
   const dup=await duplicateSlip(c.env,row.ref_number,Number(row.amount),row.bank_date,id); if(dup)return c.json({error:`Duplicate slip matches ${dup.txn_id}`,duplicate:dup},409);
-  const r=await c.env.DB.prepare("UPDATE contributions SET status='approved',approved_by=?,approved_at=datetime('now') WHERE id=? AND status='pending'").bind(admin.id,id).run(); if(!r.meta.changes)return c.json({error:'Already reviewed'},409);
+  const r=await c.env.DB.prepare("UPDATE contributions SET status='approved',approved_by=?,approved_at=datetime('now'),ocr_raw=NULL WHERE id=? AND status='pending'").bind(admin.id,id).run(); if(!r.meta.changes)return c.json({error:'Already reviewed'},409);
   await auditEntity(c.env,admin.id,'contribution_approved','contribution',id,row,{...row,status:'approved'}); return c.json({ok:true});
 });
 

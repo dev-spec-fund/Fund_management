@@ -58,7 +58,7 @@ export async function generateTxnId(env: Env, kind: "C" | "D" | "E"): Promise<st
 }
 
 export async function getAdminByTelegramId(env: Env, telegramId: string): Promise<Admin | null> {
-  const row = await env.DB.prepare("SELECT * FROM admins WHERE telegram_id = ?")
+  const row = await env.DB.prepare("SELECT * FROM admins WHERE telegram_id = ? AND COALESCE(active,1)=1")
     .bind(telegramId)
     .first<Admin>();
   return row ?? null;

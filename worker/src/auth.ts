@@ -51,6 +51,13 @@ export async function telegramAuth(c: Context<AppEnv>, next: Next) {
 
   params.delete("hash");
 
+  const authDate = Number(params.get("auth_date"));
+  const now = Math.floor(Date.now() / 1000);
+  const maxAgeSeconds = 3600;
+  if (!Number.isFinite(authDate) || authDate <= 0 || authDate > now + 60 || now - authDate > maxAgeSeconds) {
+    return c.json({ error: "Telegram authentication expired" }, 401);
+  }
+
   const encoder = new TextEncoder();
 
   // secret = HMAC_SHA256(key="WebAppData", message=bot_token)
@@ -99,13 +106,20 @@ export async function telegramAuth(c: Context<AppEnv>, next: Next) {
   const withoutEd25519Signature = allEntries.filter(([key]) => key !== "signature");
   const hashWithoutSignature = await computeHash(withoutEd25519Signature);
 
-  let valid = hashWithoutSignature === hash;
+  const safeEqual = (a: string, b: string) => {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return diff === 0;
+  };
+
+  let valid = safeEqual(hashWithoutSignature, hash);
 
   // Compatibility with client/library generations that include `signature`
   // in the bot-token HMAC data-check-string.
   if (!valid && params.has("signature")) {
     const hashWithSignature = await computeHash(allEntries);
-    valid = hashWithSignature === hash;
+    valid = safeEqual(hashWithSignature, hash);
   }
 
   if (!valid) return c.json({ error: "Invalid Telegram auth" }, 401);
@@ -146,5 +160,14 @@ export function requireFinance(c: Context<AppEnv>, next: Next) {
 export function requireSuperAdmin(c: Context<AppEnv>, next: Next) {
   const admin = c.get("admin");
   if (!adminCan(admin, "manage_admins")) return c.json({ error: "Super Admin access required" }, 403);
+  return next();
+}
+
+export async function requireMemberOrAdmin(c: Context<AppEnv>, next: Next) {
+  const admin = c.get("admin");
+  if (admin) return next();
+  const user = c.get("telegramUser");
+  const member = await c.env.DB.prepare("SELECT id FROM members WHERE telegram_id=? AND active=1 LIMIT 1").bind(String(user?.id || "")).first();
+  if (!member) return c.json({ error: "Approved member or admin access required" }, 403);
   return next();
 }
