@@ -69,15 +69,15 @@ export default function Reports({ setTab }) {
   return (
     <>
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#1F3D2B", letterSpacing: .4 }}>REPORTS</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary)", letterSpacing: .4 }}>REPORTS</div>
         <div style={{ display: "flex", gap: 6, position: "relative" }}>
-          <button onClick={async()=>{try{const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month,monthLabel,summary})}catch(e){alert(e.message)}}} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
-          <button onClick={exportCsv} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>
-          <button onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("#1F3D2B"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Add</button>
+          <button onClick={async()=>{try{const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month,monthLabel,summary})}catch(e){alert(e.message)}}} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
+          <button onClick={exportCsv} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>
+          <button onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Add</button>
           {showAdd && (
-            <div style={{ position: "absolute", right: 0, top: 38, zIndex: 5, width: 160, background: "#fff", border: "1px solid #E9E4D8", borderRadius: 10, padding: 5, boxShadow: "0 8px 24px rgba(31,61,43,.12)" }}>
-              <button onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "#3A6B3E", cursor: "pointer" }}>+ Log donation</button>
-              <button onClick={() => { setShowExpense(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "#A6432F", cursor: "pointer" }}>+ Log expense</button>
+            <div style={{ position: "absolute", right: 0, top: 38, zIndex: 5, width: 160, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 5, boxShadow: "0 8px 24px rgba(31,61,43,.12)" }}>
+              <button onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "var(--success)", cursor: "pointer" }}>+ Log donation</button>
+              <button onClick={() => { setShowExpense(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "var(--danger)", cursor: "pointer" }}>+ Log expense</button>
             </div>
           )}
         </div>
@@ -85,91 +85,91 @@ export default function Reports({ setTab }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "38px 1fr 38px", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <button onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
-        <div className="sans" style={{ textAlign: "center", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 10, padding: "9px 10px", fontSize: 14, fontWeight: 600 }}>{monthLabel}</div>
+        <div className="sans" style={{ textAlign: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 10px", fontSize: 14, fontWeight: 600 }}>{monthLabel}</div>
         <button onClick={() => shiftMonth(1)} aria-label="Next month" style={monthNavBtn()}><ChevronRight size={18} /></button>
       </div>
 
-      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>MONTHLY SUMMARY</div>
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 16, marginBottom: 14 }}>
-        <Row label="Contribution cash received" value={`+ MVR ${fmt(summary.memberIncome)}`} color="#3A6B3E" />
-        <Row label="Donations" value={`+ MVR ${fmt(summary.donationIncome)}`} color="#3A6B3E" />
-        <Row label="Expenses" value={`− MVR ${fmt(summary.expenses)}`} color="#A6432F" />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, paddingTop: 9, borderTop: "1px solid #E9E4D8" }}>
+      <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>MONTHLY SUMMARY</div>
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 14 }}>
+        <Row label="Contribution cash received" value={`+ MVR ${fmt(summary.memberIncome)}`} color="var(--success)" />
+        <Row label="Donations" value={`+ MVR ${fmt(summary.donationIncome)}`} color="var(--success)" />
+        <Row label="Expenses" value={`− MVR ${fmt(summary.expenses)}`} color="var(--danger)" />
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, paddingTop: 9, borderTop: "1px solid var(--border)" }}>
           <span className="sans" style={{ fontWeight: 700 }}>Net cash change</span>
-          <span style={{ fontWeight: 700, color: Number(summary.net) >= 0 ? "#3A6B3E" : "#A6432F" }}>{Number(summary.net) >= 0 ? "+" : "−"} MVR {fmt(Math.abs(Number(summary.net || 0)))}</span>
+          <span style={{ fontWeight: 700, color: Number(summary.net) >= 0 ? "var(--success)" : "var(--danger)" }}>{Number(summary.net) >= 0 ? "+" : "−"} MVR {fmt(Math.abs(Number(summary.net || 0)))}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 9 }}>
-          <span className="sans" style={{ color: "#6B7268" }}>Closing balance</span>
+          <span className="sans" style={{ color: "var(--muted)" }}>Closing balance</span>
           <span style={{ fontWeight: 700 }}>MVR {fmt(summary.fundBalance)}</span>
         </div>
       </div>
 
-      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>CONTRIBUTION COLLECTION</div>
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+      <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>CONTRIBUTION COLLECTION</div>
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, marginBottom: 12 }}>
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 7 }}>
           <span><b>MVR {fmt(allocatedContributions)}</b> / MVR {fmt(totalRequired)}</span>
           <strong>{collectionPct}%</strong>
         </div>
-        <div style={{ height: 7, borderRadius: 99, background: "#E9E4D8", overflow: "hidden" }}>
-          <div style={{ width: `${collectionPct}%`, height: "100%", background: "#3A6B3E", borderRadius: 99 }} />
+        <div style={{ height: 7, borderRadius: 99, background: "var(--border)", overflow: "hidden" }}>
+          <div style={{ width: `${collectionPct}%`, height: "100%", background: "var(--success)", borderRadius: 99 }} />
         </div>
-        <div className="sans" style={{ marginTop: 11, paddingTop: 9, borderTop: "1px solid #F0EDE3", fontSize: 11 }}>
+        <div className="sans" style={{ marginTop: 11, paddingTop: 9, borderTop: "1px solid var(--divider)", fontSize: 11 }}>
           <div style={{ display:"flex", justifyContent:"space-between", gap:10, marginBottom: advanceAllocated > 0 ? 6 : 0 }}>
-            <span style={{ color:"#6B7268" }}>Allocated to {monthLabel}</span>
+            <span style={{ color:"var(--muted)" }}>Allocated to {monthLabel}</span>
             <b>MVR {fmt(allocatedContributions)}</b>
           </div>
-          {advanceAllocated > 0 && <div style={{ display:"flex", justifyContent:"space-between", gap:10, color:"#3A6B3E" }}>
+          {advanceAllocated > 0 && <div style={{ display:"flex", justifyContent:"space-between", gap:10, color:"var(--success)" }}>
             <span>↳ Paid in advance</span>
             <b>MVR {fmt(advanceAllocated)}</b>
           </div>}
-          {currentMonthAllocated > 0 && advanceAllocated > 0 && <div style={{ display:"flex", justifyContent:"space-between", gap:10, color:"#8A9086", marginTop:5 }}>
+          {currentMonthAllocated > 0 && advanceAllocated > 0 && <div style={{ display:"flex", justifyContent:"space-between", gap:10, color:"var(--soft)", marginTop:5 }}>
             <span>↳ From cash received this month</span>
             <span>MVR {fmt(currentMonthAllocated)}</span>
           </div>}
         </div>
       </div>
-      <div className="sans" style={{fontSize:10,color:"#8A9086",lineHeight:1.45,margin:"-4px 2px 12px"}}>
+      <div className="sans" style={{fontSize:10,color:"var(--soft)",lineHeight:1.45,margin:"-4px 2px 12px"}}>
         Advance allocations count toward collection only. The cash was already added to the fund when it was originally received, so it is not counted again here.
       </div>
 
       {(summary.outstanding?.total || 0) > 0 && (
-        <button onClick={() => setTab?.("members")} style={{ width: "100%", background: "#FBF1EE", border: "1px solid #F2D6D0", borderRadius: 12, padding: "13px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", color: "#A6432F" }}>
+        <button onClick={() => setTab?.("members")} style={{ width: "100%", background: "var(--danger-bg-3)", border: "1px solid var(--danger-border)", borderRadius: 12, padding: "13px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", color: "var(--danger)" }}>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>Outstanding dues</span>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>MVR {fmt(summary.outstanding?.total)} · {members.length} members ›</span>
         </button>
       )}
 
-      <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>
+      <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>
         <span>CASH INCOME VS EXPENSES — 6 MONTHS</span>
         <span style={{ display: "flex", gap: 8, fontSize: 10, fontWeight: 500 }}>
-          <span>● Income</span><span style={{ color: "#A6432F" }}>● Expenses</span>
+          <span>● Income</span><span style={{ color: "var(--danger)" }}>● Expenses</span>
         </span>
       </div>
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "14px 12px", marginBottom: 16 }}>
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 12px", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 7, height: 112 }}>
           {trend.map((d, i) => {
             const label = new Intl.DateTimeFormat("en", { month: "short", timeZone: "UTC" }).format(new Date(`${d.month}-01T00:00:00Z`));
             return (
               <div key={i} title={`Income MVR ${fmt(d.income)} · Expenses MVR ${fmt(d.expense)}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                 <div style={{ width: "100%", display: "flex", gap: 2, alignItems: "flex-end", height: 84 }}>
-                  <div style={{ flex: 1, minHeight: Number(d.income) > 0 ? 2 : 0, height: `${(Number(d.income || 0) / maxVal) * 100}%`, background: "#3A6B3E", borderRadius: "3px 3px 0 0" }} />
-                  <div style={{ flex: 1, minHeight: Number(d.expense) > 0 ? 2 : 0, height: `${(Number(d.expense || 0) / maxVal) * 100}%`, background: "#A6432F", borderRadius: "3px 3px 0 0" }} />
+                  <div style={{ flex: 1, minHeight: Number(d.income) > 0 ? 2 : 0, height: `${(Number(d.income || 0) / maxVal) * 100}%`, background: "var(--success)", borderRadius: "3px 3px 0 0" }} />
+                  <div style={{ flex: 1, minHeight: Number(d.expense) > 0 ? 2 : 0, height: `${(Number(d.expense || 0) / maxVal) * 100}%`, background: "var(--danger)", borderRadius: "3px 3px 0 0" }} />
                 </div>
-                <div className="sans" style={{ fontSize: 10, color: "#8A9086" }}>{label}</div>
+                <div className="sans" style={{ fontSize: 10, color: "var(--soft)" }}>{label}</div>
               </div>
             );
           })}
         </div>
       </div>
 
-      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 7, fontWeight: 700 }}>EXPENSES BY CATEGORY</div>
+      <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>EXPENSES BY CATEGORY</div>
       {activeCategories.map((c, i) => (
-        <div key={i} style={{ display: "flex", justifyContent: "space-between", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "11px 14px", marginBottom: 7 }}>
+        <div key={i} style={{ display: "flex", justifyContent: "space-between", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "11px 14px", marginBottom: 7 }}>
           <span className="sans" style={{ fontSize: 13, fontWeight: 500 }}>{c.category}</span>
-          <span className="sans" style={{ fontSize: 13, fontWeight: 700, color: "#A6432F" }}>MVR {fmt(c.spent)}</span>
+          <span className="sans" style={{ fontSize: 13, fontWeight: 700, color: "var(--danger)" }}>MVR {fmt(c.spent)}</span>
         </div>
       ))}
-      {activeCategories.length === 0 && <div className="sans" style={{ fontSize: 12, color: "#8A9086", marginBottom: 8 }}>No expenses for this month.</div>}
+      {activeCategories.length === 0 && <div className="sans" style={{ fontSize: 12, color: "var(--soft)", marginBottom: 8 }}>No expenses for this month.</div>}
 
       {showExpense && <ExpenseModal onClose={() => setShowExpense(false)} onSaved={load} />}
       {showDonation && <DonationModal onClose={() => setShowDonation(false)} onSaved={load} />}
@@ -180,7 +180,7 @@ export default function Reports({ setTab }) {
 function Row({ label, value, color }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 8 }}>
-      <span className="sans" style={{ color: "#6B7268" }}>{label}</span>
+      <span className="sans" style={{ color: "var(--muted)" }}>{label}</span>
       <span style={{ fontWeight: 600, color }}>{value}</span>
     </div>
   );
@@ -201,9 +201,9 @@ function ExpenseModal({ onClose, onSaved }) {
   return (
     <Modal onClose={onClose} title="Log expense">
       <Field label="Description" value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
-      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 4 }}>Category</div>
+      <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Category</div>
       <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className="sans"
-        style={{ width: "100%", border: "1px solid #D9D3C4", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, background: "#fff" }}>
+        style={{ width: "100%", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, background: "var(--card)" }}>
         <option value="">Select category</option>
         {categories.filter((c)=>Number(c.active)!==0).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>

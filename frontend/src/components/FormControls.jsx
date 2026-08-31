@@ -52,7 +52,7 @@ export function Modal({ title, onClose, action, children }) {
       }}
     >
       <div style={{
-        background: "#F7F5EF",
+        background: "var(--bg)",
         borderRadius: "18px 18px 0 0",
         width: "100%",
         maxWidth: 480,
@@ -77,8 +77,8 @@ export function Modal({ title, onClose, action, children }) {
           alignItems: "center",
           minHeight: 62,
           paddingTop: 6,
-          background: "#F7F5EF",
-          borderBottom: "1px solid #EEE9DE",
+          background: "var(--bg)",
+          borderBottom: "1px solid var(--divider-2)",
           marginBottom: 14
         }}>
           <div style={{ fontSize: 18, fontWeight: 600 }}>{title}</div>
@@ -122,13 +122,13 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
       style={{
         width: "100%",
         minWidth: 0,
-        border: prefix ? 0 : `1.5px solid ${focused ? "#2F5A3D" : "#D9D3C4"}`,
+        border: prefix ? 0 : `1.5px solid ${focused ? "var(--focus)" : "var(--border-strong)"}`,
         outline: "none",
         borderRadius: prefix ? 0 : 10,
         padding: "10px 12px",
         fontSize: 14,
         boxSizing: "border-box",
-        background: focused ? "#F4F8F5" : "#fff",
+        background: focused ? "var(--focus-bg)" : "var(--card)",
         boxShadow: focused ? "0 0 0 2px rgba(47,90,61,0.10)" : "none",
         transition: "border-color .15s ease, background .15s ease, box-shadow .15s ease"
       }}
@@ -139,7 +139,7 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
     <div style={{ marginBottom: 12 }}>
       <div className="sans" style={{
         fontSize: 12,
-        color: focused ? "#1F3D2B" : "#6B7268",
+        color: focused ? "var(--primary)" : "var(--muted)",
         fontWeight: focused ? 700 : 400,
         marginBottom: 4,
         transition: "color .15s ease, font-weight .15s ease"
@@ -148,9 +148,9 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
         <div style={{
           display:"flex",
           alignItems:"center",
-          border:`1.5px solid ${focused ? "#2F5A3D" : "#D9D3C4"}`,
+          border:`1.5px solid ${focused ? "var(--focus)" : "var(--border-strong)"}`,
           borderRadius:10,
-          background: focused ? "#F4F8F5" : "#fff",
+          background: focused ? "var(--focus-bg)" : "var(--card)",
           overflow:"hidden",
           boxShadow: focused ? "0 0 0 2px rgba(47,90,61,0.10)" : "none",
           transition:"border-color .15s ease, background .15s ease, box-shadow .15s ease"
@@ -158,7 +158,7 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
           <span className="sans" style={{
             paddingLeft:12,
             fontSize:12,
-            color:focused ? "#2F5A3D" : "#8A9086",
+            color:focused ? "var(--focus)" : "var(--soft)",
             fontWeight:focused ? 700 : 400,
             flex:"0 0 auto"
           }}>{prefix}</span>

@@ -84,54 +84,54 @@ export default function Members({ isAdmin, admin }) {
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div>
-          <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "#1F3D2B" }}>Members</div>
-          <div className="sans" style={{ fontSize: 11, color: "#8A9086", marginTop: 2 }}>{activeMembers.length} active members</div>
+          <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "var(--primary)" }}>Members</div>
+          <div className="sans" style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{activeMembers.length} active members</div>
         </div>
-        <button onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={{ display: "flex", alignItems: "center", gap: 5, background: "#1F3D2B", color: "#F7F5EF", border: "none", borderRadius: 9, padding: "8px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+        <button onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={{ display: "flex", alignItems: "center", gap: 5, background: "var(--primary)", color: "var(--bg)", border: "none", borderRadius: 9, padding: "8px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
           <Plus size={15} /> Add
         </button>
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: 14, marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <button onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
-          <label className="sans" style={{ position: "relative", fontSize: 14, fontWeight: 700, color: "#1F3D2B", cursor: "pointer" }}>
+          <label className="sans" style={{ position: "relative", fontSize: 14, fontWeight: 700, color: "var(--primary)", cursor: "pointer" }}>
             {monthLabel}
             <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", cursor: "pointer" }} />
           </label>
           <button onClick={() => shiftMonth(1)} aria-label="Next month" style={monthNavBtn()}><ChevronRight size={18} /></button>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <div className="sans" style={{ fontSize: 18, fontWeight: 750, color: "#1F3D2B" }}>MVR {fmt(collected)} <span style={{ fontSize: 12, fontWeight: 500, color: "#8A9086" }}>/ {fmt(expected)}</span></div>
-          <div className="sans" style={{ fontSize: 12, fontWeight: 700, color: "#3A6B3E" }}>{percent}% collected</div>
+          <div className="sans" style={{ fontSize: 18, fontWeight: 750, color: "var(--primary)" }}>MVR {fmt(collected)} <span style={{ fontSize: 12, fontWeight: 500, color: "var(--soft)" }}>/ {fmt(expected)}</span></div>
+          <div className="sans" style={{ fontSize: 12, fontWeight: 700, color: "var(--success)" }}>{percent}% collected</div>
         </div>
-        <div style={{ height: 6, background: "#ECE8DE", borderRadius: 999, overflow: "hidden", margin: "8px 0 13px" }}><div style={{ width: `${percent}%`, height: "100%", background: "#3A6B3E", borderRadius: 999 }} /></div>
-        <div className="sans" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5, textAlign: "center", fontSize: 10, color: "#6B7268" }}>
-          <div><b style={{ display: "block", fontSize: 14, color: "#3A6B3E" }}>{counts.paid}</b>Paid</div>
-          <div><b style={{ display: "block", fontSize: 14, color: "#7A5A18" }}>{counts.partial}</b>Partial</div>
-          <div><b style={{ display: "block", fontSize: 14, color: "#A6432F" }}>{counts.unpaid}</b>Unpaid</div>
-          <div><b style={{ display: "block", fontSize: 14, color: "#51606A" }}>{counts.exempt}</b>Exempt</div>
+        <div style={{ height: 6, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", margin: "8px 0 13px" }}><div style={{ width: `${percent}%`, height: "100%", background: "var(--success)", borderRadius: 999 }} /></div>
+        <div className="sans" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5, textAlign: "center", fontSize: 10, color: "var(--muted)" }}>
+          <div><b style={{ display: "block", fontSize: 14, color: "var(--success)" }}>{counts.paid}</b>Paid</div>
+          <div><b style={{ display: "block", fontSize: 14, color: "var(--warning)" }}>{counts.partial}</b>Partial</div>
+          <div><b style={{ display: "block", fontSize: 14, color: "var(--danger)" }}>{counts.unpaid}</b>Unpaid</div>
+          <div><b style={{ display: "block", fontSize: 14, color: "var(--neutral-text)" }}>{counts.exempt}</b>Exempt</div>
         </div>
       </div>
 
       {financeAdmin && (counts.partial + counts.unpaid) > 0 && (
         <button onClick={sendOutstandingReminders} disabled={reminderBusy}
           className="sans"
-          style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, background:"#EAF1EE", color:"#1F3D2B", border:"1px solid #CFE0D6", borderRadius:11, padding:"10px 12px", fontSize:12, fontWeight:700, cursor:reminderBusy?"default":"pointer", opacity:reminderBusy?.7:1, marginBottom:8 }}>
+          style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, background:"var(--success-bg)", color:"var(--primary)", border:"1px solid var(--success-border)", borderRadius:11, padding:"10px 12px", fontSize:12, fontWeight:700, cursor:reminderBusy?"default":"pointer", opacity:reminderBusy?.7:1, marginBottom:8 }}>
           <Bell size={14} /> {reminderBusy ? "Sending reminders…" : `Remind ${counts.partial + counts.unpaid} outstanding ${counts.partial + counts.unpaid === 1 ? "member" : "members"}`}
         </button>
       )}
-      {reminderMessage && <div className="sans" style={{fontSize:10,color:reminderMessage.startsWith("Sent")?"#3A6B3E":"#A6432F",margin:"0 2px 10px"}}>{reminderMessage}</div>}
+      {reminderMessage && <div className="sans" style={{fontSize:10,color:reminderMessage.startsWith("Sent")?"var(--success)":"var(--danger)",margin:"0 2px 10px"}}>{reminderMessage}</div>}
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 3, marginBottom: 10 }}>
         {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt']].map(([key,label]) => (
-          <button key={key} onClick={() => setFilter(key)} className="sans" style={{ flexShrink: 0, border: filter === key ? "1px solid #1F3D2B" : "1px solid #DED8CA", background: filter === key ? "#1F3D2B" : "#fff", color: filter === key ? "#fff" : "#6B7268", borderRadius: 999, padding: "6px 10px", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>{label}</button>
+          <button key={key} onClick={() => setFilter(key)} className="sans" style={{ flexShrink: 0, border: filter === key ? "1px solid var(--primary)" : "1px solid var(--border-strong-2)", background: filter === key ? "var(--primary)" : "var(--card)", color: filter === key ? "var(--card)" : "var(--muted)", borderRadius: 999, padding: "6px 10px", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>{label}</button>
         ))}
       </div>
 
       <div style={{ position: "relative", marginBottom: 12 }}>
-        <Search size={16} color="#8A9086" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, ID or phone…" className="sans" style={{ width: "100%", border: "1px solid #D9D3C4", borderRadius: 10, padding: "10px 12px 10px 36px", fontSize: 13, boxSizing: "border-box", background: "#fff" }} />
+        <Search size={16} color="var(--soft)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, ID or phone…" className="sans" style={{ width: "100%", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px 10px 36px", fontSize: 13, boxSizing: "border-box", background: "var(--card)" }} />
       </div>
 
       {filtered.map((m) => {
@@ -141,25 +141,25 @@ export default function Members({ isAdmin, admin }) {
         const due = status === "exempt" || status === "inactive" ? 0 : Math.max(0, Number(m.monthly_amount) - paid);
         const memberPercent = Number(m.monthly_amount) > 0 ? Math.min(100, Math.round((paid / Number(m.monthly_amount)) * 100)) : 0;
         return (
-          <div key={m.id} onClick={() => setSelected(m)} style={{ background: m.active ? "#fff" : "#F1EFE7", opacity: m.active ? 1 : 0.65, border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 14px", marginBottom: 8, cursor: "pointer" }}>
+          <div key={m.id} onClick={() => setSelected(m)} style={{ background: m.active ? "var(--card)" : "var(--button-soft)", opacity: m.active ? 1 : 0.65, border: "1px solid var(--border)", borderRadius: 12, padding: "13px 14px", marginBottom: 8, cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="sans" style={{ fontSize: 14, fontWeight: 650, color: "#222" }}>{m.name} <span style={{ fontSize: 11, color: "#B5AE9C", fontWeight: 500 }}>{m.member_code}</span></div>
-                <div className="sans" style={{ fontSize: 11, color: "#8A9086", marginTop: 2 }}>{m.phone ? m.phone : "Phone not added"} · MVR {fmt(m.monthly_amount)}/mo</div>
+                <div className="sans" style={{ fontSize: 14, fontWeight: 650, color: "var(--text-strong)" }}>{m.name} <span style={{ fontSize: 11, color: "var(--soft-4)", fontWeight: 500 }}>{m.member_code}</span></div>
+                <div className="sans" style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{m.phone ? m.phone : "Phone not added"} · MVR {fmt(m.monthly_amount)}/mo</div>
               </div>
               <StatusBadge status={status} />
             </div>
             {m.active && status !== "exempt" && <>
-              <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 10, color: "#6B7268" }}>
+              <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 10, color: "var(--muted)" }}>
                 <span>MVR {fmt(paid)} of {fmt(m.monthly_amount)} paid</span>
-                <span style={{ color: due > 0 ? "#A6432F" : "#3A6B3E", fontWeight: 650 }}>{due > 0 ? `MVR ${fmt(due)} due` : "Complete"}</span>
+                <span style={{ color: due > 0 ? "var(--danger)" : "var(--success)", fontWeight: 650 }}>{due > 0 ? `MVR ${fmt(due)} due` : "Complete"}</span>
               </div>
-              <div style={{ height: 4, background: "#ECE8DE", borderRadius: 999, overflow: "hidden", marginTop: 6 }}><div style={{ width: `${memberPercent}%`, height: "100%", background: status === "partial" ? "#B58A3D" : "#3A6B3E" }} /></div>
+              <div style={{ height: 4, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", marginTop: 6 }}><div style={{ width: `${memberPercent}%`, height: "100%", background: status === "partial" ? "var(--warning-4)" : "var(--success)" }} /></div>
             </>}
           </div>
         );
       })}
-      {filtered.length === 0 && <div className="sans" style={{ textAlign: "center", fontSize: 13, color: "#8A9086", padding: "24px 0" }}>No members match this view.</div>}
+      {filtered.length === 0 && <div className="sans" style={{ textAlign: "center", fontSize: 13, color: "var(--soft)", padding: "24px 0" }}>No members match this view.</div>}
 
       {selected && <MemberPopup member={selected} month={month} canRemind={financeAdmin} onClose={() => setSelected(null)} onChanged={load} />}
       {showAdd && (
@@ -175,16 +175,16 @@ export default function Members({ isAdmin, admin }) {
 }
 
 function monthNavBtn() {
-  return { display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, background: "#F7F5EF", color: "#1F3D2B", border: "1px solid #E9E4D8", borderRadius: 9, cursor: "pointer" };
+  return { display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, background: "var(--bg)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: 9, cursor: "pointer" };
 }
 
 function StatusBadge({ status }) {
   const styles = {
-    paid: { label: "Paid", color: "#1F3D2B", bg: "#EAF1EE", border: "#CFE0D6" },
-    partial: { label: "Partial", color: "#7A5A18", bg: "#FFF6E5", border: "#EFD9A9" },
-    unpaid: { label: "Unpaid", color: "#A6432F", bg: "#FDEDE8", border: "#F2D6D0" },
-    exempt: { label: "Exempt", color: "#51606A", bg: "#EEF1F3", border: "#D7DEE3" },
-    inactive: { label: "Inactive", color: "#6B7268", bg: "#F1EFE7", border: "#DED8CA" },
+    paid: { label: "Paid", color: "var(--primary)", bg: "var(--success-bg)", border: "var(--success-border)" },
+    partial: { label: "Partial", color: "var(--warning)", bg: "var(--warning-bg)", border: "var(--warning-border)" },
+    unpaid: { label: "Unpaid", color: "var(--danger)", bg: "var(--danger-bg)", border: "var(--danger-border)" },
+    exempt: { label: "Exempt", color: "var(--neutral-text)", bg: "var(--surface-neutral-soft)", border: "var(--surface-neutral-3)" },
+    inactive: { label: "Inactive", color: "var(--muted)", bg: "var(--button-soft)", border: "var(--border-strong-2)" },
   };
   const s = styles[status] || styles.unpaid;
   return (
@@ -252,7 +252,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
     return /^[A-Z0-9\-_/]+$/i.test(v);
   };
 
-  const statusColor = currentLabel === "paid" ? "#3A6B3E" : currentLabel === "partial" ? "#7A5A18" : currentLabel === "exempt" ? "#51606A" : "#A6432F";
+  const statusColor = currentLabel === "paid" ? "var(--success)" : currentLabel === "partial" ? "var(--warning)" : currentLabel === "exempt" ? "var(--neutral-text)" : "var(--danger)";
   const monthLabel = (() => {
     try { return new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${month}-01T00:00:00Z`)); }
     catch { return month; }
@@ -262,24 +262,24 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
     const applied = allocationsFor(h.id);
     const refValid = looksLikeBankRef(h.ref_number);
     return (
-      <div key={h.id} style={{ background:"#fff", border:"1px solid #E9E4D8", borderRadius:12, padding:"12px 13px", marginBottom:8 }}>
+      <div key={h.id} style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:"12px 13px", marginBottom:8 }}>
         <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start"}}>
           <div style={{minWidth:0}}>
-            <div className="sans" style={{fontSize:13,fontWeight:700,color:"#1F3D2B"}}>{h.txn_id}</div>
-            <div className="sans" style={{fontSize:10,color:"#8A9086",marginTop:2,textTransform:"capitalize"}}>
+            <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--primary)"}}>{h.txn_id}</div>
+            <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:2,textTransform:"capitalize"}}>
               {h.status}{h.approved_at ? ` · ${formatLocalDateTime(h.approved_at)}` : h.submitted_at ? ` · ${formatLocalDateTime(h.submitted_at)}` : ""}
             </div>
           </div>
           <div className="sans" style={{fontSize:14,fontWeight:700,whiteSpace:"nowrap"}}>MVR {fmt(h.amount)}</div>
         </div>
 
-        <div className="sans" style={{fontSize:10,color:refValid?"#6B7268":"#A46B24",marginTop:8}}>
-          {refValid ? <>Bank ref: <b style={{color:"#1F3D2B"}}>{h.ref_number}</b></> : <>⚠ Reference needs review: <b>{h.ref_number || "not detected"}</b></>}
+        <div className="sans" style={{fontSize:10,color:refValid?"var(--muted)":"var(--warning-3)",marginTop:8}}>
+          {refValid ? <>Bank ref: <b style={{color:"var(--primary)"}}>{h.ref_number}</b></> : <>⚠ Reference needs review: <b>{h.ref_number || "not detected"}</b></>}
         </div>
 
         {applied.length > 0 && (
-          <div style={{background:"#F7F5EF",borderRadius:9,padding:"8px 9px",marginTop:8}}>
-            <div className="sans" style={{fontSize:9,fontWeight:700,color:"#6B7268",letterSpacing:.5,marginBottom:4}}>APPLIED TO</div>
+          <div style={{background:"var(--bg)",borderRadius:9,padding:"8px 9px",marginTop:8}}>
+            <div className="sans" style={{fontSize:9,fontWeight:700,color:"var(--muted)",letterSpacing:.5,marginBottom:4}}>APPLIED TO</div>
             {applied.map((a,i)=> {
               const monthly = Number(member.monthly_amount || 0);
               const label = Number(a.amount) + .005 >= monthly ? "Paid" : "Allocated";
@@ -292,7 +292,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
         )}
 
         {applied.length === 0 && h.status === "approved" && (
-          <div className="sans" style={{fontSize:9,color:"#9A9384",marginTop:7}}>
+          <div className="sans" style={{fontSize:9,color:"var(--soft-2)",marginTop:7}}>
             Legacy contribution · applied to {h.month}
           </div>
         )}
@@ -301,7 +301,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   };
 
   return (
-    <Modal onClose={onClose} title={member.name} action={<button onClick={() => setEditing(true)} style={{ background:"none", border:"none", cursor:"pointer" }}><Pencil size={17} color="#8A9086" /></button>}>
+    <Modal onClose={onClose} title={member.name} action={<button onClick={() => setEditing(true)} style={{ background:"none", border:"none", cursor:"pointer" }}><Pencil size={17} color="var(--soft)" /></button>}>
       {editing ? (
         <>
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -311,52 +311,52 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
         </>
       ) : (
         <>
-          <div className="sans" style={{fontSize:12,color:"#8A9086"}}>
+          <div className="sans" style={{fontSize:12,color:"var(--soft)"}}>
             {member.member_code} · {member.phone || "Phone not added"} · MVR {fmt(member.monthly_amount)}/mo
           </div>
-          <div className="sans" style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:member.telegram_id?"#3A6B3E":"#8A9086",marginTop:5}}>
+          <div className="sans" style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:member.telegram_id?"var(--success)":"var(--soft)",marginTop:5}}>
             <span>{member.telegram_id ? "●" : "○"}</span>{member.telegram_id ? "Telegram linked" : "Telegram not linked"}
           </div>
 
-          <div style={{background:"#F7F5EF",border:"1px solid #E9E4D8",borderRadius:12,padding:13,marginTop:14}}>
+          <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:12,padding:13,marginTop:14}}>
             <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
               <div>
-                <div style={{fontSize:10,color:"#8A9086"}}>{monthLabel}</div>
+                <div style={{fontSize:10,color:"var(--soft)"}}>{monthLabel}</div>
                 <div style={{fontSize:15,fontWeight:700,color:statusColor,textTransform:"capitalize",marginTop:2}}>{currentLabel}</div>
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:13,fontWeight:700}}>MVR {fmt(currentPaid)} / {fmt(monthlyAmount)}</div>
-                <div style={{fontSize:10,color:currentDue>0?"#A6432F":"#3A6B3E",marginTop:2}}>{currentDue>0?`MVR ${fmt(currentDue)} due`:"No amount due"}</div>
+                <div style={{fontSize:10,color:currentDue>0?"var(--danger)":"var(--success)",marginTop:2}}>{currentDue>0?`MVR ${fmt(currentDue)} due`:"No amount due"}</div>
               </div>
             </div>
           </div>
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:9,marginBottom:16}}>
-            <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:11,padding:11}}>
-              <div className="sans" style={{fontSize:9,color:"#8A9086"}}>TOTAL CONTRIBUTED</div>
+            <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:11,padding:11}}>
+              <div className="sans" style={{fontSize:9,color:"var(--soft)"}}>TOTAL CONTRIBUTED</div>
               <div className="sans" style={{fontSize:14,fontWeight:700,marginTop:3}}>MVR {fmt(totalContributed)}</div>
             </div>
-            <div style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:11,padding:11}}>
-              <div className="sans" style={{fontSize:9,color:"#8A9086"}}>CURRENT OUTSTANDING</div>
-              <div className="sans" style={{fontSize:14,fontWeight:700,color:currentDue>0?"#A6432F":"#3A6B3E",marginTop:3}}>MVR {fmt(currentDue)}</div>
+            <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:11,padding:11}}>
+              <div className="sans" style={{fontSize:9,color:"var(--soft)"}}>CURRENT OUTSTANDING</div>
+              <div className="sans" style={{fontSize:14,fontWeight:700,color:currentDue>0?"var(--danger)":"var(--success)",marginTop:3}}>MVR {fmt(currentDue)}</div>
             </div>
           </div>
 
-          <div className="sans" style={{fontSize:11,color:"#6B7268",marginBottom:8,fontWeight:700,letterSpacing:.5}}>CONTRIBUTION HISTORY</div>
+          <div className="sans" style={{fontSize:11,color:"var(--muted)",marginBottom:8,fontWeight:700,letterSpacing:.5}}>CONTRIBUTION HISTORY</div>
           {approved.map(contributionCard)}
-          {approved.length===0 && <div className="sans" style={{fontSize:12,color:"#8A9086",padding:"8px 0"}}>No approved contributions yet.</div>}
+          {approved.length===0 && <div className="sans" style={{fontSize:12,color:"var(--soft)",padding:"8px 0"}}>No approved contributions yet.</div>}
 
           {rejected.length>0 && (
             <>
               <button onClick={()=>setShowRejected(!showRejected)} className="sans"
-                style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",border:0,background:"transparent",padding:"10px 2px",color:"#8A9086",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",border:0,background:"transparent",padding:"10px 2px",color:"var(--soft)",fontSize:10,fontWeight:700,cursor:"pointer"}}>
                 <span>REJECTED / VOIDED · {rejected.length}</span><span>{showRejected?"▲":"▼"}</span>
               </button>
               {showRejected && rejected.map(contributionCard)}
             </>
           )}
 
-          <div className="sans" style={{fontSize:10,color:"#8A9086",fontWeight:700,marginTop:12,marginBottom:6}}>EXPORT STATEMENT</div>
+          <div className="sans" style={{fontSize:10,color:"var(--soft)",fontWeight:700,marginTop:12,marginBottom:6}}>EXPORT STATEMENT</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <button className="sans" onClick={async () => { const { exportStatementPdf } = await import("../utils/exports"); return exportStatementPdf(member); }} style={smallBtn()}>PDF</button>
             <button className="sans" onClick={async () => { const { exportStatementCsv } = await import("../utils/exports"); return exportStatementCsv(member); }} style={smallBtn()}>CSV</button>
@@ -369,20 +369,20 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
               const r=await api.admin.sendPaymentReminders({month,member_id:member.id});
               setReminderNote(r.sent ? "Reminder sent." : (r.reason || "No reminder sent."));
             }catch(e){setReminderNote(e.message)} finally{setReminding(false)}
-          }} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"#EAF1EE",color:"#1F3D2B",border:"1px solid #CFE0D6",borderRadius:10,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",marginTop:10}}>
+          }} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"var(--success-bg)",color:"var(--primary)",border:"1px solid var(--success-border)",borderRadius:10,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",marginTop:10}}>
             <Bell size={14}/>{reminding?"Sending…":"Send payment reminder"}
           </button>}
 
           {member.active && canRemind && currentDue <= 0 && (
-            <div className="sans" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"#F2F5F3",color:"#6B7268",border:"1px solid #E0E6E2",borderRadius:10,padding:10,fontSize:11,fontWeight:600,marginTop:10}}>
+            <div className="sans" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"var(--surface-cool)",color:"var(--muted)",border:"1px solid var(--surface-neutral-2)",borderRadius:10,padding:10,fontSize:11,fontWeight:600,marginTop:10}}>
               ✓ Paid — no reminder needed
             </div>
           )}
 
-          {reminderNote && <div className="sans" style={{fontSize:10,color:"#6B7268",marginTop:5,textAlign:"center"}}>{reminderNote}</div>}
+          {reminderNote && <div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5,textAlign:"center"}}>{reminderNote}</div>}
 
           <button onClick={toggleActive} className="sans"
-            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"none",color:member.active?"#A6432F":"#3A6B3E",border:"1px solid "+(member.active?"#F2D6D0":"#DDECD9"),borderRadius:10,padding:12,fontSize:13,fontWeight:600,cursor:"pointer",marginTop:12}}>
+            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"none",color:member.active?"var(--danger)":"var(--success)",border:"1px solid "+(member.active?"var(--danger-border)":"var(--success-bg-2)"),borderRadius:10,padding:12,fontSize:13,fontWeight:600,cursor:"pointer",marginTop:12}}>
             {member.active ? "Deactivate member" : "Reactivate member"}
           </button>
         </>

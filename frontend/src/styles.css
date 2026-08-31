@@ -1,5 +1,134 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap');
 
+:root {
+  color-scheme: light dark;
+  --bg: #F7F5EF;
+  --card: #FFFFFF;
+  --text: #1F2A22;
+  --text-strong: #222222;
+  --primary: #1F3D2B;
+  --topbar: #17212B;
+  --muted: #6B7268;
+  --muted-2: #7A8078;
+  --soft: #8A9086;
+  --soft-2: #9A9384;
+  --soft-3: #AAA493;
+  --soft-4: #B5AE9C;
+  --border: #E9E4D8;
+  --border-strong: #D9D3C4;
+  --border-strong-2: #DED8CA;
+  --border-2: #E2DDD0;
+  --divider: #F0EDE3;
+  --divider-2: #EEE9DE;
+  --divider-3: #F5F1E8;
+  --surface-2: #ECE8DE;
+  --skeleton: #E9E6DE;
+  --button-soft: #F1EFE7;
+  --toggle-off: #D8D4C8;
+  --surface-warm: #F3F0E7;
+  --focus-bg: #F4F8F5;
+  --surface-cool: #F2F5F3;
+  --surface-success-soft: #EEF4F0;
+  --surface-neutral-soft: #EEF1F3;
+  --surface-neutral: #EEF0F1;
+  --surface-neutral-2: #E0E6E2;
+  --surface-neutral-3: #D7DEE3;
+  --neutral-text: #51606A;
+  --neutral-text-2: #59645B;
+  --focus: #2F5A3D;
+  --success: #3A6B3E;
+  --success-strong: #315C35;
+  --success-bg: #EAF1EE;
+  --success-bg-2: #DDECD9;
+  --success-bg-3: #E3EBDD;
+  --success-border: #CFE0D6;
+  --success-border-2: #D3E3D9;
+  --danger: #A6432F;
+  --danger-strong: #8E3F2E;
+  --danger-bg: #FDEDE8;
+  --danger-bg-2: #FAECE8;
+  --danger-bg-3: #FBF1EE;
+  --danger-bg-4: #FFF7F3;
+  --danger-border: #F2D6D0;
+  --danger-border-2: #EFD5CF;
+  --danger-border-3: #E9CFC5;
+  --warning: #7A5A18;
+  --warning-2: #8A6B24;
+  --warning-3: #A46B24;
+  --warning-4: #B58A3D;
+  --warning-bg: #FFF6E5;
+  --warning-bg-2: #FFF7E8;
+  --warning-bg-3: #FBF4DF;
+  --warning-border: #EFD9A9;
+  --warning-border-2: #E8D7A8;
+  --accent: #C98A4B;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101511;
+    --card: #182019;
+    --text: #ECF1EC;
+    --text-strong: #F6F8F6;
+    --primary: #284B35;
+    --topbar: #0B1115;
+    --muted: #B0BAB0;
+    --muted-2: #9DA89E;
+    --soft: #929D93;
+    --soft-2: #858F86;
+    --soft-3: #768078;
+    --soft-4: #69736B;
+    --border: #303B32;
+    --border-strong: #3A473D;
+    --border-strong-2: #354137;
+    --border-2: #2C372E;
+    --divider: #273129;
+    --divider-2: #2B352D;
+    --divider-3: #222B24;
+    --surface-2: #202920;
+    --skeleton: #263029;
+    --button-soft: #222C24;
+    --toggle-off: #49534B;
+    --surface-warm: #252B22;
+    --focus-bg: #1C2A20;
+    --surface-cool: #1D2721;
+    --surface-success-soft: #1B2D20;
+    --surface-neutral-soft: #20282B;
+    --surface-neutral: #21292B;
+    --surface-neutral-2: #28322C;
+    --surface-neutral-3: #313A3E;
+    --neutral-text: #AAB6BD;
+    --neutral-text-2: #A8B2AA;
+    --focus: #7EBC8B;
+    --success: #7FBE82;
+    --success-strong: #8BCA8F;
+    --success-bg: #1D3223;
+    --success-bg-2: #223B27;
+    --success-bg-3: #26382A;
+    --success-border: #34553B;
+    --success-border-2: #3B6043;
+    --danger: #E28270;
+    --danger-strong: #EF9685;
+    --danger-bg: #38211E;
+    --danger-bg-2: #33201D;
+    --danger-bg-3: #30201E;
+    --danger-bg-4: #2B1E1B;
+    --danger-border: #5A332C;
+    --danger-border-2: #624038;
+    --danger-border-3: #573932;
+    --warning: #E0BE72;
+    --warning-2: #D6B56A;
+    --warning-3: #D5A95F;
+    --warning-4: #C9A45F;
+    --warning-bg: #302817;
+    --warning-bg-2: #2E2819;
+    --warning-bg-3: #2C281B;
+    --warning-border: #5A4822;
+    --warning-border-2: #594A28;
+    --accent: #D69A5B;
+  }
+}
+
 html, body, #root {
   height: 100%;
   width: 100%;
@@ -11,6 +140,8 @@ html, body, #root {
 
 body {
   margin: 0;
+  background: var(--bg);
+  color: var(--text);
   overflow: hidden;
   overscroll-behavior-x: none;
   -webkit-tap-highlight-color: transparent;
@@ -21,13 +152,16 @@ body {
 button, input, textarea, select {
   font: inherit;
   font-family: 'Inter', sans-serif !important;
+  color: var(--text);
 }
+
+input::placeholder, textarea::placeholder { color: var(--soft); opacity: 1; }
 button { -webkit-tap-highlight-color: transparent; }
 button:disabled { cursor: not-allowed !important; opacity: .55; }
 
 input:focus, textarea:focus, select:focus {
-  border-color: #2F5A3D !important;
-  background: #F4F8F5 !important;
+  border-color: var(--focus) !important;
+  background: var(--focus-bg) !important;
   box-shadow: 0 0 0 2px rgba(47,90,61,0.10) !important;
   outline: none !important;
 }
@@ -66,7 +200,7 @@ input:focus, textarea:focus, select:focus {
 .skeleton-block {
   position: relative;
   overflow: hidden;
-  background: #E9E6DE;
+  background: var(--skeleton);
   border-radius: 8px;
 }
 

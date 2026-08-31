@@ -30,12 +30,12 @@ export default function Meetings(){
   };
 
   const meetingLifecycle=(m)=>{
-    if(m.status==="cancelled") return {label:"Cancelled",color:"#A6432F",bg:"#FDEDE8"};
+    if(m.status==="cancelled") return {label:"Cancelled",color:"var(--danger)",bg:"var(--danger-bg)"};
     const now=new Date();
     const when=new Date(`${m.meeting_date}T${m.meeting_time||"00:00"}:00`);
-    if(!Number.isNaN(when.getTime()) && when.getTime()<now.getTime()) return {label:"Completed",color:"#51606A",bg:"#EEF0F1"};
-    if(!m.sent_at && m.status!=="sent") return {label:"Draft",color:"#6B7268",bg:"#F3F0E7"};
-    return {label:"Upcoming",color:"#315C35",bg:"#EAF1EE"};
+    if(!Number.isNaN(when.getTime()) && when.getTime()<now.getTime()) return {label:"Completed",color:"var(--neutral-text)",bg:"var(--surface-neutral)"};
+    if(!m.sent_at && m.status!=="sent") return {label:"Draft",color:"var(--muted)",bg:"var(--surface-warm)"};
+    return {label:"Upcoming",color:"var(--success-strong)",bg:"var(--success-bg)"};
   };
 
   const openDetails=async(m)=>{
@@ -132,17 +132,17 @@ export default function Meetings(){
 
   const group=(key,label,list,color)=>{
     const open=openGroups[key];
-    return <div style={{borderTop:"1px solid #F0EDE3",paddingTop:8,marginTop:8}}>
+    return <div style={{borderTop:"1px solid var(--divider)",paddingTop:8,marginTop:8}}>
       <button onClick={()=>setOpenGroups({...openGroups,[key]:!open})} className="sans"
         style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",border:0,background:"transparent",padding:"2px 0 6px",cursor:"pointer"}}>
         <span style={{fontSize:10,fontWeight:700,color,letterSpacing:.3}}>{label} · {list?.length||0}</span>
-        <span style={{fontSize:10,color:"#9A9384"}}>{open?"▲":"▼"}</span>
+        <span style={{fontSize:10,color:"var(--soft-2)"}}>{open?"▲":"▼"}</span>
       </button>
       {open&&((list||[]).length===0
-        ? <div className="sans" style={{fontSize:10,color:"#A7A195",paddingBottom:4}}>None</div>
-        : (list||[]).map(x=><div key={x.id} className="sans" style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11,padding:"6px 0",borderBottom:"1px solid #F5F1E8"}}>
+        ? <div className="sans" style={{fontSize:10,color:"var(--soft-3)",paddingBottom:4}}>None</div>
+        : (list||[]).map(x=><div key={x.id} className="sans" style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11,padding:"6px 0",borderBottom:"1px solid var(--divider-3)"}}>
             <span><b>{x.name}</b>{x.member_code?` · ${x.member_code}`:""}</span>
-            <span style={{color:"#9A9384",textAlign:"right"}}>
+            <span style={{color:"var(--soft-2)",textAlign:"right"}}>
               {x.responded_at?formatLocalDateTime(x.responded_at):x.telegram_id?"Telegram linked":"Not linked"}
             </span>
           </div>))}
@@ -159,23 +159,23 @@ export default function Meetings(){
     <MessageBanner>{message}</MessageBanner>
 
     {rows===null?<Center>Loading…</Center>:rows.length===0
-      ?<div className="sans" style={{background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:18,color:"#8A9086",fontSize:12}}>No meetings created yet.</div>
+      ?<div className="sans" style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:18,color:"var(--soft)",fontSize:12}}>No meetings created yet.</div>
       :rows.map(m=>{
         const answered=Number(m.going||0)+Number(m.maybe||0)+Number(m.declined||0);
         const status=meetingLifecycle(m);
-        return <div key={m.id} style={{background:"#fff",border:`1px solid ${status.label==="Cancelled"?"#EFD5CF":"#E9E4D8"}`,borderRadius:12,padding:14,marginBottom:10,opacity:status.label==="Cancelled"?.78:1}}>
+        return <div key={m.id} style={{background:"var(--card)",border:`1px solid ${status.label==="Cancelled"?"var(--danger-border-2)":"var(--border)"}`,borderRadius:12,padding:14,marginBottom:10,opacity:status.label==="Cancelled"?.78:1}}>
           <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
             <div style={{minWidth:0}}>
               <div style={{fontWeight:700,fontSize:15}}>{m.title}</div>
-              <div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:4}}>{fmtMeetingDateTime(m.meeting_date,m.meeting_time)}{m.venue?` · ${m.venue}`:""}</div>
+              <div className="sans" style={{fontSize:11,color:"var(--soft)",marginTop:4}}>{fmtMeetingDateTime(m.meeting_date,m.meeting_time)}{m.venue?` · ${m.venue}`:""}</div>
             </div>
             <span className="sans" style={{fontSize:10,padding:"5px 8px",height:"fit-content",borderRadius:99,background:status.bg,color:status.color}}>{status.label}</span>
           </div>
           <div className="sans" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginTop:12,textAlign:"center"}}>
-            <div><b>{m.going||0}</b><div style={{fontSize:9,color:"#8A9086"}}>Going</div></div>
-            <div><b>{m.maybe||0}</b><div style={{fontSize:9,color:"#8A9086"}}>Maybe</div></div>
-            <div><b>{m.declined||0}</b><div style={{fontSize:9,color:"#8A9086"}}>Declined</div></div>
-            <div><b>{answered}</b><div style={{fontSize:9,color:"#8A9086"}}>Responded</div></div>
+            <div><b>{m.going||0}</b><div style={{fontSize:9,color:"var(--soft)"}}>Going</div></div>
+            <div><b>{m.maybe||0}</b><div style={{fontSize:9,color:"var(--soft)"}}>Maybe</div></div>
+            <div><b>{m.declined||0}</b><div style={{fontSize:9,color:"var(--soft)"}}>Declined</div></div>
+            <div><b>{answered}</b><div style={{fontSize:9,color:"var(--soft)"}}>Responded</div></div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:status.label==="Cancelled"?"1fr":"1fr 1fr",gap:7,marginTop:12}}>
             <button onClick={()=>openDetails(m)} style={{...compactBtn,width:"100%",padding:"9px 10px"}}>View details</button>
@@ -189,10 +189,10 @@ export default function Meetings(){
       <Field label="Date" type="date" value={form.meeting_date} onChange={v=>setForm({...form,meeting_date:v})}/>
       <Field label="Time" type="time" value={form.meeting_time} onChange={v=>setForm({...form,meeting_time:v})}/>
       <Field label="Venue / location" value={form.venue} onChange={v=>setForm({...form,venue:v})}/>
-      <label className="sans" style={{display:"block",fontSize:11,color:"#6B7268",marginBottom:10}}>
+      <label className="sans" style={{display:"block",fontSize:11,color:"var(--muted)",marginBottom:10}}>
         <span style={{display:"block",marginBottom:5}}>Agenda / message</span>
         <textarea value={form.agenda} onChange={e=>setForm({...form,agenda:e.target.value})} rows={4}
-          style={{width:"100%",padding:"10px 11px",border:"1px solid #DED8CA",borderRadius:9,background:"#fff",fontSize:13,resize:"vertical"}}/>
+          style={{width:"100%",padding:"10px 11px",border:"1px solid var(--border-strong-2)",borderRadius:9,background:"var(--card)",fontSize:13,resize:"vertical"}}/>
       </label>
       <Field label="RSVP deadline (optional)" value={form.rsvp_deadline} onChange={v=>setForm({...form,rsvp_deadline:v})}/>
       <button disabled={busy} onClick={create} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:busy?.6:1}}>{busy?"Creating…":"Create meeting"}</button>
@@ -204,10 +204,10 @@ export default function Meetings(){
         <Field label="Date" type="date" value={form.meeting_date} onChange={v=>setForm({...form,meeting_date:v})}/>
         <Field label="Time" type="time" value={form.meeting_time} onChange={v=>setForm({...form,meeting_time:v})}/>
         <Field label="Venue / location" value={form.venue} onChange={v=>setForm({...form,venue:v})}/>
-        <label className="sans" style={{display:"block",fontSize:11,color:"#6B7268",marginBottom:10}}>
+        <label className="sans" style={{display:"block",fontSize:11,color:"var(--muted)",marginBottom:10}}>
           <span style={{display:"block",marginBottom:5}}>Agenda / message</span>
           <textarea value={form.agenda} onChange={e=>setForm({...form,agenda:e.target.value})} rows={4}
-            style={{width:"100%",padding:"10px 11px",border:"1px solid #DED8CA",borderRadius:9,background:"#fff",fontSize:13,resize:"vertical"}}/>
+            style={{width:"100%",padding:"10px 11px",border:"1px solid var(--border-strong-2)",borderRadius:9,background:"var(--card)",fontSize:13,resize:"vertical"}}/>
         </label>
         <Field label="RSVP deadline (optional)" value={form.rsvp_deadline} onChange={v=>setForm({...form,rsvp_deadline:v})}/>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -220,42 +220,42 @@ export default function Meetings(){
           const yes=details.responses?.yes||[],maybe=details.responses?.maybe||[],no=details.responses?.no||[],pending=details.responses?.pending||[];
           const total=details.total_members||0;
           return <>
-            <div style={{background:"#F7F5EF",borderRadius:11,padding:12}}>
+            <div style={{background:"var(--bg)",borderRadius:11,padding:12}}>
               <div className="sans" style={{display:"flex",justifyContent:"space-between",gap:10}}>
-                <span style={{color:"#8A9086"}}>Status</span>
+                <span style={{color:"var(--soft)"}}>Status</span>
                 <span style={{fontWeight:700,color:status.color,background:status.bg,padding:"3px 7px",borderRadius:99}}>{status.label}</span>
               </div>
-              <div className="sans" style={{fontSize:16,fontWeight:700,color:"#1F3D2B",marginTop:12}}>{fmtMeetingDateTime(details.meeting_date,details.meeting_time)}</div>
-              <div className="sans" style={{fontSize:12,color:"#6B7268",marginTop:4}}>{details.venue||"Venue not specified"}</div>
-              {details.rsvp_deadline&&<div className="sans" style={{fontSize:10,color:"#8A9086",marginTop:6}}>RSVP by {details.rsvp_deadline}</div>}
+              <div className="sans" style={{fontSize:16,fontWeight:700,color:"var(--primary)",marginTop:12}}>{fmtMeetingDateTime(details.meeting_date,details.meeting_time)}</div>
+              <div className="sans" style={{fontSize:12,color:"var(--muted)",marginTop:4}}>{details.venue||"Venue not specified"}</div>
+              {details.rsvp_deadline&&<div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:6}}>RSVP by {details.rsvp_deadline}</div>}
             </div>
 
-            <div className="sans" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginTop:10,textAlign:"center",background:"#fff",border:"1px solid #E9E4D8",borderRadius:11,padding:"10px 6px"}}>
-              <div><b style={{color:"#3A6B3E"}}>{yes.length}</b><div style={{fontSize:9,color:"#8A9086"}}>Going</div></div>
-              <div><b style={{color:"#7A5A18"}}>{maybe.length}</b><div style={{fontSize:9,color:"#8A9086"}}>Maybe</div></div>
-              <div><b style={{color:"#A6432F"}}>{no.length}</b><div style={{fontSize:9,color:"#8A9086"}}>Declined</div></div>
-              <div><b>{pending.length}</b><div style={{fontSize:9,color:"#8A9086"}}>Awaiting</div></div>
+            <div className="sans" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginTop:10,textAlign:"center",background:"var(--card)",border:"1px solid var(--border)",borderRadius:11,padding:"10px 6px"}}>
+              <div><b style={{color:"var(--success)"}}>{yes.length}</b><div style={{fontSize:9,color:"var(--soft)"}}>Going</div></div>
+              <div><b style={{color:"var(--warning)"}}>{maybe.length}</b><div style={{fontSize:9,color:"var(--soft)"}}>Maybe</div></div>
+              <div><b style={{color:"var(--danger)"}}>{no.length}</b><div style={{fontSize:9,color:"var(--soft)"}}>Declined</div></div>
+              <div><b>{pending.length}</b><div style={{fontSize:9,color:"var(--soft)"}}>Awaiting</div></div>
             </div>
 
-            {(details.sent_at||details.last_notification_at)&&<div className="sans" style={{fontSize:10,color:"#8A9086",marginTop:9,lineHeight:1.55}}>
+            {(details.sent_at||details.last_notification_at)&&<div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:9,lineHeight:1.55}}>
               {details.sent_at&&<div>Invitation sent: {formatLocalDateTime(details.sent_at)}</div>}
               {details.last_notification_at&&<div>Last notification: {formatLocalDateTime(details.last_notification_at)}</div>}
             </div>}
 
             {details.agenda&&<>
-              <div className="sans" style={{fontSize:10,fontWeight:700,color:"#6B7268",marginTop:14,marginBottom:5}}>AGENDA / MESSAGE</div>
-              <div className="sans" style={{fontSize:12,lineHeight:1.5,background:"#fff",border:"1px solid #E9E4D8",borderRadius:10,padding:11}}>{details.agenda}</div>
+              <div className="sans" style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:14,marginBottom:5}}>AGENDA / MESSAGE</div>
+              <div className="sans" style={{fontSize:12,lineHeight:1.5,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,padding:11}}>{details.agenda}</div>
             </>}
 
-            {details.status==="cancelled"&&<div className="sans" style={{fontSize:11,lineHeight:1.45,background:"#FDEDE8",color:"#A6432F",padding:10,borderRadius:9,marginTop:12}}>
+            {details.status==="cancelled"&&<div className="sans" style={{fontSize:11,lineHeight:1.45,background:"var(--danger-bg)",color:"var(--danger)",padding:10,borderRadius:9,marginTop:12}}>
               <b>Cancelled</b>{details.cancelled_at?` · ${formatLocalDateTime(details.cancelled_at)}`:""}<br/>{details.cancel_reason||"Cancelled by admin"}
             </div>}
 
-            <div className="sans" style={{fontSize:10,fontWeight:700,color:"#6B7268",marginTop:16}}>RSVP DETAILS · {total} ACTIVE MEMBERS</div>
-            {group("yes","GOING",yes,"#3A6B3E")}
-            {group("maybe","MAYBE",maybe,"#7A5A18")}
-            {group("no","DECLINED",no,"#A6432F")}
-            {group("pending","AWAITING RESPONSE",pending,"#6B7268")}
+            <div className="sans" style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:16}}>RSVP DETAILS · {total} ACTIVE MEMBERS</div>
+            {group("yes","GOING",yes,"var(--success)")}
+            {group("maybe","MAYBE",maybe,"var(--warning)")}
+            {group("no","DECLINED",no,"var(--danger)")}
+            {group("pending","AWAITING RESPONSE",pending,"var(--muted)")}
 
             {details.status!=="cancelled"&&<>
               {pending.length>0&&<button disabled={busy} onClick={remindPending} style={{...approveBtn,width:"100%",padding:10,marginTop:14}}>

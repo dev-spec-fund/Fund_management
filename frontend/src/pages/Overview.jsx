@@ -57,7 +57,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
   return (
     <>
-      <div style={{ background: "#1F3D2B", borderRadius: 16, padding: "23px 22px", color: "#F7F5EF" }}>
+      <div style={{ background: "var(--primary)", borderRadius: 16, padding: "23px 22px", color: "var(--bg)" }}>
         <div className="sans" style={{ fontSize: 11, opacity: 0.62, letterSpacing: 1.1 }}>FUND BALANCE</div>
         <div style={{ fontSize: 39, fontWeight: 600, marginTop: 4 }}>MVR {fmt(summary.fundBalance)}</div>
         <div className="sans" style={{ fontSize: 11, opacity: 0.7, marginTop: 5 }}>
@@ -66,31 +66,31 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
-        <StatCard icon={<ArrowUpRight size={15} color="#3A6B3E" />} label="Contributions" value={`MVR ${fmt(contributions)}`} />
-        <StatCard icon={<ArrowDownRight size={15} color="#A6432F" />} label="Expenses this month" value={`MVR ${fmt(expenses)}`} />
+        <StatCard icon={<ArrowUpRight size={15} color="var(--success)" />} label="Contributions" value={`MVR ${fmt(contributions)}`} />
+        <StatCard icon={<ArrowDownRight size={15} color="var(--danger)" />} label="Expenses this month" value={`MVR ${fmt(expenses)}`} />
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 13, padding: "12px 14px", marginTop: 10 }}>
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 13, padding: "12px 14px", marginTop: 10 }}>
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-          <span style={{ color: "#6B7268" }}>Donations this month</span>
-          <strong style={{ color: "#3A6B3E" }}>+ MVR {fmt(donations)}</strong>
+          <span style={{ color: "var(--muted)" }}>Donations this month</span>
+          <strong style={{ color: "var(--success)" }}>+ MVR {fmt(donations)}</strong>
         </div>
       </div>
 
-      <div className="sans" style={{ fontSize: 11, color: "#6B7268", marginTop: 18, marginBottom: 7, fontWeight: 700, letterSpacing: .5 }}>MONTHLY COLLECTION · {monthLabel.toUpperCase()}</div>
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 13, padding: "13px 14px" }}>
+      <div className="sans" style={{ fontSize: 11, color: "var(--muted)", marginTop: 18, marginBottom: 7, fontWeight: 700, letterSpacing: .5 }}>MONTHLY COLLECTION · {monthLabel.toUpperCase()}</div>
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 13, padding: "13px 14px" }}>
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12 }}>
-          <span><b style={{ color: "#1F3D2B" }}>MVR {fmt(allocatedContributions)}</b> <span style={{ color: "#9A9384" }}>/ MVR {fmt(expected)}</span></span>
-          <b style={{ color: "#3A6B3E" }}>{collectionPct}% collected</b>
+          <span><b style={{ color: "var(--primary)" }}>MVR {fmt(allocatedContributions)}</b> <span style={{ color: "var(--soft-2)" }}>/ MVR {fmt(expected)}</span></span>
+          <b style={{ color: "var(--success)" }}>{collectionPct}% collected</b>
         </div>
-        <div style={{ height: 6, background: "#ECE8DE", borderRadius: 999, overflow: "hidden", marginTop: 8 }}>
-          <div style={{ width: `${collectionPct}%`, height: "100%", background: "#3A6B3E", borderRadius: 999 }} />
+        <div style={{ height: 6, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", marginTop: 8 }}>
+          <div style={{ width: `${collectionPct}%`, height: "100%", background: "var(--success)", borderRadius: 999 }} />
         </div>
       </div>
 
       {isAdmin && outstandingTotal > 0 && (
         <button onClick={() => setTab("members")}
-          style={{ width: "100%", background: "#FBF1EE", border: "1px solid #F2D6D0", borderRadius: 12, padding: "12px 14px", marginTop: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", color: "#A6432F" }}>
+          style={{ width: "100%", background: "var(--danger-bg-3)", border: "1px solid var(--danger-border)", borderRadius: 12, padding: "12px 14px", marginTop: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--danger)" }}>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>Outstanding</span>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>
             MVR {fmt(outstandingTotal)} · {outstandingMembers} {outstandingMembers === 1 ? "member" : "members"} ›
@@ -100,7 +100,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
       {isAdmin && pendingCount !== null && (
         <button onClick={() => setTab("pending")}
-          style={{ width: "100%", background: pendingCount > 0 ? "#FFF7E8" : "#EEF4F0", border: `1px solid ${pendingCount > 0 ? "#E8D7A8" : "#D3E3D9"}`, borderRadius: 12, padding: "12px 14px", marginTop: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", color: pendingCount > 0 ? "#7A5A18" : "#3A6B3E" }}>
+          style={{ width: "100%", background: pendingCount > 0 ? "var(--warning-bg-2)" : "var(--surface-success-soft)", border: `1px solid ${pendingCount > 0 ? "var(--warning-border-2)" : "var(--success-border-2)"}`, borderRadius: 12, padding: "12px 14px", marginTop: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", color: pendingCount > 0 ? "var(--warning)" : "var(--success)" }}>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>Pending approvals</span>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>
             {pendingCount > 0 ? `${pendingCount} waiting ›` : "✓ None waiting"}
@@ -109,11 +109,11 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       )}
 
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 8 }}>
-        <span style={{ fontSize: 12, color: "#6B7268", fontWeight: 700, letterSpacing: .5 }}>RECENT ACTIVITY</span>
-        {activity.length > 0 && <button onClick={() => setTab("activity")} style={{ border: 0, background: "transparent", padding: 0, color: "#3A6B3E", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>View all →</button>}
+        <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700, letterSpacing: .5 }}>RECENT ACTIVITY</span>
+        {activity.length > 0 && <button onClick={() => setTab("activity")} style={{ border: 0, background: "transparent", padding: 0, color: "var(--success)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>View all →</button>}
       </div>
       {activity.map((a) => <ActivityRow key={`${a.kind}-${a.id}`} a={a} isAdmin={isAdmin} />)}
-      {activity.length === 0 && <div className="sans" style={{ fontSize: 12, color: "#8A9086" }}>No activity yet.</div>}
+      {activity.length === 0 && <div className="sans" style={{ fontSize: 12, color: "var(--soft)" }}>No activity yet.</div>}
     </>
   );
 }
@@ -129,9 +129,9 @@ function normalizeRecentActivity(rows) {
 
 function StatCard({ icon, label, value }) {
   return (
-    <div style={{ background: "#fff", borderRadius: 14, padding: 16, border: "1px solid #E9E4D8" }}>
+    <div style={{ background: "var(--card)", borderRadius: 14, padding: 16, border: "1px solid var(--border)" }}>
       {icon}
-      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginTop: 8 }}>{label}</div>
+      <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 600, marginTop: 2 }}>{value}</div>
     </div>
   );
