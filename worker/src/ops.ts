@@ -22,72 +22,33 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-async function tableColumns(env: Env, table: string): Promise<Set<string>> {
-  const rows = await env.DB.prepare(`PRAGMA table_info(${table})`).all<any>();
-  return new Set(rows.results.map((r: any) => String(r.name)));
-}
-
-async function addColumn(env: Env, table: string, column: string, sqlType: string) {
-  const cols = await tableColumns(env, table);
-  if (!cols.has(column)) await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqlType}`).run();
-}
-
+const REQUIRED_SCHEMA_VERSION = 9;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
-  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS error_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source TEXT NOT NULL,
-    message TEXT NOT NULL,
-    detail TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )`).run();
-  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS rate_limits (
-    bucket TEXT NOT NULL,
-    subject TEXT NOT NULL,
-    window_start INTEGER NOT NULL,
-    count INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY(bucket, subject, window_start)
-  )`).run();
-  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS month_closures (
-    month TEXT PRIMARY KEY,
-    closed_by INTEGER NOT NULL REFERENCES admins(id),
-    closed_at TEXT NOT NULL DEFAULT (datetime('now')),
-    note TEXT
-  )`).run();
-
-  await addColumn(env, "admins", "active", "INTEGER NOT NULL DEFAULT 1");
-  await addColumn(env, "admins", "deactivated_at", "TEXT");
-  await addColumn(env, "admins", "deactivated_by", "INTEGER REFERENCES admins(id)");
-
-  await addColumn(env, "contributions", "bank_date", "TEXT");
-  await addColumn(env, "contributions", "corrected_by", "INTEGER REFERENCES admins(id)");
-  await addColumn(env, "contributions", "corrected_at", "TEXT");
-  await addColumn(env, "contributions", "voided_by", "INTEGER REFERENCES admins(id)");
-  await addColumn(env, "contributions", "voided_at", "TEXT");
-  await addColumn(env, "contributions", "void_reason", "TEXT");
-
-  await addColumn(env, "donations", "member_id", "INTEGER REFERENCES members(id)");
-  await addColumn(env, "donations", "transaction_month", "TEXT");
-  await addColumn(env, "donations", "status", "TEXT NOT NULL DEFAULT 'active'");
-  await addColumn(env, "donations", "voided_by", "INTEGER REFERENCES admins(id)");
-  await addColumn(env, "donations", "voided_at", "TEXT");
-  await addColumn(env, "donations", "void_reason", "TEXT");
-
-  await addColumn(env, "expenses", "transaction_month", "TEXT");
-  await addColumn(env, "expenses", "status", "TEXT NOT NULL DEFAULT 'approved'");
-  await addColumn(env, "expenses", "approval_required", "INTEGER NOT NULL DEFAULT 0");
-  await addColumn(env, "expenses", "approved_by", "INTEGER REFERENCES admins(id)");
-  await addColumn(env, "expenses", "approved_at", "TEXT");
-  await addColumn(env, "expenses", "voided_by", "INTEGER REFERENCES admins(id)");
-  await addColumn(env, "expenses", "voided_at", "TEXT");
-  await addColumn(env, "expenses", "void_reason", "TEXT");
-  await addColumn(env, "expense_categories", "active", "INTEGER NOT NULL DEFAULT 1");
-
-  await env.DB.prepare("INSERT OR IGNORE INTO settings (key,value) VALUES ('expense_approval_threshold','5000')").run();
-  await env.DB.prepare("INSERT OR IGNORE INTO settings (key,value) VALUES ('mini_app_url','https://fund-management.pages.dev')").run();
-  await env.DB.prepare("INSERT OR IGNORE INTO settings (key,value) VALUES ('reminder_schedule','Daily 00:00 Maldives (19:00 UTC)')").run();
-  schemaReady = true;
+  try {
+    const version = await env.DB.prepare("SELECT MAX(version) version FROM schema_migrations").first<{version:number}>();
+    if (Number(version?.version || 0) < REQUIRED_SCHEMA_VERSION) {
+      throw new Error(`Database migration required: expected schema version ${REQUIRED_SCHEMA_VERSION}`);
+    }
+    const checks:[string,string[]][] = [
+      ["admins", ["active","deactivated_at","deactivated_by"]],
+      ["contributions", ["bank_date","corrected_by","corrected_at","voided_by","voided_at","void_reason"]],
+      ["donations", ["member_id","transaction_month","status","voided_by","voided_at","void_reason"]],
+      ["expenses", ["transaction_month","status","approval_required","approved_by","approved_at","voided_by","voided_at","void_reason"]],
+      ["expense_categories", ["active"]],
+      ["meetings", ["updated_at","last_notification_at","cancelled_at","cancelled_by","cancel_reason"]],
+    ];
+    for (const [table,required] of checks) {
+      const rows=await env.DB.prepare(`PRAGMA table_info(${table})`).all<any>();
+      const cols=new Set(rows.results.map((r:any)=>String(r.name)));
+      const missing=required.filter(col=>!cols.has(col));
+      if(missing.length) throw new Error(`Database schema incomplete: ${table}.${missing.join(',')}`);
+    }
+    schemaReady = true;
+  } catch (e) {
+    throw e instanceof Error ? e : new Error(String(e));
+  }
 }
 
 export async function safeLogError(env: Env, source: string, error: unknown, detail?: unknown) {

@@ -24,6 +24,7 @@ settingsRoute.patch("/", requireFinance, async (c) => {
     const value=String(raw ?? '').trim();
     if(key==='expense_approval_threshold' && (!Number.isFinite(Number(value)) || Number(value)<=0 || Number(value)>100000000)) return c.json({error:'Invalid expense approval threshold'},400);
     if(key==='default_monthly_amount' && (!Number.isFinite(Number(value)) || Number(value)<=0 || Number(value)>1000000)) return c.json({error:'Invalid default monthly amount'},400);
+    if(key==='mini_app_url') { try { const u=new URL(value); if(u.protocol!=='https:') return c.json({error:'Mini App URL must use HTTPS'},400); } catch { return c.json({error:'Invalid Mini App URL'},400); } }
     if(key==='reminder_day' && value!=='off' && (!/^\d{1,2}$/.test(value) || Number(value)<1 || Number(value)>28)) return c.json({error:"Reminder day must be 1-28 or 'off'"},400);
     if(key.startsWith('notify_') && !['0','1'].includes(value)) return c.json({error:`${key} must be 0 or 1`},400);
     if(value.length>500) return c.json({error:`${key} is too long`},400);
@@ -33,8 +34,9 @@ settingsRoute.patch("/", requireFinance, async (c) => {
 });
 
 settingsRoute.get("/admins", requireAdmin, async(c)=>{
+  const caller=c.get("admin")!; const viewer=caller.role==='viewer';
   const rows=await c.env.DB.prepare(`
-    SELECT a.id,a.telegram_id,a.name,a.role,COALESCE(a.active,1) active,a.created_at,a.deactivated_at,
+    SELECT a.id,${viewer ? "NULL" : "a.telegram_id"} telegram_id,a.name,a.role,COALESCE(a.active,1) active,a.created_at,a.deactivated_at,
            m.id member_id,m.member_code,m.name member_name,COALESCE(m.active,1) member_active
     FROM admins a
     LEFT JOIN members m ON m.telegram_id=a.telegram_id
@@ -46,6 +48,8 @@ settingsRoute.post("/admins", requireSuperAdmin, async(c)=>{
   const admin=c.get("admin")!; const b=await c.req.json<any>();
   const role=b.role||"treasurer"; if(!["super_admin","treasurer","viewer"].includes(role))return c.json({error:"Invalid role"},400);
   const tg=telegramId(b.telegram_id); const name=boundedText(b.name,120,true); if(!tg||!name)return c.json({error:'Valid Telegram ID and name are required'},400);
+  const existing=await c.env.DB.prepare("SELECT id,active FROM admins WHERE telegram_id=?").bind(tg).first<any>();
+  if(existing) return c.json({error:"An admin record already exists for this Telegram account"},409);
   const r=await c.env.DB.prepare("INSERT INTO admins(telegram_id,name,role,active) VALUES(?,?,?,1)").bind(tg,name,role).run();
   await auditEntity(c.env,admin.id,"admin_created","admin",Number(r.meta.last_row_id),null,{telegram_id:tg,name,role}); return c.json({ok:true,id:r.meta.last_row_id},201);
 });

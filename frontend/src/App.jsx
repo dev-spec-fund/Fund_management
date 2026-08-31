@@ -70,9 +70,10 @@ export default function App() {
   const isMember = !!me?.member;
   const adminView = isAdmin && mode === "admin";
   const memberView = isMember && mode === "member";
+  const canFinance = adminView && ["owner","super_admin","treasurer"].includes(me?.admin?.role);
 
   const tabs = adminView
-    ? ["overview", "pending", "members", "activity", "reports", "meetings", "settings"]
+    ? (canFinance ? ["overview", "pending", "members", "activity", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
     : ["overview", "history", "fund", "activity"];
 
   const changeMode = (nextMode) => {
@@ -110,12 +111,12 @@ export default function App() {
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>
-        {tab === "overview" && <Overview isAdmin={adminView} setTab={setTab} />}
-        {tab === "pending" && adminView && <PendingApprovals />}
+        {tab === "overview" && <Overview isAdmin={adminView} canFinance={canFinance} setTab={setTab} />}
+        {tab === "pending" && canFinance && <PendingApprovals />}
         {tab === "members" && adminView && <Members isAdmin admin={me.admin} />}
         {tab === "history" && memberView && <MyHistory member={me.member} />}
         {tab === "fund" && memberView && <FundView />}
-        {tab === "activity" && <Activity isAdmin={adminView} />}
+        {tab === "activity" && <Activity isAdmin={adminView} canFinance={canFinance} />}
         {tab === "reports" && adminView && <Reports setTab={setTab} />}
         {tab === "meetings" && adminView && <Meetings />}
         {tab === "settings" && adminView && <Settings admin={me.admin} />}
@@ -174,7 +175,7 @@ function Center({ children }) {
 }
 
 /* ---------- Overview ---------- */
-function Overview({ isAdmin, setTab }) {
+function Overview({ isAdmin, canFinance, setTab }) {
   const [summary, setSummary] = useState(null);
   const [activity, setActivity] = useState([]);
   const [pendingCount, setPendingCount] = useState(null);
@@ -183,7 +184,7 @@ function Overview({ isAdmin, setTab }) {
     const summaryRequest = isAdmin ? api.reports.summary() : api.reports.publicSummary();
     summaryRequest.then(setSummary).catch(() => {});
     api.reports.activity().then((a) => setActivity(a.slice(0, 4))).catch(() => {});
-    if (isAdmin) {
+    if (canFinance) {
       api.admin.pending().then((p) => {
         const count =
           (p?.registrations?.length || 0) +
@@ -192,7 +193,7 @@ function Overview({ isAdmin, setTab }) {
         setPendingCount(count);
       }).catch(() => setPendingCount(null));
     }
-  }, [isAdmin]);
+  }, [isAdmin, canFinance]);
 
   if (!summary) return <Center>Loading overview…</Center>;
 
@@ -310,12 +311,12 @@ function activityTime(a) {
   return d ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
 }
 
-function ActivityRow({ a, isAdmin, onExpenseClick }) {
+function ActivityRow({ a, isAdmin, canFinance = false, onExpenseClick }) {
   const isIn = a.kind === "contribution" || a.kind === "donation";
   const type = a.kind === "contribution" ? "Contribution" : a.kind === "donation" ? "Donation" : "Expense";
   return (
-    <div onClick={() => a.kind === "expense" && isAdmin && onExpenseClick?.(a)}
-      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "11px 14px", marginBottom: 7, cursor: a.kind === "expense" && isAdmin ? "pointer" : "default" }}>
+    <div onClick={() => a.kind === "expense" && canFinance && onExpenseClick?.(a)}
+      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "11px 14px", marginBottom: 7, cursor: a.kind === "expense" && canFinance ? "pointer" : "default" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
         <div style={{ width: 32, height: 32, flex: "0 0 32px", borderRadius: 10, background: isIn ? "#DDECD9" : "#F2D6D0", display: "flex", alignItems: "center", justifyContent: "center" }}>
           {isIn ? <ArrowUpRight size={16} color="#3A6B3E" /> : <ArrowDownRight size={16} color="#A6432F" />}
@@ -333,7 +334,7 @@ function ActivityRow({ a, isAdmin, onExpenseClick }) {
       </div>
       <div className="sans" style={{ flex: "0 0 auto", marginLeft: 10, fontSize: 14, fontWeight: 700, color: isIn ? "#3A6B3E" : "#A6432F" }}>
         <div>{isIn ? "+" : "−"} MVR {fmt(a.amount)}</div>
-        {a.kind === "expense" && isAdmin && <div style={{fontSize:10,fontWeight:500,color:"#8A9086",marginTop:3,textAlign:"right"}}><Pencil size={10} style={{verticalAlign:"-1px",marginRight:3}}/>Edit</div>}
+        {a.kind === "expense" && canFinance && <div style={{fontSize:10,fontWeight:500,color:"#8A9086",marginTop:3,textAlign:"right"}}><Pencil size={10} style={{verticalAlign:"-1px",marginRight:3}}/>Edit</div>}
       </div>
     </div>
   );
@@ -349,21 +350,24 @@ function Members({ isAdmin, admin }) {
   const [showAdd, setShowAdd] = useState(false);
   const [reminderBusy, setReminderBusy] = useState(false);
   const [reminderMessage, setReminderMessage] = useState("");
-  const [form, setForm] = useState({ name: "", phone: "", monthly_amount: 250 });
+  const [defaultMonthly, setDefaultMonthly] = useState(250);
+  const [form, setForm] = useState({ name: "", phone: "", monthly_amount: "" });
 
   const load = () => Promise.all([
     api.members.list().then(setMembers),
     api.reports.summary(month).then(setMonthlySummary),
   ]).catch(() => {});
   useEffect(() => { if (isAdmin) load(); }, [isAdmin, month]);
+  useEffect(() => { if (isAdmin) api.settings.get().then(s=>{ const v=Number(s.default_monthly_amount)||250; setDefaultMonthly(v); setForm(f=>({...f,monthly_amount:f.monthly_amount===""?String(v):f.monthly_amount})); }).catch(()=>{}); }, [isAdmin]);
 
   if (!isAdmin) return <Center>Member directory is admin-only in this view.</Center>;
   const financeAdmin = ["owner","super_admin","treasurer"].includes(admin?.role);
 
   const addMember = async () => {
     if (!form.name.trim()) return;
-    await api.members.create({ ...form, monthly_amount: Number(form.monthly_amount) });
-    setForm({ name: "", phone: "", monthly_amount: 250 });
+    const amount=form.monthly_amount===""?defaultMonthly:Number(form.monthly_amount);
+    await api.members.create({ ...form, monthly_amount: amount });
+    setForm({ name: "", phone: "", monthly_amount: String(defaultMonthly) });
     setShowAdd(false);
     load();
   };
@@ -417,7 +421,7 @@ function Members({ isAdmin, admin }) {
           <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "#1F3D2B" }}>Members</div>
           <div className="sans" style={{ fontSize: 11, color: "#8A9086", marginTop: 2 }}>{activeMembers.length} active members</div>
         </div>
-        <button onClick={() => setShowAdd(true)} className="sans" style={{ display: "flex", alignItems: "center", gap: 5, background: "#1F3D2B", color: "#F7F5EF", border: "none", borderRadius: 9, padding: "8px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+        <button onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={{ display: "flex", alignItems: "center", gap: 5, background: "#1F3D2B", color: "#F7F5EF", border: "none", borderRadius: 9, padding: "8px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
           <Plus size={15} /> Add
         </button>
       </div>
@@ -927,7 +931,7 @@ function FundView() {
 }
 
 /* ---------- Activity ---------- */
-function Activity({ isAdmin }) {
+function Activity({ isAdmin, canFinance = false }) {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("all");
   const [editingExpense, setEditingExpense] = useState(null);
@@ -937,10 +941,10 @@ function Activity({ isAdmin }) {
 
   const loadActivity = () => api.reports.activity().then(setRows).catch(() => setRows([]));
   useEffect(() => { loadActivity(); }, []);
-  useEffect(() => { if (isAdmin) api.expenses.categories().then(setExpenseCategories).catch(() => {}); }, [isAdmin]);
+  useEffect(() => { if (canFinance) api.expenses.categories().then(setExpenseCategories).catch(() => {}); }, [canFinance]);
 
   const openExpense = (row) => {
-    if (!isAdmin || row.kind !== "expense") return;
+    if (!canFinance || row.kind !== "expense") return;
     setExpenseError("");
     setEditingExpense({
       ...row,
@@ -1019,7 +1023,7 @@ function Activity({ isAdmin }) {
           <div className="sans" style={{ display: "flex", alignItems: "center", gap: 8, margin: "13px 2px 7px", fontSize: 10, fontWeight: 700, letterSpacing: 1.1, textTransform: "uppercase", color: "#8A9086" }}>
             <span>{group.label}</span><span style={{ height: 1, flex: 1, background: "#E9E4D8" }} />
           </div>
-          {group.rows.map((a) => <ActivityRow key={`${a.kind}-${a.id}`} a={a} isAdmin={isAdmin} onExpenseClick={openExpense} />)}
+          {group.rows.map((a) => <ActivityRow key={`${a.kind}-${a.id}`} a={a} isAdmin={isAdmin} canFinance={canFinance} onExpenseClick={openExpense} />)}
         </div>
       ))}
       {filtered.length === 0 && <div className="sans" style={{ fontSize: 13, color: "#8A9086" }}>Nothing here yet.</div>}
@@ -1035,10 +1039,10 @@ function Activity({ isAdmin }) {
           <select value={editingExpense.category_id || ""} onChange={(e)=>setEditingExpense({...editingExpense,category_id:e.target.value})}
             style={{width:"100%",padding:"10px 11px",border:"1px solid #DED8CA",borderRadius:9,background:"#fff",fontSize:13}}>
             <option value="">Uncategorised</option>
-            {expenseCategories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            {expenseCategories.filter(c=>Number(c.active)!==0 || Number(c.id)===Number(editingExpense.category_id)).map(c=><option key={c.id} value={c.id}>{c.name}{Number(c.active)===0?" (inactive)":""}</option>)}
           </select>
         </label>
-        <Field label="Expense month (YYYY-MM)" value={editingExpense.transaction_month || ""} onChange={(v)=>setEditingExpense({...editingExpense,transaction_month:v})}/>
+        <Field label="Expense month" type="month" value={editingExpense.transaction_month || ""} onChange={(v)=>setEditingExpense({...editingExpense,transaction_month:v})}/>
         {expenseError && <div className="sans" style={{fontSize:11,color:"#A6432F",background:"#FDEDE8",padding:9,borderRadius:8,marginBottom:10}}>{expenseError}</div>}
         <button disabled={expenseBusy} onClick={saveExpense} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:expenseBusy?.6:1}}>
           {expenseBusy ? "Saving…" : "Save changes"}
@@ -1260,7 +1264,7 @@ function ExpenseModal({ onClose, onSaved }) {
       <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className="sans"
         style={{ width: "100%", border: "1px solid #D9D3C4", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, background: "#fff" }}>
         <option value="">Select category</option>
-        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        {categories.filter((c)=>Number(c.active)!==0).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
       <Field label="Amount" type="number" prefix="MVR" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
       <PrimaryButton onClick={save}>Save expense</PrimaryButton>

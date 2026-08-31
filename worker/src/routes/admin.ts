@@ -10,7 +10,7 @@ import { money, validDate, validMonth, boundedText } from "../validation";
 
 export const adminRoute = new Hono<AppEnv>();
 
-adminRoute.get('/pending', requireAdmin, async c => {
+adminRoute.get('/pending', requireFinance, async c => {
   await ensureOperationalSchema(c.env);
   const registrations = await c.env.DB.prepare(`SELECT * FROM member_registration_requests WHERE status='pending' ORDER BY requested_at ASC`).all<any>();
   const enrichedRegs:any[]=[];
@@ -458,10 +458,13 @@ adminRoute.post('/meetings/:id/send', requireFinance, async c => {
 });
 
 adminRoute.get('/health', requireAdmin, async c => {
-  await ensureOperationalSchema(c.env); const out:any={checked_at:new Date().toISOString(),db:{ok:false},telegram:{ok:false},webhook:{ok:false},ai:{ok:!!c.env.AI},mini_app_url:await getSetting(c.env,'mini_app_url'),reminder_schedule:await getSetting(c.env,'reminder_schedule'),month:currentMonth(c.env.FUND_TIMEZONE||'Indian/Maldives')};
+  await ensureOperationalSchema(c.env);
+  const admin=c.get('admin')!; const full=admin.role==='owner'||admin.role==='super_admin';
+  const out:any={checked_at:new Date().toISOString(),db:{ok:false},telegram:{ok:false},webhook:{ok:false},ai:{ok:!!c.env.AI}};
+  if(full){out.mini_app_url=await getSetting(c.env,'mini_app_url');out.reminder_schedule=await getSetting(c.env,'reminder_schedule');out.month=currentMonth(c.env.FUND_TIMEZONE||'Indian/Maldives');}
   try{const x=await c.env.DB.prepare('SELECT 1 ok').first<any>();out.db={ok:Number(x?.ok)===1}}catch(e){await safeLogError(c.env,'health.db',e)}
-  try{const r=await fetch(`https://api.telegram.org/bot${c.env.TELEGRAM_BOT_TOKEN}/getMe`);const j:any=await r.json();out.telegram={ok:!!j.ok,username:j.result?.username||null}}catch(e){await safeLogError(c.env,'health.telegram',e)}
-  try{const r=await fetch(`https://api.telegram.org/bot${c.env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`);const j:any=await r.json();out.webhook={ok:!!j.ok,url:j.result?.url||'',pending:j.result?.pending_update_count||0,last_error:j.result?.last_error_message||null}}catch(e){await safeLogError(c.env,'health.webhook',e)}
+  try{const r=await fetch(`https://api.telegram.org/bot${c.env.TELEGRAM_BOT_TOKEN}/getMe`);const j:any=await r.json();out.telegram=full?{ok:!!j.ok,username:j.result?.username||null}:{ok:!!j.ok}}catch(e){await safeLogError(c.env,'health.telegram',e)}
+  try{const r=await fetch(`https://api.telegram.org/bot${c.env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`);const j:any=await r.json();out.webhook=full?{ok:!!j.ok,url:j.result?.url||'',pending:j.result?.pending_update_count||0,last_error:j.result?.last_error_message||null}:{ok:!!j.ok}}catch(e){await safeLogError(c.env,'health.webhook',e)}
   return c.json(out);
 });
 
@@ -469,7 +472,11 @@ adminRoute.get('/errors', requireSuperAdmin, async c => { await ensureOperationa
 adminRoute.delete('/errors', requireSuperAdmin, async c => { const admin=c.get('admin')!; await c.env.DB.prepare("DELETE FROM error_log").run(); await auditEntity(c.env,admin.id,'error_log_cleared','error_log','all',null,{cleared:true}); return c.json({ok:true}); });
 
 adminRoute.get('/backup', requireSuperAdmin, async c => {
-  await ensureOperationalSchema(c.env); const tables=['members','admins','member_registration_requests','contributions','donations','expense_categories','expenses','exemptions','settings','id_sequences','audit_log','month_closures']; const data:any={exported_at:new Date().toISOString(),format:'kys-fund-json-v1',tables:{}};
-  for(const t of tables){try{data.tables[t]=(await c.env.DB.prepare(`SELECT * FROM ${t}`).all()).results}catch(e){data.tables[t]={error:String(e)}}}
-  const admin=c.get('admin')!; await auditEntity(c.env,admin.id,'database_backup_exported','database','D1',null,{tables:tables.length}); c.header('Content-Disposition',`attachment; filename="kys-fund-backup-${new Date().toISOString().slice(0,10)}.json"`); return c.json(data);
+  await ensureOperationalSchema(c.env);
+  const tables=['members','admins','member_registration_requests','contributions','contribution_allocations','donations','expense_categories','expenses','exemptions','settings','id_sequences','audit_log','month_closures','meetings','meeting_rsvps','error_log','rate_limits','schema_migrations'];
+  const version=await c.env.DB.prepare("SELECT MAX(version) version FROM schema_migrations").first<any>();
+  const data:any={exported_at:new Date().toISOString(),format:'kys-fund-json-v2',schema_version:Number(version?.version||0),tables:{}};
+  for(const t of tables){data.tables[t]=(await c.env.DB.prepare(`SELECT * FROM ${t}`).all()).results;}
+  const admin=c.get('admin')!; await auditEntity(c.env,admin.id,'database_backup_exported','database','D1',null,{tables:tables.length,schema_version:data.schema_version});
+  c.header('Content-Disposition',`attachment; filename="kys-fund-backup-${new Date().toISOString().slice(0,10)}.json"`); return c.json(data);
 });

@@ -9,12 +9,21 @@ export const expensesRoute = new Hono<AppEnv>();
 
 expensesRoute.get("/", requireAdmin, async (c) => {
   await ensureOperationalSchema(c.env);
-  const rows = await c.env.DB.prepare(`SELECT e.*,c.name category_name,la.name logged_by_name,aa.name approved_by_name
+  const rows = await c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.category_id,e.amount,e.logged_by,e.edited_by,e.transaction_month,
+      e.status,e.approval_required,e.approved_by,e.approved_at,e.voided_by,e.voided_at,e.void_reason,e.created_at,e.updated_at,
+      c.name category_name,la.name logged_by_name,aa.name approved_by_name
     FROM expenses e LEFT JOIN expense_categories c ON c.id=e.category_id
     LEFT JOIN admins la ON la.id=e.logged_by LEFT JOIN admins aa ON aa.id=e.approved_by
     ORDER BY e.created_at DESC`).all();
   return c.json(rows.results);
 });
+
+async function validActiveCategory(c:any, categoryId:any) {
+  if(categoryId===null || categoryId===undefined || categoryId==='') return {id:null};
+  const id=Number(categoryId);
+  if(!Number.isInteger(id) || id<=0) return null;
+  return await c.env.DB.prepare("SELECT id,name FROM expense_categories WHERE id=? AND COALESCE(active,1)=1").bind(id).first<any>();
+}
 
 async function eligibleOtherFinanceAdmins(c:any, adminId:number) {
   const row = await c.env.DB.prepare("SELECT COUNT(*) n FROM admins WHERE id != ? AND role IN ('owner','super_admin','treasurer') AND COALESCE(active,1)=1")
@@ -31,6 +40,8 @@ expensesRoute.post("/", requireFinance, async (c) => {
   const month=body.month || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if(!description || amount===null) return c.json({error:"Description and valid positive amount are required"},400);
   if(!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
+  const category=await validActiveCategory(c,body.category_id);
+  if(body.category_id && !category) return c.json({error:"Expense category is inactive or does not exist"},409);
   try{await requireOpenMonth(c.env,month);}catch(e:any){return c.json({error:e.message},409);}
   const threshold=money(await getSetting(c.env,"expense_approval_threshold")) || 5000;
   const needsApproval=amount>=threshold && (await eligibleOtherFinanceAdmins(c,admin.id))>0;
@@ -38,7 +49,7 @@ expensesRoute.post("/", requireFinance, async (c) => {
   const res=await c.env.DB.prepare(`INSERT INTO expenses
     (txn_id,description,category_id,amount,logged_by,transaction_month,status,approval_required,approved_by,approved_at)
     VALUES(?,?,?,?,?,?,?,?,?,?)`)
-    .bind(txnId,description,body.category_id ? Number(body.category_id) : null,amount,admin.id,month,needsApproval?"pending":"approved",needsApproval?1:0,needsApproval?null:admin.id,needsApproval?null:new Date().toISOString()).run();
+    .bind(txnId,description,category?.id ?? null,amount,admin.id,month,needsApproval?"pending":"approved",needsApproval?1:0,needsApproval?null:admin.id,needsApproval?null:new Date().toISOString()).run();
   await auditEntity(c.env,admin.id,"expense_created","expense",Number(res.meta.last_row_id),null,{txn_id:txnId,description,amount,month,status:needsApproval?"pending":"approved"});
   return c.json({id:res.meta.last_row_id,txn_id:txnId,status:needsApproval?"pending":"approved",approval_required:needsApproval},201);
 });
@@ -74,21 +85,27 @@ expensesRoute.patch("/:id", requireFinance, async (c) => {
   const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
   if(!before)return c.json({error:"Not found"},404);
   if(before.status==='voided')return c.json({error:"Voided expenses cannot be edited"},409);
-  const month=body.month??before.transaction_month??before.created_at.slice(0,7);
+  const month=body.transaction_month??body.month??before.transaction_month??before.created_at.slice(0,7);
   if(!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
   try{await requireOpenMonth(c.env,month);}catch(e:any){return c.json({error:e.message},409);}
   const description=boundedText(body.description??before.description,500,true);
   const amount=money(body.amount??before.amount);
+  const requestedCategory=body.category_id===undefined?before.category_id:(body.category_id?Number(body.category_id):null);
+  if(body.category_id!==undefined && Number(requestedCategory)!==Number(before.category_id)){
+    const category=await validActiveCategory(c,requestedCategory);
+    if(requestedCategory && !category) return c.json({error:"Expense category is inactive or does not exist"},409);
+  }
+
   if(!description || amount===null) return c.json({error:"Description and valid positive amount are required"},400);
   const threshold=money(await getSetting(c.env,"expense_approval_threshold")) || 5000;
-  const materialChanged = description!==before.description || Number(body.category_id??before.category_id)!==Number(before.category_id) || Math.abs(amount-Number(before.amount))>0.004 || month!==(before.transaction_month??before.created_at.slice(0,7));
+  const materialChanged = description!==before.description || Number(requestedCategory)!==Number(before.category_id) || Math.abs(amount-Number(before.amount))>0.004 || month!==(before.transaction_month??before.created_at.slice(0,7));
   let status=before.status, approvalRequired=Number(before.approval_required||0), approvedBy=before.approved_by, approvedAt=before.approved_at;
   if(materialChanged){
     const needsApproval=amount>=threshold && (await eligibleOtherFinanceAdmins(c,admin.id))>0;
     status=needsApproval?'pending':'approved'; approvalRequired=needsApproval?1:0; approvedBy=needsApproval?null:admin.id; approvedAt=needsApproval?null:new Date().toISOString();
   }
   await c.env.DB.prepare("UPDATE expenses SET description=?,category_id=?,amount=?,transaction_month=?,edited_by=?,updated_at=datetime('now'),status=?,approval_required=?,approved_by=?,approved_at=? WHERE id=?")
-    .bind(description,body.category_id===undefined?before.category_id:(body.category_id?Number(body.category_id):null),amount,month,admin.id,status,approvalRequired,approvedBy,approvedAt,id).run();
+    .bind(description,requestedCategory,amount,month,admin.id,status,approvalRequired,approvedBy,approvedAt,id).run();
   const after=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
   await auditEntity(c.env,admin.id,"expense_updated","expense",id,before,after); return c.json({ok:true,status:after.status,approval_required:after.approval_required});
 });

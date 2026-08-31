@@ -236,3 +236,19 @@ CREATE TABLE IF NOT EXISTS meeting_rsvps (
 
 CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(meeting_date, meeting_time);
 CREATE INDEX IF NOT EXISTS idx_meeting_rsvps_meeting ON meeting_rsvps(meeting_id);
+
+
+-- Schema migration ledger. Fresh databases created from schema.sql are current through v9.
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (2,'performance_indexes');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (3,'admin_columns_and_runtime_fixes');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (4,'contribution_allocations');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (5,'meetings');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (6,'meeting_management');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (7,'meeting_notification_tracking');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (8,'expense_category_management');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (9,'hardening_and_schema_versioning');
