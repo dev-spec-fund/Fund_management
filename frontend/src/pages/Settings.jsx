@@ -190,7 +190,7 @@ export default function Settings({ admin }) {
       <div style={cardStyle}>
         <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}}>
           <div>
-            <div style={{fontSize:13,fontWeight:700,color:"var(--primary)"}}>Automatic reminders</div>
+            <div style={{fontSize:13,fontWeight:700,color:"var(--primary-text)"}}>Automatic reminders</div>
             <div style={{fontSize:10,color:"var(--soft)",marginTop:3}}>Telegram reminder to unpaid and partially paid members.</div>
           </div>
           <button disabled={!financeAdmin} onClick={()=>financeAdmin&&saveSetting("reminder_day",settings.reminder_day==="off"?"5":"off")}
@@ -266,7 +266,7 @@ export default function Settings({ admin }) {
     {settingsSection==="admins" && <>
       <SectionTitle>ADMINS & ROLES</SectionTitle>
       {superAdmin&&<div style={{...cardStyle,marginBottom:12}}>
-        <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--primary)",marginBottom:4}}>Promote existing member</div>
+        <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--primary-text)",marginBottom:4}}>Promote existing member</div>
         <div className="sans" style={{fontSize:10,color:"var(--soft)",marginBottom:9}}>The member keeps their member account and contribution obligations. Telegram must be linked.</div>
         <select value={promoteMemberId} onChange={e=>setPromoteMemberId(e.target.value)} style={{width:"100%",border:"1px solid var(--border-strong)",borderRadius:8,padding:9,background:"var(--card)",marginBottom:8}}>
           <option value="">Select member…</option>{membersForAdmin.filter(m=>m.active!==0).map(m=><option key={m.id} value={m.id}>{m.name} · {m.member_code}{m.telegram_id?"":" · Telegram not linked"}</option>)}

@@ -105,7 +105,7 @@ export function FundView() {
 
   return (
     <>
-      <div className="sans" style={{ display:"flex", alignItems:"center", gap:7, background:"var(--success-bg)", color:"var(--primary)", fontSize:12, borderRadius:10, padding:"9px 12px", marginBottom:14 }}>
+      <div className="sans" style={{ display:"flex", alignItems:"center", gap:7, background:"var(--success-bg)", color:"var(--success-strong)", fontSize:12, borderRadius:10, padding:"9px 12px", marginBottom:14 }}>
         <Eye size={13} /> Fund information is read-only and visible to all members
       </div>
 

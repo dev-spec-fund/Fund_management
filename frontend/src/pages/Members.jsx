@@ -84,7 +84,7 @@ export default function Members({ isAdmin, admin }) {
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div>
-          <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "var(--primary)" }}>Members</div>
+          <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "var(--primary-text)" }}>Members</div>
           <div className="sans" style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{activeMembers.length} active members</div>
         </div>
         <button onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={{ display: "flex", alignItems: "center", gap: 5, background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 9, padding: "8px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -95,14 +95,14 @@ export default function Members({ isAdmin, admin }) {
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: 14, marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <button onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
-          <label className="sans" style={{ position: "relative", fontSize: 14, fontWeight: 700, color: "var(--primary)", cursor: "pointer" }}>
+          <label className="sans" style={{ position: "relative", fontSize: 14, fontWeight: 700, color: "var(--primary-text)", cursor: "pointer" }}>
             {monthLabel}
             <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", cursor: "pointer" }} />
           </label>
           <button onClick={() => shiftMonth(1)} aria-label="Next month" style={monthNavBtn()}><ChevronRight size={18} /></button>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <div className="sans" style={{ fontSize: 18, fontWeight: 750, color: "var(--primary)" }}>MVR {fmt(collected)} <span style={{ fontSize: 12, fontWeight: 500, color: "var(--soft)" }}>/ {fmt(expected)}</span></div>
+          <div className="sans" style={{ fontSize: 18, fontWeight: 750, color: "var(--primary-text)" }}>MVR {fmt(collected)} <span style={{ fontSize: 12, fontWeight: 500, color: "var(--soft)" }}>/ {fmt(expected)}</span></div>
           <div className="sans" style={{ fontSize: 12, fontWeight: 700, color: "var(--success)" }}>{percent}% collected</div>
         </div>
         <div style={{ height: 6, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", margin: "8px 0 13px" }}><div style={{ width: `${percent}%`, height: "100%", background: "var(--success)", borderRadius: 999 }} /></div>
@@ -117,7 +117,7 @@ export default function Members({ isAdmin, admin }) {
       {financeAdmin && (counts.partial + counts.unpaid) > 0 && (
         <button onClick={sendOutstandingReminders} disabled={reminderBusy}
           className="sans"
-          style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, background:"var(--success-bg)", color:"var(--primary)", border:"1px solid var(--success-border)", borderRadius:11, padding:"10px 12px", fontSize:12, fontWeight:700, cursor:reminderBusy?"default":"pointer", opacity:reminderBusy?.7:1, marginBottom:8 }}>
+          style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, background:"var(--success-bg)", color:"var(--success-strong)", border:"1px solid var(--success-border)", borderRadius:11, padding:"10px 12px", fontSize:12, fontWeight:700, cursor:reminderBusy?"default":"pointer", opacity:reminderBusy?.7:1, marginBottom:8 }}>
           <Bell size={14} /> {reminderBusy ? "Sending reminders…" : `Remind ${counts.partial + counts.unpaid} outstanding ${counts.partial + counts.unpaid === 1 ? "member" : "members"}`}
         </button>
       )}
@@ -125,7 +125,7 @@ export default function Members({ isAdmin, admin }) {
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 3, marginBottom: 10 }}>
         {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt']].map(([key,label]) => (
-          <button key={key} onClick={() => setFilter(key)} className="sans" style={{ flexShrink: 0, border: filter === key ? "1px solid var(--primary)" : "1px solid var(--border-strong-2)", background: filter === key ? "var(--primary)" : "var(--card)", color: filter === key ? "var(--card)" : "var(--muted)", borderRadius: 999, padding: "6px 10px", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>{label}</button>
+          <button key={key} onClick={() => setFilter(key)} className="sans" style={{ flexShrink: 0, border: filter === key ? "1px solid var(--primary)" : "1px solid var(--border-strong-2)", background: filter === key ? "var(--primary)" : "var(--card)", color: filter === key ? "var(--on-primary)" : "var(--muted)", borderRadius: 999, padding: "6px 10px", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>{label}</button>
         ))}
       </div>
 
@@ -175,12 +175,12 @@ export default function Members({ isAdmin, admin }) {
 }
 
 function monthNavBtn() {
-  return { display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, background: "var(--bg)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: 9, cursor: "pointer" };
+  return { display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, background: "var(--bg)", color: "var(--primary-text)", border: "1px solid var(--border)", borderRadius: 9, cursor: "pointer" };
 }
 
 function StatusBadge({ status }) {
   const styles = {
-    paid: { label: "Paid", color: "var(--primary)", bg: "var(--success-bg)", border: "var(--success-border)" },
+    paid: { label: "Paid", color: "var(--success-strong)", bg: "var(--success-bg)", border: "var(--success-border)" },
     partial: { label: "Partial", color: "var(--warning)", bg: "var(--warning-bg)", border: "var(--warning-border)" },
     unpaid: { label: "Unpaid", color: "var(--danger)", bg: "var(--danger-bg)", border: "var(--danger-border)" },
     exempt: { label: "Exempt", color: "var(--neutral-text)", bg: "var(--surface-neutral-soft)", border: "var(--surface-neutral-3)" },
@@ -265,7 +265,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
       <div key={h.id} style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:"12px 13px", marginBottom:8 }}>
         <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start"}}>
           <div style={{minWidth:0}}>
-            <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--primary)"}}>{h.txn_id}</div>
+            <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--primary-text)"}}>{h.txn_id}</div>
             <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:2,textTransform:"capitalize"}}>
               {h.status}{h.approved_at ? ` · ${formatLocalDateTime(h.approved_at)}` : h.submitted_at ? ` · ${formatLocalDateTime(h.submitted_at)}` : ""}
             </div>
@@ -274,7 +274,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
         </div>
 
         <div className="sans" style={{fontSize:10,color:refValid?"var(--muted)":"var(--warning-3)",marginTop:8}}>
-          {refValid ? <>Bank ref: <b style={{color:"var(--primary)"}}>{h.ref_number}</b></> : <>⚠ Reference needs review: <b>{h.ref_number || "not detected"}</b></>}
+          {refValid ? <>Bank ref: <b style={{color:"var(--primary-text)"}}>{h.ref_number}</b></> : <>⚠ Reference needs review: <b>{h.ref_number || "not detected"}</b></>}
         </div>
 
         {applied.length > 0 && (
@@ -369,7 +369,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
               const r=await api.admin.sendPaymentReminders({month,member_id:member.id});
               setReminderNote(r.sent ? "Reminder sent." : (r.reason || "No reminder sent."));
             }catch(e){setReminderNote(e.message)} finally{setReminding(false)}
-          }} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"var(--success-bg)",color:"var(--primary)",border:"1px solid var(--success-border)",borderRadius:10,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",marginTop:10}}>
+          }} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"var(--success-bg)",color:"var(--success-strong)",border:"1px solid var(--success-border)",borderRadius:10,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",marginTop:10}}>
             <Bell size={14}/>{reminding?"Sending…":"Send payment reminder"}
           </button>}
 

@@ -139,7 +139,7 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
     <div style={{ marginBottom: 12 }}>
       <div className="sans" style={{
         fontSize: 12,
-        color: focused ? "var(--primary)" : "var(--muted)",
+        color: focused ? "var(--primary-text)" : "var(--muted)",
         fontWeight: focused ? 700 : 400,
         marginBottom: 4,
         transition: "color .15s ease, font-weight .15s ease"

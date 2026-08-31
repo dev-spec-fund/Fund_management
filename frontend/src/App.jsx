@@ -132,7 +132,7 @@ export default function App() {
       )}
       <div className="sans" style={{ flexShrink: 0, display: "flex", gap: 18, padding: "0 20px", marginTop: 18, overflowX: "auto" }}>
         {tabs.map((t) => (
-          <button key={t} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "var(--primary)" : "var(--muted-2)", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
+          <button key={t} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "var(--primary-text)" : "var(--muted-2)", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>

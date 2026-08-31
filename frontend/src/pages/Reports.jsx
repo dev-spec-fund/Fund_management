@@ -69,7 +69,7 @@ export default function Reports({ setTab }) {
   return (
     <>
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary)", letterSpacing: .4 }}>REPORTS</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>REPORTS</div>
         <div style={{ display: "flex", gap: 6, position: "relative" }}>
           <button onClick={async()=>{try{const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month,monthLabel,summary})}catch(e){alert(e.message)}}} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
           <button onClick={exportCsv} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>

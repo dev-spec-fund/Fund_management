@@ -67,7 +67,7 @@ export default function PendingApprovals() {
     {count === 0 ? (
       <div style={{background:"var(--card)",border:"1px solid var(--success-bg-3)",borderRadius:16,padding:"34px 20px",textAlign:"center",marginTop:18}}>
         <div style={{width:48,height:48,borderRadius:24,background:"var(--success-bg)",color:"var(--success)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,margin:"0 auto 12px"}}>✓</div>
-        <div className="sans" style={{fontSize:16,fontWeight:700,color:"var(--primary)"}}>All caught up</div>
+        <div className="sans" style={{fontSize:16,fontWeight:700,color:"var(--primary-text)"}}>All caught up</div>
         <div className="sans" style={{fontSize:12,color:"var(--soft)",lineHeight:1.55,marginTop:6}}>
           No approvals are waiting.<br/>New submissions will appear here.
         </div>
@@ -97,7 +97,7 @@ export default function PendingApprovals() {
                 <div className="sans" style={{fontWeight:700,fontSize:14,whiteSpace:"nowrap"}}>MVR {fmt(c.amount)}</div>
               </div>
               <div className="sans" style={{fontSize:11,color:"var(--muted)",marginTop:8}}>
-                Ref: <b style={{color:c.ref_number?"var(--primary)":"var(--danger)"}}>{c.ref_number || "Not detected"}</b>
+                Ref: <b style={{color:c.ref_number?"var(--primary-text)":"var(--danger)"}}>{c.ref_number || "Not detected"}</b>
               </div>
               {c.created_at && <div className="sans" style={{fontSize:10,color:"var(--soft-4)",marginTop:4}}>Submitted {formatLocalDateTime(c.created_at)}</div>}
               <div className="sans" style={{fontSize:10,color:needsReview?"var(--warning-3)":"var(--success)",marginTop:7,fontWeight:600}}>
@@ -105,7 +105,7 @@ export default function PendingApprovals() {
               </div>
               {Array.isArray(c.allocation_preview) && c.allocation_preview.length>0 && (
                 <div className="sans" style={{background:"var(--bg)",borderRadius:9,padding:9,marginTop:8,fontSize:10,color:"var(--neutral-text-2)"}}>
-                  <b style={{color:"var(--primary)"}}>Will be applied to</b>
+                  <b style={{color:"var(--primary-text)"}}>Will be applied to</b>
                   {c.allocation_preview.map((a,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
                     <span>{a.month}</span><span>MVR {fmt(a.amount)} · {a.status_after==="paid"?"Paid":"Partial"}</span>
                   </div>)}

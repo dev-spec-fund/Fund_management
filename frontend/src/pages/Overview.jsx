@@ -80,7 +80,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       <div className="sans" style={{ fontSize: 11, color: "var(--muted)", marginTop: 18, marginBottom: 7, fontWeight: 700, letterSpacing: .5 }}>MONTHLY COLLECTION · {monthLabel.toUpperCase()}</div>
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 13, padding: "13px 14px" }}>
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12 }}>
-          <span><b style={{ color: "var(--primary)" }}>MVR {fmt(allocatedContributions)}</b> <span style={{ color: "var(--soft-2)" }}>/ MVR {fmt(expected)}</span></span>
+          <span><b style={{ color: "var(--primary-text)" }}>MVR {fmt(allocatedContributions)}</b> <span style={{ color: "var(--soft-2)" }}>/ MVR {fmt(expected)}</span></span>
           <b style={{ color: "var(--success)" }}>{collectionPct}% collected</b>
         </div>
         <div style={{ height: 6, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", marginTop: 8 }}>

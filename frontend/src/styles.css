@@ -7,6 +7,7 @@
   --text: #1F2A22;
   --text-strong: #222222;
   --primary: #1F3D2B;
+  --primary-text: #1F3D2B;
   --topbar: #17212B;
   --on-primary: #F7F5EF;
   --on-topbar: #FFFFFF;
@@ -78,6 +79,7 @@
     --text: #E7EAE5;
     --text-strong: #F5F6F2;
     --primary: #244832;
+    --primary-text: #9DCC9B;
     --topbar: #11171B;
     --on-primary: #F4F1E8;
     --on-topbar: #F5F7F8;
