@@ -199,6 +199,15 @@ function Overview({ isAdmin, setTab }) {
   const outstandingMembers = (summary.outstanding?.members || []).length;
   const expected = allocatedContributions + outstandingTotal;
   const collectionPct = expected > 0 ? Math.min(100, Math.round((allocatedContributions / expected) * 100)) : 0;
+  const overviewMonth = summary.month || currentMonthValue();
+  const monthLabel = (() => {
+    try {
+      const [y, m] = overviewMonth.split("-").map(Number);
+      return new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(new Date(y, m - 1, 1));
+    } catch {
+      return overviewMonth;
+    }
+  })();
 
   return (
     <>
