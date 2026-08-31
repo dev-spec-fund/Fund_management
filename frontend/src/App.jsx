@@ -739,7 +739,7 @@ function Settings({ admin }) {
     {superAdmin&&<><SectionTitle>DATABASE BACKUP</SectionTitle><div style={cardStyle}><div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:8}}>Download a JSON snapshot before schema or data changes. For a full D1 SQL export, use the included worker backup script.</div><button onClick={backup} style={approveBtn}>Download backup</button></div></>}
 
     <SectionTitle>AUDIT LOG</SectionTitle>
-    <div style={cardStyle}>{audit.slice(0,100).map(a=><div key={a.id} className="sans" style={{padding:"8px 0",borderBottom:"1px solid #F0EDE3"}}><div style={{display:"flex",justifyContent:"space-between",fontSize:12}}><b>{a.action}</b><span style={{color:"#B5AE9C",fontSize:10}}>{a.created_at}</span></div><div style={{fontSize:11,color:"#8A9086",marginTop:2,wordBreak:"break-word"}}>{a.detail} · by {a.admin_name || "system"}</div></div>)}{!audit.length&&<EmptyLine>No audit entries.</EmptyLine>}</div>
+    <div style={cardStyle}>{audit.slice(0,100).map(a=><AuditEntry key={a.id} a={a}/>)}{!audit.length&&<EmptyLine>No audit entries.</EmptyLine>}</div>
 
     {superAdmin&&<><SectionTitle>RECENT ERRORS</SectionTitle><div style={cardStyle}>{errors.slice(0,50).map(e=><div key={e.id} className="sans" style={{padding:"7px 0",borderBottom:"1px solid #F0EDE3",fontSize:11}}><b>{e.source}</b> · {e.message}<div style={{color:"#B5AE9C"}}>{e.created_at}</div></div>)}{!errors.length&&<EmptyLine>No logged errors.</EmptyLine>}</div></>}
   </>;

@@ -147,6 +147,34 @@ export async function findDuplicateMembers(env: Env, name?: string | null, phone
   }).slice(0,10);
 }
 
+const AUDIT_SENSITIVE_KEYS = new Set([
+  "ocr_raw", "slip_file_id", "file_id", "telegram_file_id", "photo_file_id",
+  "image", "image_bytes", "raw", "ai_response", "model_response", "prompt",
+]);
+
+function sanitizeAuditValue(value: unknown, depth = 0): unknown {
+  if (depth > 5) return "[truncated]";
+  if (value == null || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "string") return value.length > 500 ? `${value.slice(0, 500)}…` : value;
+  if (Array.isArray(value)) return value.slice(0, 25).map(v => sanitizeAuditValue(v, depth + 1));
+  if (typeof value === "object") {
+    const clean: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (AUDIT_SENSITIVE_KEYS.has(key.toLowerCase())) continue;
+      clean[key] = sanitizeAuditValue(val, depth + 1);
+    }
+    return clean;
+  }
+  return String(value);
+}
+
+export function sanitizeAuditDetail(detail: unknown): unknown {
+  if (typeof detail !== "string") return sanitizeAuditValue(detail);
+  try { return sanitizeAuditValue(JSON.parse(detail)); }
+  catch { return detail.length > 500 ? `${detail.slice(0, 500)}…` : detail; }
+}
+
 export async function auditEntity(env: Env, adminId: number | null, action: string, entity: string, entityId: number | string | null, before?: unknown, after?: unknown) {
-  await logAudit(env, adminId, action, JSON.stringify({ entity, entity_id: entityId, before: before ?? null, after: after ?? null }));
+  const detail = sanitizeAuditValue({ entity, entity_id: entityId, before: before ?? null, after: after ?? null });
+  await logAudit(env, adminId, action, JSON.stringify(detail));
 }

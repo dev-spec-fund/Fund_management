@@ -203,7 +203,7 @@ export async function ocrSlip(
         const amount = cleanAmount(parsed.amount);
         const ref = cleanRef(parsed.ref ?? parsed.reference ?? parsed.transaction_reference ?? parsed.transaction_id);
         const date = typeof parsed.date === "string" ? parsed.date.trim() : "";
-        const raw = [date && `Transaction Date: ${date}`, `[Vision parse]\n${visionRaw}`].filter(Boolean).join("\n");
+        const raw = JSON.stringify({ amount, ref, date: /^20\d{2}-\d{2}-\d{2}$/.test(date) ? date : null });
         if (amount !== null || ref) return { amount, ref, raw };
       } catch (err) {
         await safeLogError(env, "ocr.vision.json", err, String(visionRaw).slice(0, 1000));
@@ -240,10 +240,12 @@ export async function ocrSlip(
   }
 
   const local = parseSlipText(ocrText);
+  const dateMatch = String(ocrText || visionRaw || "").match(/\b(20\d{2})[-\/.](0[1-9]|1[0-2])[-\/.]([0-2]\d|3[01])\b/);
+  const date = dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : null;
   return {
     amount: local.amount,
     ref: local.ref,
-    raw: [ocrText, visionRaw && `[Vision fallback raw]\n${visionRaw}`].filter(Boolean).join("\n\n"),
+    raw: JSON.stringify({ amount: local.amount, ref: local.ref, date }),
   };
 }
 

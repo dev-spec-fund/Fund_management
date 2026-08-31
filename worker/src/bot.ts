@@ -272,8 +272,14 @@ Logged by: ${esc(admin.name)}`;
   const amount = parsed.amount ?? ocr.amount;
   const ref = parsed.ref ?? ocr.ref;
   const month = parsed.month ?? currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");
-  const bankDateMatch = String(ocr.raw || "").match(/\b(20\d{2})[-\/.](0[1-9]|1[0-2])[-\/.]([0-2]\d|3[01])\b/);
-  const bankDate = bankDateMatch ? `${bankDateMatch[1]}-${bankDateMatch[2]}-${bankDateMatch[3]}` : new Date().toISOString().slice(0,10);
+  let extractedDate: string | null = null;
+  try {
+    const structured = JSON.parse(ocr.raw || "{}");
+    if (typeof structured?.date === "string" && /^20\d{2}-\d{2}-\d{2}$/.test(structured.date)) extractedDate = structured.date;
+  } catch {}
+  const bankDate = extractedDate || new Intl.DateTimeFormat("en-CA", {
+    timeZone: env.FUND_TIMEZONE || "Indian/Maldives", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(new Date());
 
   if (!amount || amount <= 0) {
     return sendMessage(env, chatId, "Couldn't read the amount from your slip. Please resend with a caption such as <code>250 2026-08</code> or <code>250 BANKREF123 2026-08</code>.");
