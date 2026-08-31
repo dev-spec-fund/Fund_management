@@ -21,6 +21,7 @@ import {
   ensureMemberRegistrationTable,
   findUnlinkedMemberMatches,
 } from "./db";
+import { adminCan, consumeRateLimit, duplicateSlip, ensureOperationalSchema, requireOpenMonth, safeLogError } from "./ops";
 
 const MINI_APP_URL = "https://fund-management.pages.dev";
 
@@ -86,8 +87,14 @@ function registrationButtons(requestId: number, matches: any[]) {
 }
 
 export async function handleUpdate(env: Env, update: any) {
-  if (update.message) return handleMessage(env, update.message);
-  if (update.callback_query) return handleCallback(env, update.callback_query);
+  await ensureOperationalSchema(env);
+  try {
+    if (update.message) return handleMessage(env, update.message);
+    if (update.callback_query) return handleCallback(env, update.callback_query);
+  } catch (e) {
+    await safeLogError(env, "bot.handleUpdate", e, { update_id: update?.update_id });
+    throw e;
+  }
 }
 
 async function handleMessage(env: Env, message: any) {
@@ -100,6 +107,7 @@ async function handleMessage(env: Env, message: any) {
   const text: string = message.text || "";
 
   if (text === "/start") {
+    if (!(await consumeRateLimit(env, "bot_start", telegramId, 5, 60))) return sendMessage(env, chatId, "Too many requests. Please try again in a minute.");
     const linkedId = await ensureMemberLinked(env, telegramId);
     if (linkedId) {
       return sendMessage(
@@ -197,25 +205,50 @@ async function handleMessage(env: Env, message: any) {
 }
 
 async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramId: string) {
+  if (!(await consumeRateLimit(env, "slip_upload", telegramId, 10, 3600))) return sendMessage(env, chatId, "Too many slip uploads. Please try again later.");
   const caption: string = message.caption || "";
   const largestPhoto = message.photo[message.photo.length - 1];
   const fileId = largestPhoto.file_id;
 
   if (caption.startsWith("/expense")) {
     const admin = await getAdminByTelegramId(env, telegramId);
-    if (!admin) return sendMessage(env, chatId, "Only admins can log expenses this way.");
+    if (!admin || !adminCan(admin, "finance")) return sendMessage(env, chatId, "Treasurer or Super Admin access is required to log expenses.");
     const rest = caption.replace("/expense", "").trim();
     const monthMatch = rest.match(/\d{4}-(0[1-9]|1[0-2])/);
+    const month = monthMatch?.[0] || currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");
     const description = monthMatch ? rest.replace(monthMatch[0], "").trim() : rest;
+    try { await requireOpenMonth(env, month); } catch (e:any) { return sendMessage(env, chatId, esc(e.message)); }
 
     const file = await downloadTelegramFile(env, fileId);
     const ocr = file ? await ocrSlip(env, file.bytes) : { amount: null, ref: null, raw: "" };
+    const amount = Number(ocr.amount || 0);
+    if (amount <= 0) return sendMessage(env, chatId, "I couldn't read the expense amount. Please add/edit this expense in the Fund App.");
+    const threshold = Number(await getSetting(env, "expense_approval_threshold")) || 5000;
+    const adminCount = await env.DB.prepare("SELECT COUNT(*) n FROM admins").first<{n:number}>();
+    const needsApproval = amount >= threshold && Number(adminCount?.n || 0) > 1;
     const txnId = await generateTxnId(env, "E");
-    await env.DB.prepare(
-      "INSERT INTO expenses (txn_id, description, amount, receipt_file_id, logged_by) VALUES (?, ?, ?, ?, ?)"
-    ).bind(txnId, description || "Expense", ocr.amount || 0, slipReference(fileId), admin.id).run();
-    await logAudit(env, admin.id, "log_expense", `${txnId} — ${description} — MVR ${ocr.amount ?? "?"}`);
-    return sendMessage(env, chatId, `Expense logged (${txnId}): ${esc(description || "Expense")}${ocr.amount ? ` — MVR ${ocr.amount}` : " (amount unclear, edit in app)"}`);
+    const r = await env.DB.prepare(`INSERT INTO expenses
+      (txn_id, description, amount, receipt_file_id, logged_by, transaction_month, status, approval_required, approved_by, approved_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(txnId, description || "Expense", amount, slipReference(fileId), admin.id, month, needsApproval ? "pending" : "approved", needsApproval ? 1 : 0, needsApproval ? null : admin.id, needsApproval ? null : new Date().toISOString()).run();
+    const expenseId = Number(r.meta.last_row_id);
+    await logAudit(env, admin.id, "expense_created", `${txnId} — ${description || "Expense"} — MVR ${amount} — ${needsApproval ? "pending approval" : "approved"}`);
+    if (needsApproval) {
+      const captionText = `🧾 <b>Expense confirmation required</b>
+
+Txn: <code>${txnId}</code>
+Description: ${esc(description || "Expense")}
+Amount: <b>MVR ${amount}</b>
+Month: ${month}
+Logged by: ${esc(admin.name)}`;
+      const admins = await env.DB.prepare("SELECT telegram_id,id FROM admins WHERE id != ?").bind(admin.id).all<any>();
+      for (const a of admins.results) await sendPhoto(env, a.telegram_id, fileId, captionText, { reply_markup: { inline_keyboard: [[
+        { text: "✅ Confirm expense", callback_data: `expapprove:${expenseId}` },
+        { text: "❌ Reject expense", callback_data: `expreject:${expenseId}` },
+      ]] } });
+      return sendMessage(env, chatId, `Expense ${txnId} saved as pending. A different admin must confirm it because it is MVR ${amount}.`);
+    }
+    return sendMessage(env, chatId, `Expense logged (${txnId}): ${esc(description || "Expense")} — MVR ${amount}`);
   }
 
   const member = await env.DB.prepare("SELECT * FROM members WHERE telegram_id = ?").bind(telegramId).first<any>();
@@ -228,23 +261,25 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
   const amount = parsed.amount ?? ocr.amount;
   const ref = parsed.ref ?? ocr.ref;
   const month = parsed.month ?? currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");
+  const bankDateMatch = String(ocr.raw || "").match(/\b(20\d{2})[-\/.](0[1-9]|1[0-2])[-\/.]([0-2]\d|3[01])\b/);
+  const bankDate = bankDateMatch ? `${bankDateMatch[1]}-${bankDateMatch[2]}-${bankDateMatch[3]}` : new Date().toISOString().slice(0,10);
 
   if (!amount || amount <= 0) {
     return sendMessage(env, chatId, "Couldn't read the amount from your slip. Please resend with a caption such as <code>250 2026-08</code> or <code>250 BANKREF123 2026-08</code>.");
   }
 
-  let dupWarning = "";
-  if (ref) {
-    const dup = await env.DB.prepare(
-      "SELECT id FROM contributions WHERE ref_number = ? AND status != 'rejected'"
-    ).bind(ref).first();
-    if (dup) dupWarning = "\n⚠️ This bank reference was already submitted before.";
+  try { await requireOpenMonth(env, month); } catch (e:any) { return sendMessage(env, chatId, `This contribution month is closed: ${esc(e.message)}`); }
+  const dup = await duplicateSlip(env, ref, Number(amount), bankDate);
+  if (dup) {
+    await safeLogError(env, "duplicate_slip", new Error("Duplicate bank slip blocked"), { telegramId, ref, amount, bankDate, existing: dup.txn_id });
+    return sendMessage(env, chatId, `⚠️ This slip appears to be a duplicate of <code>${esc(dup.txn_id)}</code> (same bank reference, amount and date). It was not submitted again.`);
   }
+  const dupWarning = "";
 
   const txnId = await generateTxnId(env, "C");
   const insertRes = await env.DB.prepare(
-    "INSERT INTO contributions (txn_id, member_id, amount, month, ref_number, slip_file_id, ocr_raw) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).bind(txnId, member.id, amount, month, ref, slipReference(fileId), ocr.raw).run();
+    "INSERT INTO contributions (txn_id, member_id, amount, month, ref_number, bank_date, slip_file_id, ocr_raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(txnId, member.id, amount, month, ref, bankDate, slipReference(fileId), ocr.raw).run();
   const contributionId = Number(insertRes.meta.last_row_id);
 
   await sendMessage(env, chatId, `Slip received (${txnId}): MVR ${amount} for ${month}${ref ? ` (bank ref: ${esc(ref)})` : ""}. Waiting for admin approval.${dupWarning}`);
@@ -255,14 +290,18 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
     `Txn: <code>${txnId}</code>\n` +
     `Amount: <b>MVR ${amount}</b>\n` +
     `Month: ${month}\n` +
-    `Bank ref: <code>${esc(ref || "not detected")}</code>${dupWarning}`;
+    `Bank ref: <code>${esc(ref || "not detected")}</code>\n` +
+    `Bank date: ${esc(bankDate)}${dupWarning}`;
 
   await notifyAdminsWithPhoto(env, fileId, adminCaption, {
     reply_markup: {
-      inline_keyboard: [[
-        { text: "✅ Approve", callback_data: `approve:${contributionId}` },
-        { text: "❌ Reject", callback_data: `reject:${contributionId}` },
-      ]],
+      inline_keyboard: [
+        [
+          { text: "✅ Approve", callback_data: `approve:${contributionId}` },
+          { text: "❌ Reject", callback_data: `reject:${contributionId}` },
+        ],
+        [{ text: "✏️ Review / Correct OCR", web_app: { url: `${MINI_APP_URL}?review=contribution&id=${contributionId}` } }]
+      ],
     },
   });
 }
@@ -276,6 +315,7 @@ async function finishRegistrationMessage(env: Env, callback: any, text: string) 
 
 async function handleCallback(env: Env, callback: any) {
   const telegramId = String(callback.from.id);
+  if (!(await consumeRateLimit(env, "bot_callback", telegramId, 30, 60))) return answerCallback(env, callback.id, "Too many actions. Try again shortly.");
   const admin = await getAdminByTelegramId(env, telegramId);
   if (!admin) return answerCallback(env, callback.id, "Admins only.");
 
@@ -355,6 +395,34 @@ async function handleCallback(env: Env, callback: any) {
     return answerCallback(env, callback.id, `Registered as ${member.member_code}`);
   }
 
+  if (action === "expapprove" || action === "expreject") {
+    if (!adminCan(admin, "finance")) return answerCallback(env, callback.id, "Treasurer or Super Admin required.");
+    const expenseId = Number(parts[1]);
+    const expense = await env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(expenseId).first<any>();
+    if (!expense) return answerCallback(env, callback.id, "Expense not found.");
+    if (expense.status !== "pending") return answerCallback(env, callback.id, `Already ${expense.status}.`);
+    if (action === "expapprove" && Number(expense.logged_by) === Number(admin.id)) return answerCallback(env, callback.id, "A different admin must confirm this expense.");
+    try { await requireOpenMonth(env, expense.transaction_month || expense.created_at.slice(0,7)); } catch (e:any) { return answerCallback(env, callback.id, e.message); }
+    if (action === "expapprove") {
+      const changed = await env.DB.prepare("UPDATE expenses SET status='approved',approved_by=?,approved_at=datetime('now') WHERE id=? AND status='pending'").bind(admin.id,expenseId).run();
+      if (!changed.meta.changes) return answerCallback(env, callback.id, "Already reviewed.");
+      await logAudit(env, admin.id, "expense_approved", `${expense.txn_id} approved`);
+      const previous = callback.message.caption || callback.message.text || "Expense";
+      await finishRegistrationMessage(env, callback, `${previous}
+
+✅ Confirmed by ${esc(admin.name)}`);
+      return answerCallback(env, callback.id, "Expense confirmed");
+    }
+    const changed = await env.DB.prepare("UPDATE expenses SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason='Rejected during approval' WHERE id=? AND status='pending'").bind(admin.id,expenseId).run();
+    if (!changed.meta.changes) return answerCallback(env, callback.id, "Already reviewed.");
+    await logAudit(env, admin.id, "expense_rejected", `${expense.txn_id} rejected`);
+    const previous = callback.message.caption || callback.message.text || "Expense";
+    await finishRegistrationMessage(env, callback, `${previous}
+
+❌ Rejected by ${esc(admin.name)}`);
+    return answerCallback(env, callback.id, "Expense rejected");
+  }
+
   if (action !== "approve" && action !== "reject") return answerCallback(env, callback.id, "Unknown action.");
 
   const contributionId = Number(parts[1]);
@@ -363,6 +431,9 @@ async function handleCallback(env: Env, callback: any) {
   if (contribution.status !== "pending") return answerCallback(env, callback.id, `Already ${contribution.status}.`);
 
   if (action === "approve") {
+    try { await requireOpenMonth(env, contribution.month); } catch (e:any) { return answerCallback(env, callback.id, e.message); }
+    const duplicate = await duplicateSlip(env, contribution.ref_number, Number(contribution.amount), contribution.bank_date, contributionId);
+    if (duplicate) return answerCallback(env, callback.id, `Duplicate of ${duplicate.txn_id}; review in app.`);
     const changed = await env.DB.prepare(
       "UPDATE contributions SET status = 'approved', approved_by = ?, approved_at = datetime('now') WHERE id = ? AND status = 'pending'"
     ).bind(admin.id, contributionId).run();

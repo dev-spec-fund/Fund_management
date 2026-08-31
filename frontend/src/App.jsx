@@ -4,18 +4,59 @@ import {
   Download, ShieldCheck, Bell, ChevronLeft, AlertTriangle, Eye, Pencil, Trash2,
 } from "lucide-react";
 import { api } from "./api";
+import { jsPDF } from "jspdf";
 
 const fmt = (n) => Number(n || 0).toLocaleString();
+
+function downloadText(filename, text, type = "text/plain") {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+async function exportStatementCsv(member) {
+  const st = await api.members.statement(member.id);
+  const rows = [["Member ID", st.member.member_code], ["Member", st.member.name], [], ["Month","Status","Paid","Due","Reason"]];
+  for (const x of st.monthly_status) rows.push([x.month,x.status,x.paid,x.due,x.reason||""]);
+  rows.push([], ["Contribution transaction","Month","Amount","Bank reference","Status","Submitted"]);
+  for (const x of st.contributions) rows.push([x.txn_id,x.month,x.amount,x.ref_number||"",x.status,x.submitted_at]);
+  rows.push([], ["Donation transaction","Month","Amount","Note","Date"]);
+  for (const x of (st.donations || [])) rows.push([x.txn_id,x.transaction_month||"",x.amount,x.note||"",x.created_at]);
+  rows.push([], ["Balance date","Transaction","Type","Amount","Running balance"]);
+  for (const x of (st.balance_history || [])) rows.push([x.at,x.txn_id,x.kind,x.amount,x.balance]);
+  const csv = rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g,'""')}"`).join(",")).join("\n");
+  downloadText(`${st.member.member_code}-statement.csv`, csv, "text/csv;charset=utf-8");
+}
+
+async function exportStatementPdf(member) {
+  const st = await api.members.statement(member.id);
+  const doc = new jsPDF(); let y=18;
+  doc.setFontSize(16); doc.text("Fund Member Statement", 14, y); y+=9;
+  doc.setFontSize(10); doc.text(`${st.member.member_code} — ${st.member.name}`,14,y); y+=6;
+  doc.text(`Monthly contribution: MVR ${fmt(st.member.monthly_amount)}`,14,y); y+=10;
+  doc.setFontSize(11); doc.text("Monthly status",14,y); y+=6; doc.setFontSize(9);
+  for (const x of st.monthly_status) { if(y>280){doc.addPage();y=18;} doc.text(`${x.month}  ${String(x.status).toUpperCase()}  Paid MVR ${fmt(x.paid)}  Due MVR ${fmt(x.due)}`,14,y); y+=5; }
+  y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Transactions",14,y); y+=6; doc.setFontSize(9);
+  for (const x of st.contributions) { if(y>280){doc.addPage();y=18;} doc.text(`${x.txn_id}  ${x.month}  MVR ${fmt(x.amount)}  ${x.ref_number||"No bank ref"}  ${x.status}`,14,y); y+=5; }
+  if ((st.donations || []).length) { y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Donations",14,y); y+=6; doc.setFontSize(9); for(const x of st.donations){if(y>280){doc.addPage();y=18;}doc.text(`${x.txn_id}  ${x.transaction_month||""}  MVR ${fmt(x.amount)}  ${x.note||""}`,14,y);y+=5;} }
+  y+=5; if(y>270){doc.addPage();y=18;} doc.setFontSize(11); doc.text("Balance history",14,y); y+=6; doc.setFontSize(9); for(const x of (st.balance_history||[])){if(y>280){doc.addPage();y=18;}doc.text(`${String(x.at||"").slice(0,10)}  ${x.txn_id}  ${x.kind}  +MVR ${fmt(x.amount)}  Balance MVR ${fmt(x.balance)}`,14,y);y+=5;}
+  doc.save(`${st.member.member_code}-statement.pdf`);
+}
 
 export default function App() {
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState("overview");
+  const [mode, setMode] = useState("member");
 
   useEffect(() => {
     api.me()
-      .then(setMe)
+      .then((data) => {
+        setMe(data);
+        setMode(data?.admin ? "admin" : "member");
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -24,12 +65,36 @@ export default function App() {
   if (error) return <Shell><Center>Couldn't connect: {error}</Center></Shell>;
 
   const isAdmin = !!me?.admin;
-  const tabs = isAdmin
-    ? ["overview", "members", "activity", "reports", "settings"]
-    : ["overview", "members", "history", "fund", "activity"];
+  const isMember = !!me?.member;
+  const adminView = isAdmin && mode === "admin";
+  const memberView = isMember && mode === "member";
+
+  const tabs = adminView
+    ? ["overview", "pending", "members", "activity", "reports", "settings"]
+    : ["overview", "history", "fund", "activity"];
+
+  const changeMode = (nextMode) => {
+    setMode(nextMode);
+    setTab("overview");
+  };
 
   return (
-    <Shell isAdmin={isAdmin} me={me}>
+    <Shell isAdmin={isAdmin} isMember={isMember} mode={mode} me={me}>
+      {isAdmin && isMember && (
+        <div style={{ padding: "14px 20px 0", maxWidth: 480, margin: "0 auto" }}>
+          <div className="sans" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "#E9E4D8", borderRadius: 12, padding: 3 }}>
+            <button onClick={() => changeMode("admin")} style={modeButton(mode === "admin")}>Admin View</button>
+            <button onClick={() => changeMode("member")} style={modeButton(mode === "member")}>My Account</button>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && !isMember && (
+        <div className="sans" style={{ margin: "14px 20px 0", maxWidth: 440, background: "#FFF6E5", border: "1px solid #EFD9A9", color: "#7A5A18", borderRadius: 10, padding: "9px 12px", fontSize: 12 }}>
+          You are an admin but not yet linked to a member account. Send /start to the bot and choose “Register Myself as Member”.
+        </div>
+      )}
+
       <div className="sans" style={{ display: "flex", gap: 18, padding: "0 20px", marginTop: 18, overflowX: "auto" }}>
         {tabs.map((t) => (
           <button key={t} onClick={() => setTab(t)}
@@ -43,19 +108,33 @@ export default function App() {
         ))}
       </div>
       <div style={{ padding: 20, maxWidth: 480, margin: "0 auto" }}>
-        {tab === "overview" && <Overview isAdmin={isAdmin} setTab={setTab} />}
-        {tab === "members" && <Members isAdmin={isAdmin} />}
-        {tab === "history" && !isAdmin && <MyHistory telegramId={me?.user?.id} />}
-        {tab === "fund" && !isAdmin && <FundView />}
-        {tab === "activity" && <Activity isAdmin={isAdmin} />}
-        {tab === "reports" && isAdmin && <Reports />}
-        {tab === "settings" && isAdmin && <Settings admin={me.admin} />}
+        {tab === "overview" && <Overview isAdmin={adminView} setTab={setTab} />}
+        {tab === "pending" && adminView && <PendingApprovals />}
+        {tab === "members" && adminView && <Members isAdmin />}
+        {tab === "history" && memberView && <MyHistory member={me.member} />}
+        {tab === "fund" && memberView && <FundView />}
+        {tab === "activity" && <Activity isAdmin={adminView} />}
+        {tab === "reports" && adminView && <Reports />}
+        {tab === "settings" && adminView && <Settings admin={me.admin} />}
       </div>
     </Shell>
   );
 }
 
-function Shell({ children, isAdmin, me }) {
+function modeButton(active) {
+  return {
+    border: "none",
+    borderRadius: 9,
+    padding: "9px 10px",
+    background: active ? "#1F3D2B" : "transparent",
+    color: active ? "#F7F5EF" : "#6B7268",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+  };
+}
+
+function Shell({ children, isAdmin, isMember, mode, me }) {
   return (
     <div style={{ fontFamily: "'Fraunces','Georgia',serif", background: "#F7F5EF", minHeight: "100vh", color: "#1F2A22" }}>
       <style>{`
@@ -67,7 +146,7 @@ function Shell({ children, isAdmin, me }) {
           <ChevronLeft size={18} />
           <span style={{ fontWeight: 600 }}>Fund Bot</span>
         </div>
-        {me && <div style={{ opacity: 0.75, fontSize: 12 }}>{isAdmin ? "Admin" : "Member"}</div>}
+        {me && <div style={{ opacity: 0.75, fontSize: 12 }}>{isAdmin && isMember ? (mode === "admin" ? "Admin View" : "My Account") : isAdmin ? "Admin" : "Member"}</div>}
       </div>
       <div style={{ background: "#1F3D2B", padding: "24px 24px 6px", color: "#F7F5EF" }}>
         <div className="sans" style={{ fontSize: 12, letterSpacing: 2, opacity: 0.65, textTransform: "uppercase" }}>Fund</div>
@@ -88,9 +167,10 @@ function Overview({ isAdmin, setTab }) {
   const [activity, setActivity] = useState([]);
 
   useEffect(() => {
-    api.reports.summary().then(setSummary).catch(() => {});
+    const summaryRequest = isAdmin ? api.reports.summary() : api.reports.publicSummary();
+    summaryRequest.then(setSummary).catch(() => {});
     api.reports.activity().then((a) => setActivity(a.slice(0, 5))).catch(() => {});
-  }, []);
+  }, [isAdmin]);
 
   if (!summary) return <Center>Loading overview…</Center>;
 
@@ -263,6 +343,10 @@ function MemberPopup({ member, onClose, onChanged }) {
             </div>
           ))}
           {(!detail || detail.contributions?.length === 0) && <div className="sans" style={{ fontSize: 13, color: "#8A9086" }}>No contributions recorded yet.</div>}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
+            <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn}>PDF statement</button>
+            <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn}>CSV statement</button>
+          </div>
           <button onClick={toggleActive} className="sans"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "none", color: member.active ? "#A6432F" : "#3A6B3E", border: "1px solid " + (member.active ? "#F2D6D0" : "#DDECD9"), borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 12 }}>
             {member.active ? "Deactivate member" : "Reactivate member"}
@@ -274,22 +358,31 @@ function MemberPopup({ member, onClose, onChanged }) {
 }
 
 /* ---------- Member-only views ---------- */
-function MyHistory({ telegramId }) {
+function MyHistory({ member }) {
   const [rows, setRows] = useState(null);
   useEffect(() => {
-    api.reports.activity()
-      .then((a) => setRows(a.filter((x) => x.kind === "contribution")))
+    api.myContributions()
+      .then(setRows)
       .catch(() => setRows([]));
   }, []);
   if (rows === null) return <Center>Loading…</Center>;
   return (
     <>
+      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 14, padding: 16, marginBottom: 16 }}>
+        <div className="sans" style={{ fontSize: 11, color: "#8A9086", letterSpacing: 1 }}>MY MEMBER ACCOUNT</div>
+        <div style={{ fontSize: 24, fontWeight: 600, marginTop: 3 }}>{member?.member_code || "—"}</div>
+        <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginTop: 3 }}>{member?.name} · MVR {fmt(member?.monthly_amount)}/month</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+          <button className="sans" onClick={() => exportStatementPdf(member)} style={smallBtn}>PDF statement</button>
+          <button className="sans" onClick={() => exportStatementCsv(member)} style={smallBtn}>CSV statement</button>
+        </div>
+      </div>
       <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>YOUR CONTRIBUTIONS</div>
       {rows.map((h) => (
         <div key={h.id} style={{ display: "flex", justifyContent: "space-between", background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: "13px 16px", marginBottom: 8 }}>
           <div>
             <div className="sans" style={{ fontSize: 14, fontWeight: 500 }}>{h.month}</div>
-            <div className="sans" style={{ fontSize: 11, color: "#B5AE9C" }}>{h.txn_id} · Bank ref: {h.ref || "—"}</div>
+            <div className="sans" style={{ fontSize: 11, color: "#B5AE9C" }}>{h.txn_id} · Bank ref: {h.ref_number || "—"} · {h.status}</div>
           </div>
           <div className="sans" style={{ fontSize: 14, fontWeight: 600 }}>MVR {fmt(h.amount)}</div>
         </div>
@@ -301,7 +394,7 @@ function MyHistory({ telegramId }) {
 
 function FundView() {
   const [summary, setSummary] = useState(null);
-  useEffect(() => { api.reports.summary().then(setSummary).catch(() => {}); }, []);
+  useEffect(() => { api.reports.publicSummary().then(setSummary).catch(() => {}); }, []);
   if (!summary) return <Center>Loading…</Center>;
   return (
     <>
@@ -481,64 +574,128 @@ function DonationModal({ onClose, onSaved }) {
   );
 }
 
+
+/* ---------- Pending approvals (admin) ---------- */
+function PendingApprovals() {
+  const [data, setData] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [error, setError] = useState("");
+  const load = () => api.admin.pending().then(setData).catch((e) => setError(e.message));
+  useEffect(load, []);
+  if (!data) return <Center>{error || "Loading approvals…"}</Center>;
+  const count = (data.registrations?.length || 0) + (data.contributions?.length || 0) + (data.expenses?.length || 0);
+  const act = async (fn) => { try { setError(""); await fn(); await load(); } catch (e) { setError(e.message); } };
+  return <>
+    <div className="sans" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+      <div><div style={{fontWeight:600}}>Pending approvals</div><div style={{fontSize:12,color:"#8A9086"}}>{count} item{count===1?"":"s"} waiting</div></div>
+      <button onClick={load} style={smallBtn}>Refresh</button>
+    </div>
+    {error && <div className="sans" style={{background:"#FDEDE8",color:"#A6432F",padding:10,borderRadius:10,fontSize:12,marginBottom:12}}>{error}</div>}
+
+    <SectionTitle>NEW MEMBERS</SectionTitle>
+    {(data.registrations || []).map((r) => <div key={r.id} style={cardStyle}>
+      <div className="sans" style={{fontWeight:600,fontSize:14}}>{r.name}</div>
+      <div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:3}}>Telegram {r.telegram_id}{r.username ? ` · @${r.username}` : ""}</div>
+      {(r.possible_matches || []).map((m) => <div key={m.id} className="sans" style={{fontSize:12,background:"#FFF6E5",padding:8,borderRadius:8,marginTop:8}}>Possible existing: <b>{m.member_code}</b> — {m.name}
+        <button onClick={() => act(() => api.admin.approveRegistration(r.id, m.id))} style={{...smallBtn,marginLeft:8}}>Link</button></div>)}
+      <div style={{display:"flex",gap:8,marginTop:10}}>
+        <button onClick={() => act(() => api.admin.approveRegistration(r.id))} style={approveBtn}>Create & approve</button>
+        <button onClick={() => act(() => api.admin.rejectRegistration(r.id, "Rejected by admin"))} style={rejectBtn}>Reject</button>
+      </div>
+    </div>)}
+    {!data.registrations?.length && <EmptyLine>No pending member requests.</EmptyLine>}
+
+    <SectionTitle>CONTRIBUTION SLIPS</SectionTitle>
+    {(data.contributions || []).map((c) => <div key={c.id} style={cardStyle}>
+      <div style={{display:"flex",justifyContent:"space-between",gap:8}}><div><div className="sans" style={{fontWeight:600,fontSize:14}}>{c.member_name} <span style={{fontSize:11,color:"#8A9086"}}>{c.member_code}</span></div><div className="sans" style={{fontSize:11,color:"#8A9086"}}>{c.txn_id} · {c.month} · Ref {c.ref_number || "not detected"}</div></div><div className="sans" style={{fontWeight:700}}>MVR {fmt(c.amount)}</div></div>
+      <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+        <button onClick={() => setEditing({...c})} style={smallBtn}>✏️ Correct OCR</button>
+        <button onClick={() => act(() => api.admin.approveContribution(c.id))} style={approveBtn}>Approve</button>
+        <button onClick={() => act(() => api.admin.rejectContribution(c.id, "Rejected by admin"))} style={rejectBtn}>Reject</button>
+      </div>
+    </div>)}
+    {!data.contributions?.length && <EmptyLine>No pending contribution slips.</EmptyLine>}
+
+    <SectionTitle>EXPENSE CONFIRMATIONS</SectionTitle>
+    {(data.expenses || []).map((e) => <div key={e.id} style={cardStyle}>
+      <div style={{display:"flex",justifyContent:"space-between"}}><div><div className="sans" style={{fontWeight:600,fontSize:14}}>{e.description}</div><div className="sans" style={{fontSize:11,color:"#8A9086"}}>{e.txn_id} · by {e.logged_by_name || "admin"}</div></div><div className="sans" style={{fontWeight:700}}>MVR {fmt(e.amount)}</div></div>
+      <div style={{display:"flex",gap:8,marginTop:10}}><button onClick={() => act(() => api.expenses.approve(e.id))} style={approveBtn}>Confirm</button><button onClick={() => act(() => api.expenses.reject(e.id))} style={rejectBtn}>Reject</button></div>
+    </div>)}
+    {!data.expenses?.length && <EmptyLine>No pending expenses.</EmptyLine>}
+
+    {editing && <Modal title={`Correct ${editing.txn_id}`} onClose={() => setEditing(null)}>
+      <Field label="Amount (MVR)" type="number" value={editing.amount} onChange={(v)=>setEditing({...editing,amount:Number(v)})}/>
+      <Field label="Bank reference" value={editing.ref_number || ""} onChange={(v)=>setEditing({...editing,ref_number:v})}/>
+      <Field label="Bank date (YYYY-MM-DD)" value={editing.bank_date || ""} onChange={(v)=>setEditing({...editing,bank_date:v})}/>
+      <Field label="Contribution month (YYYY-MM)" value={editing.month || ""} onChange={(v)=>setEditing({...editing,month:v})}/>
+      <PrimaryButton onClick={() => act(async()=>{await api.admin.correctContribution(editing.id,{amount:editing.amount,ref_number:editing.ref_number||null,bank_date:editing.bank_date||null,month:editing.month});setEditing(null);})}>Save correction</PrimaryButton>
+    </Modal>}
+  </>;
+}
+
+function SectionTitle({children}) { return <div className="sans" style={{fontSize:12,color:"#6B7268",fontWeight:700,letterSpacing:.7,margin:"18px 0 8px"}}>{children}</div>; }
+function EmptyLine({children}) { return <div className="sans" style={{fontSize:12,color:"#8A9086",padding:"8px 2px 14px"}}>{children}</div>; }
+const cardStyle={background:"#fff",border:"1px solid #E9E4D8",borderRadius:12,padding:14,marginBottom:8};
+const smallBtn={background:"#F1EFE7",border:"1px solid #DED8CA",borderRadius:8,padding:"7px 10px",fontSize:12,cursor:"pointer"};
+const approveBtn={...smallBtn,background:"#EAF1EE",color:"#1F3D2B",border:"1px solid #CFE0D6",fontWeight:600};
+const rejectBtn={...smallBtn,background:"#FDEDE8",color:"#A6432F",border:"1px solid #F2D6D0",fontWeight:600};
+
 /* ---------- Settings (admin) ---------- */
 function Settings({ admin }) {
-  const [settings, setSettings] = useState(null);
-  const [admins, setAdmins] = useState([]);
-  const [audit, setAudit] = useState(null);
-
-  useEffect(() => {
-    api.settings.get().then(setSettings).catch(() => {});
-    api.settings.admins().then(setAdmins).catch(() => {});
-    if (admin?.role === "owner") api.settings.auditLog().then(setAudit).catch(() => {});
-  }, [admin]);
-
-  if (!settings) return <Center>Loading settings…</Center>;
-
-  const updateReminderDay = async (value) => {
-    await api.settings.update({ reminder_day: value });
-    setSettings({ ...settings, reminder_day: value });
+  const [settings,setSettings]=useState(null); const [admins,setAdmins]=useState([]); const [audit,setAudit]=useState([]); const [health,setHealth]=useState(null); const [closures,setClosures]=useState([]); const [errors,setErrors]=useState([]); const [message,setMessage]=useState("");
+  const role = admin?.role === "owner" ? "super_admin" : admin?.role;
+  const superAdmin = role === "super_admin";
+  const load=()=>{
+    api.settings.get().then(setSettings).catch(()=>{}); api.settings.admins().then(setAdmins).catch(()=>{}); api.settings.auditLog().then(setAudit).catch(()=>{}); api.admin.health().then(setHealth).catch(()=>{}); api.admin.monthClosures().then(setClosures).catch(()=>{}); if(superAdmin) api.admin.errors().then(setErrors).catch(()=>{});
   };
+  useEffect(load,[admin]);
+  if(!settings)return <Center>Loading settings…</Center>;
+  const saveSetting=async(key,value)=>{await api.settings.update({[key]:String(value)});setSettings({...settings,[key]:String(value)});setMessage("Saved");};
+  const closeMonth=async()=>{const month=prompt("Month to close (YYYY-MM)",new Date().toISOString().slice(0,7));if(!month)return;try{await api.admin.closeMonth(month,"Closed from Fund App");load()}catch(e){setMessage(e.message)}};
+  const backup=async()=>{try{const data=await api.admin.backup();downloadText(`kys-fund-backup-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(data,null,2),"application/json");}catch(e){setMessage(e.message)}};
+  return <>
+    {message && <div className="sans" style={{fontSize:12,background:"#EAF1EE",padding:9,borderRadius:9,marginBottom:12}}>{message}</div>}
+    <SectionTitle>SYSTEM HEALTH</SectionTitle>
+    <div style={cardStyle}>
+      {health ? <div className="sans" style={{fontSize:12,lineHeight:1.8}}>
+        <div>Database: <b>{health.db?.ok ? "✅ Online" : "❌ Error"}</b></div>
+        <div>Telegram bot: <b>{health.telegram?.ok ? `✅ @${health.telegram.username || "connected"}` : "❌ Error"}</b></div>
+        <div>Webhook: <b>{health.webhook?.ok && health.webhook?.url ? "✅ Configured" : "⚠️ Check webhook"}</b>{health.webhook?.pending ? ` · ${health.webhook.pending} pending` : ""}</div>
+        <div>AI/OCR binding: <b>{health.ai?.ok ? "✅ Available" : "❌ Missing"}</b></div>
+        <div>Mini App: {health.mini_app_url || "not set"}</div><div>Reminder: {health.reminder_schedule || "not set"}</div>
+        {health.webhook?.last_error && <div style={{color:"#A6432F"}}>Webhook error: {health.webhook.last_error}</div>}
+      </div> : <div className="sans" style={{fontSize:12,color:"#8A9086"}}>Checking…</div>}
+      <button onClick={()=>api.admin.health().then(setHealth)} style={{...smallBtn,marginTop:8}}>Refresh health</button>
+    </div>
 
-  return (
-    <>
-      <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>REMINDER SCHEDULE</div>
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <select value={settings.reminder_day} onChange={(e) => updateReminderDay(e.target.value)} className="sans"
-          style={{ width: "100%", border: "1px solid #D9D3C4", borderRadius: 8, padding: "9px 11px", fontSize: 14, background: "#F7F5EF" }}>
-          {["1", "5", "10", "15", "off"].map((d) => <option key={d} value={d}>{d === "off" ? "Off — manual only" : `Day ${d}`}</option>)}
-        </select>
-      </div>
+    <SectionTitle>CONTRIBUTION & EXPENSE SETTINGS</SectionTitle>
+    <div style={cardStyle}>
+      <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Reminder day</div>
+      <select value={settings.reminder_day} onChange={e=>saveSetting("reminder_day",e.target.value)} className="sans" style={{width:"100%",border:"1px solid #D9D3C4",borderRadius:8,padding:"9px 11px",fontSize:14,background:"#F7F5EF",marginBottom:12}}>{["1","5","10","15","off"].map(d=><option key={d} value={d}>{d==="off"?"Off — manual only":`Day ${d}`}</option>)}</select>
+      <div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:4}}>Expense second-approval threshold (MVR)</div>
+      <input type="number" value={settings.expense_approval_threshold || 5000} onChange={e=>setSettings({...settings,expense_approval_threshold:e.target.value})} onBlur={e=>saveSetting("expense_approval_threshold",e.target.value)} className="sans" style={{width:"100%",boxSizing:"border-box",border:"1px solid #D9D3C4",borderRadius:8,padding:"9px 11px",fontSize:14}} />
+    </div>
 
-      <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>ADMINS & ROLES</div>
-      <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 4, marginBottom: 16 }}>
-        {admins.map((a) => (
-          <div key={a.id} className="sans" style={{ display: "flex", justifyContent: "space-between", padding: "11px 12px", borderBottom: "1px solid #F0EDE3", fontSize: 13 }}>
-            {a.name}
-            <span style={{ background: a.role === "owner" ? "#EAF1EE" : "#F4E7C9", color: a.role === "owner" ? "#1F3D2B" : "#8A6A1E", fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 12 }}>{a.role}</span>
-          </div>
-        ))}
-      </div>
+    <SectionTitle>MONTH CLOSE</SectionTitle>
+    <div style={cardStyle}>
+      {closures.slice(0,6).map(x=><div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"6px 0",borderBottom:"1px solid #F0EDE3"}}><span><b>{x.month}</b> · closed by {x.closed_by_name || "admin"}</span>{superAdmin&&<button onClick={()=>api.admin.reopenMonth(x.month).then(load)} style={smallBtn}>Reopen</button>}</div>)}
+      {!closures.length&&<div className="sans" style={{fontSize:12,color:"#8A9086"}}>No months closed yet.</div>}
+      {superAdmin&&<button onClick={closeMonth} style={{...approveBtn,marginTop:10}}>Close a month</button>}
+    </div>
 
-      {admin?.role === "owner" && (
-        <>
-          <div className="sans" style={{ fontSize: 13, color: "#6B7268", marginBottom: 8, fontWeight: 600 }}>AUDIT LOG (owner only)</div>
-          <div style={{ background: "#fff", border: "1px solid #E9E4D8", borderRadius: 12, padding: 4 }}>
-            {(audit || []).map((a) => (
-              <div key={a.id} className="sans" style={{ padding: "11px 12px", borderBottom: "1px solid #F0EDE3" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                  <span style={{ fontWeight: 500 }}>{a.action}</span>
-                  <span style={{ color: "#B5AE9C", fontSize: 11 }}>{a.created_at}</span>
-                </div>
-                <div style={{ fontSize: 12, color: "#8A9086", marginTop: 2 }}>{a.detail} · by {a.admin_name || "system"}</div>
-              </div>
-            ))}
-            {(!audit || audit.length === 0) && <div className="sans" style={{ fontSize: 13, color: "#8A9086", padding: 12 }}>No entries yet.</div>}
-          </div>
-        </>
-      )}
-    </>
-  );
+    <SectionTitle>ADMINS & ROLES</SectionTitle>
+    <div style={cardStyle}>
+      {admins.map(a=><div key={a.id} className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #F0EDE3",fontSize:13}}><span>{a.name}</span>{superAdmin?<select value={a.role==="owner"?"super_admin":a.role} onChange={e=>api.settings.updateAdmin(a.id,{role:e.target.value}).then(load)} style={{border:"1px solid #D9D3C4",borderRadius:8,padding:5}}><option value="super_admin">Super Admin</option><option value="treasurer">Treasurer</option><option value="viewer">Viewer</option></select>:<span>{a.role}</span>}</div>)}
+      <div className="sans" style={{fontSize:11,color:"#8A9086",marginTop:8}}>Super Admin: full control · Treasurer: financial operations · Viewer: read-only.</div>
+    </div>
+
+    {superAdmin&&<><SectionTitle>DATABASE BACKUP</SectionTitle><div style={cardStyle}><div className="sans" style={{fontSize:12,color:"#6B7268",marginBottom:8}}>Download a JSON snapshot before schema or data changes. For a full D1 SQL export, use the included worker backup script.</div><button onClick={backup} style={approveBtn}>Download backup</button></div></>}
+
+    <SectionTitle>AUDIT LOG</SectionTitle>
+    <div style={cardStyle}>{audit.slice(0,100).map(a=><div key={a.id} className="sans" style={{padding:"8px 0",borderBottom:"1px solid #F0EDE3"}}><div style={{display:"flex",justifyContent:"space-between",fontSize:12}}><b>{a.action}</b><span style={{color:"#B5AE9C",fontSize:10}}>{a.created_at}</span></div><div style={{fontSize:11,color:"#8A9086",marginTop:2,wordBreak:"break-word"}}>{a.detail} · by {a.admin_name || "system"}</div></div>)}{!audit.length&&<EmptyLine>No audit entries.</EmptyLine>}</div>
+
+    {superAdmin&&<><SectionTitle>RECENT ERRORS</SectionTitle><div style={cardStyle}>{errors.slice(0,50).map(e=><div key={e.id} className="sans" style={{padding:"7px 0",borderBottom:"1px solid #F0EDE3",fontSize:11}}><b>{e.source}</b> · {e.message}<div style={{color:"#B5AE9C"}}>{e.created_at}</div></div>)}{!errors.length&&<EmptyLine>No logged errors.</EmptyLine>}</div></>}
+  </>;
 }
 
 /* ---------- Shared UI bits ---------- */

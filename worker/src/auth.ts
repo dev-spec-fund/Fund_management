@@ -1,6 +1,7 @@
 import type { Context, Next } from "hono";
 import type { Env } from "./types";
 import { getAdminByTelegramId } from "./db";
+import { adminCan } from "./ops";
 
 /**
  * Verifies Telegram WebApp initData (HMAC-SHA256 per Telegram's spec) and
@@ -103,6 +104,18 @@ export function requireAdmin(c: Context<any>, next: Next) {
 
 export function requireOwner(c: Context<any>, next: Next) {
   const admin = c.get("admin");
-  if (!admin || admin.role !== "owner") return c.json({ error: "Owner access required" }, 403);
+  if (!admin || (admin.role !== "owner" && admin.role !== "super_admin")) return c.json({ error: "Owner access required" }, 403);
+  return next();
+}
+
+export function requireFinance(c: Context<any>, next: Next) {
+  const admin = c.get("admin");
+  if (!adminCan(admin, "finance")) return c.json({ error: "Treasurer or Super Admin access required" }, 403);
+  return next();
+}
+
+export function requireSuperAdmin(c: Context<any>, next: Next) {
+  const admin = c.get("admin");
+  if (!adminCan(admin, "manage_admins")) return c.json({ error: "Super Admin access required" }, 403);
   return next();
 }

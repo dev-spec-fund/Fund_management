@@ -1,4 +1,5 @@
 import type { Env } from "./types";
+import { safeLogError } from "./ops";
 
 const API = (token: string, method: string) => `https://api.telegram.org/bot${token}/${method}`;
 
@@ -9,9 +10,12 @@ export async function tg(env: Env, method: string, body: Record<string, unknown>
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    console.error(`Telegram API ${method} failed:`, await res.text());
+    const detail = await res.text();
+    console.error(`Telegram API ${method} failed:`, detail);
+    await safeLogError(env, `telegram.${method}`, new Error(`Telegram API ${res.status}`), detail);
+    return null;
   }
-  return res.json().catch(() => null);
+  return res.json().catch(async (e) => { await safeLogError(env, `telegram.${method}.json`, e); return null; });
 }
 
 export function sendMessage(env: Env, chatId: string | number, text: string, extra: Record<string, unknown> = {}) {
@@ -172,8 +176,10 @@ export async function ocrSlip(
 
     if (first?.format === "error") {
       ocrText = `OCR conversion error: ${first?.error || "unknown error"}`;
+      await safeLogError(env, "ocr.convert", new Error(first?.error || "OCR conversion error"));
     }
   } catch (err) {
+    await safeLogError(env, "ocr.convert", err);
     ocrText = `OCR conversion error: ${String(err)}`;
   }
 
