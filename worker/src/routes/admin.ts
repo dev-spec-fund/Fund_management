@@ -99,6 +99,7 @@ adminRoute.get('/health', requireAdmin, async c => {
 });
 
 adminRoute.get('/errors', requireSuperAdmin, async c => { await ensureOperationalSchema(c.env); return c.json((await c.env.DB.prepare("SELECT * FROM error_log ORDER BY created_at DESC LIMIT 200").all()).results); });
+adminRoute.delete('/errors', requireSuperAdmin, async c => { const admin=c.get('admin')!; await c.env.DB.prepare("DELETE FROM error_log").run(); await auditEntity(c.env,admin.id,'error_log_cleared','error_log','all',null,{cleared:true}); return c.json({ok:true}); });
 
 adminRoute.get('/backup', requireSuperAdmin, async c => {
   await ensureOperationalSchema(c.env); const tables=['members','admins','member_registration_requests','contributions','donations','expense_categories','expenses','exemptions','settings','id_sequences','audit_log','month_closures']; const data:any={exported_at:new Date().toISOString(),format:'kys-fund-json-v1',tables:{}};

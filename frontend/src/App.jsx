@@ -785,7 +785,7 @@ function Settings({ admin }) {
     <SectionTitle>AUDIT LOG</SectionTitle>
     <div style={cardStyle}>{audit.slice(0,100).map(a=><AuditEntry key={a.id} a={a}/>)}{!audit.length&&<EmptyLine>No audit entries.</EmptyLine>}</div>
 
-    {superAdmin&&<><SectionTitle>RECENT ERRORS</SectionTitle><div style={cardStyle}>{errors.slice(0,50).map(e=><div key={e.id} className="sans" style={{padding:"7px 0",borderBottom:"1px solid #F0EDE3",fontSize:11}}><b>{e.source}</b> · {e.message}<div style={{color:"#B5AE9C"}}>{e.created_at}</div></div>)}{!errors.length&&<EmptyLine>No logged errors.</EmptyLine>}</div></>}
+    {superAdmin&&<><SectionTitle>RECENT ERRORS</SectionTitle><div style={cardStyle}>{errors.length>0&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}><button onClick={()=>{if(confirm("Clear all logged errors?")) api.admin.clearErrors().then(()=>setErrors([])).catch(e=>setMessage(e.message));}} style={compactBtn}>Clear errors</button></div>}{errors.slice(0,50).map(e=><div key={e.id} className="sans" style={{padding:"7px 0",borderBottom:"1px solid #F0EDE3",fontSize:11}}><b>{e.source}</b> · {e.message}<div style={{color:"#B5AE9C"}}>{e.created_at}</div></div>)}{!errors.length&&<EmptyLine>No logged errors.</EmptyLine>}</div></>}
   </>;
 }
 

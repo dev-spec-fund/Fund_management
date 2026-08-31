@@ -118,29 +118,53 @@ function parseSlipText(text: string): { amount: number | null; ref: string | nul
   return { amount, ref };
 }
 
-function parseModelJson(text: string): { amount: number | null; ref: string | null } {
-  const match = text.match(/\{[\s\S]*?\}/);
-  if (!match) return { amount: null, ref: null };
+function parseModelJson(text: string): { amount: number | null; ref: string | null; date: string | null } {
+  const raw = String(text || "");
+  const match = raw.match(/\{[\s\S]*?\}/);
 
-  try {
-    const parsed: any = JSON.parse(match[0]);
-    const amount = cleanAmount(
-      parsed.amount ?? parsed.transfer_amount ?? parsed.transaction_amount ?? parsed.paid_amount
-    );
-    const ref = cleanRef(
-      parsed.ref ??
-        parsed.reference ??
-        parsed.reference_number ??
-        parsed.transaction_id ??
-        parsed.transaction_reference ??
-        parsed.transaction_number ??
-        parsed.txn_id ??
-        parsed.txn_ref
-    );
-    return { amount, ref };
-  } catch {
-    return { amount: null, ref: null };
+  if (match) {
+    try {
+      const parsed: any = JSON.parse(match[0]);
+      const amount = cleanAmount(
+        parsed.amount ?? parsed.transfer_amount ?? parsed.transaction_amount ?? parsed.paid_amount
+      );
+      const ref = cleanRef(
+        parsed.ref ??
+          parsed.reference ??
+          parsed.reference_number ??
+          parsed.transaction_id ??
+          parsed.transaction_reference ??
+          parsed.transaction_number ??
+          parsed.txn_id ??
+          parsed.txn_ref
+      );
+      const d = typeof parsed.date === "string" ? parsed.date.trim() : "";
+      const date = /^20\d{2}-\d{2}-\d{2}$/.test(d) ? d : null;
+      return { amount, ref, date };
+    } catch {
+      // Vision models occasionally truncate JSON. Fall through to tolerant field extraction.
+    }
   }
+
+  // Tolerant extraction for truncated/malformed JSON. Do not treat this as a system error.
+  const amountMatch = raw.match(/["']?(?:amount|transfer_amount|transaction_amount|paid_amount)["']?\s*:\s*["']?([^,"'}\n]+)/i);
+  const refMatch = raw.match(/["']?(?:ref|reference|reference_number|transaction_reference|transaction_id|transaction_number|txn_id|txn_ref)["']?\s*:\s*["']?([A-Z0-9\-_/]{4,})/i);
+  const dateMatch = raw.match(/["']?date["']?\s*:\s*["']?(20\d{2}-\d{2}-\d{2})/i);
+
+  const amount = cleanAmount(amountMatch?.[1]);
+  const ref = cleanRef(refMatch?.[1]);
+  const date = dateMatch?.[1] || null;
+
+  if (amount !== null || ref) return { amount, ref, date };
+
+  // Last fallback: parse any human-readable labels the model emitted.
+  const local = parseSlipText(raw);
+  const genericDate = raw.match(/\b(20\d{2})[-\/.](0[1-9]|1[0-2])[-\/.]([0-2]\d|3[01])\b/);
+  return {
+    amount: local.amount,
+    ref: local.ref,
+    date: genericDate ? `${genericDate[1]}-${genericDate[2]}-${genericDate[3]}` : null,
+  };
 }
 
 /** Encodes a Worker ArrayBuffer as a base64 data URL without spreading a large array. */
@@ -196,18 +220,13 @@ export async function ocrSlip(
       result?.description ||
       JSON.stringify(result);
 
-    const jsonMatch = String(visionRaw).match(/\{[\s\S]*?\}/);
-    if (jsonMatch) {
-      try {
-        const parsed: any = JSON.parse(jsonMatch[0]);
-        const amount = cleanAmount(parsed.amount);
-        const ref = cleanRef(parsed.ref ?? parsed.reference ?? parsed.transaction_reference ?? parsed.transaction_id);
-        const date = typeof parsed.date === "string" ? parsed.date.trim() : "";
-        const raw = JSON.stringify({ amount, ref, date: /^20\d{2}-\d{2}-\d{2}$/.test(date) ? date : null });
-        if (amount !== null || ref) return { amount, ref, raw };
-      } catch (err) {
-        await safeLogError(env, "ocr.vision.json", err, String(visionRaw).slice(0, 1000));
-      }
+    const parsedVision = parseModelJson(String(visionRaw));
+    if (parsedVision.amount !== null || parsedVision.ref) {
+      return {
+        amount: parsedVision.amount,
+        ref: parsedVision.ref,
+        raw: JSON.stringify(parsedVision),
+      };
     }
   } catch (err) {
     await safeLogError(env, "ocr.vision", err);

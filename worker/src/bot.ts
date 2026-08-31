@@ -288,7 +288,15 @@ Logged by: ${esc(admin.name)}`;
   try { await requireOpenMonth(env, month); } catch (e:any) { return sendMessage(env, chatId, `This contribution month is closed: ${esc(e.message)}`); }
   const dup = await duplicateSlip(env, ref, Number(amount), bankDate);
   if (dup) {
-    await safeLogError(env, "duplicate_slip", new Error("Duplicate bank slip blocked"), { telegramId, ref, amount, bankDate, existing: dup.txn_id });
+    await logAudit(env, null, "duplicate_slip_blocked", JSON.stringify({
+      member_id: member.id,
+      member_code: member.member_code,
+      amount: Number(amount),
+      month,
+      ref: ref || null,
+      bank_date: bankDate,
+      existing_txn_id: dup.txn_id,
+    }));
     return sendMessage(env, chatId, `⚠️ This slip appears to be a duplicate of <code>${esc(dup.txn_id)}</code> (same bank reference, amount and date). It was not submitted again.`);
   }
   const dupWarning = "";

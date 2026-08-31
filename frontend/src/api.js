@@ -79,6 +79,7 @@ export const api = {
     rejectContribution: (id, reason) => request(`/api/admin/pending/contributions/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
     health: () => request("/api/admin/health"),
     errors: () => request("/api/admin/errors"),
+    clearErrors: () => request("/api/admin/errors", { method: "DELETE" }),
     monthClosures: () => request("/api/admin/month-close"),
     closeMonth: (month, note) => request(`/api/admin/month-close/${month}`, { method: "POST", body: JSON.stringify({ note }) }),
     reopenMonth: (month) => request(`/api/admin/month-close/${month}`, { method: "DELETE" }),
