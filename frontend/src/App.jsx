@@ -145,6 +145,12 @@ function Shell({ children, isAdmin, isMember, mode, me }) {
         html, body, #root { height: 100%; width: 100%; max-width: 100%; overflow-x: hidden; }
         *, *::before, *::after { box-sizing: border-box; }
         body { margin: 0; overflow: hidden; overscroll-behavior-x: none; }
+        input:focus, textarea:focus, select:focus {
+          border-color: #2F5A3D !important;
+          background: #F4F8F5 !important;
+          box-shadow: 0 0 0 2px rgba(47,90,61,0.10) !important;
+          outline: none !important;
+        }
         .sans { font-family: 'Inter', sans-serif; }
       `}</style>
       <div className="sans" style={{ flexShrink: 0, background: "#17212B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", fontSize: 14 }}>
@@ -2195,23 +2201,46 @@ function Field({ label, value, onChange, type = "text", prefix = null, placehold
       style={{
         width: "100%",
         minWidth: 0,
-        border: prefix ? 0 : "1px solid #D9D3C4",
+        border: prefix ? 0 : `1.5px solid ${focused ? "#2F5A3D" : "#D9D3C4"}`,
         outline: "none",
         borderRadius: prefix ? 0 : 10,
         padding: "10px 12px",
         fontSize: 14,
         boxSizing: "border-box",
-        background: "#fff"
+        background: focused ? "#F4F8F5" : "#fff",
+        boxShadow: focused ? "0 0 0 2px rgba(47,90,61,0.10)" : "none",
+        transition: "border-color .15s ease, background .15s ease, box-shadow .15s ease"
       }}
     />
   );
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <div className="sans" style={{ fontSize: 12, color: "#6B7268", marginBottom: 4 }}>{label}</div>
+      <div className="sans" style={{
+        fontSize: 12,
+        color: focused ? "#1F3D2B" : "#6B7268",
+        fontWeight: focused ? 700 : 400,
+        marginBottom: 4,
+        transition: "color .15s ease, font-weight .15s ease"
+      }}>{label}</div>
       {prefix ? (
-        <div style={{ display:"flex", alignItems:"center", border:"1px solid #D9D3C4", borderRadius:10, background:"#fff", overflow:"hidden" }}>
-          <span className="sans" style={{ paddingLeft:12, fontSize:12, color:"#8A9086", flex:"0 0 auto" }}>{prefix}</span>
+        <div style={{
+          display:"flex",
+          alignItems:"center",
+          border:`1.5px solid ${focused ? "#2F5A3D" : "#D9D3C4"}`,
+          borderRadius:10,
+          background: focused ? "#F4F8F5" : "#fff",
+          overflow:"hidden",
+          boxShadow: focused ? "0 0 0 2px rgba(47,90,61,0.10)" : "none",
+          transition:"border-color .15s ease, background .15s ease, box-shadow .15s ease"
+        }}>
+          <span className="sans" style={{
+            paddingLeft:12,
+            fontSize:12,
+            color:focused ? "#2F5A3D" : "#8A9086",
+            fontWeight:focused ? 700 : 400,
+            flex:"0 0 auto"
+          }}>{prefix}</span>
           {input}
         </div>
       ) : input}
