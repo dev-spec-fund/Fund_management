@@ -1,5 +1,4 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft } from "lucide-react";
 import { api } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
@@ -203,13 +202,9 @@ function modeButton(active) {
   return { border: "none", borderRadius: 9, padding: "9px 10px", background: active ? "var(--primary)" : "transparent", color: active ? "var(--on-primary)" : "var(--muted)", fontSize: 12, fontWeight: 600, cursor: "pointer" };
 }
 
-function Shell({ children, isAdmin, isMember, mode, me }) {
+function Shell({ children }) {
   return (
     <div className="app-scroll-root" style={{ fontFamily: "'Fraunces','Georgia',serif", background: "var(--bg)", color: "var(--text)" }}>
-      <div className="sans" style={{ flexShrink: 0, background: "var(--topbar)", color: "var(--on-topbar)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", fontSize: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><ChevronLeft size={18} /><span style={{ fontWeight: 600 }}>Fund Bot</span></div>
-        {me && <div style={{ opacity: 0.75, fontSize: 12 }}>{isAdmin && isMember ? (mode === "admin" ? "Admin View" : "My Account") : isAdmin ? "Admin" : "Member"}</div>}
-      </div>
       <div className="theme-brand-surface" style={{ flexShrink: 0, background: "var(--primary)", padding: "24px 24px 6px", color: "var(--on-primary)" }}>
         <div className="sans" style={{ fontSize: 12, letterSpacing: 2, opacity: 0.65, textTransform: "uppercase" }}>Fund</div>
         <div style={{ fontSize: 28, fontWeight: 600, marginTop: 2 }}>Ledger</div>
