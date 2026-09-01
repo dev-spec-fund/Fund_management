@@ -167,13 +167,15 @@ export default function Settings({ admin }) {
   return <>
     <MessageBanner>{message}</MessageBanner>
 
-    <div style={{display:"flex",gap:6,overflowX:"auto",marginBottom:16,paddingBottom:2}}>
-      {tabs.map(([key,label])=>
-        <button key={key} onClick={()=>setSettingsSection(key)} className="sans"
-          style={{flex:"0 0 auto",border:`1px solid ${settingsSection===key?"var(--primary)":"var(--border-2)"}`,background:settingsSection===key?"var(--primary)":"var(--card)",color:settingsSection===key?"var(--on-primary)":"var(--muted)",borderRadius:20,padding:"7px 13px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-          {label}{key==="system" && errors.length>0 ? ` · ${errors.length}` : ""}
-        </button>
-      )}
+    <div className="settings-subnav-sticky">
+      <div className="settings-subnav-scroll">
+        {tabs.map(([key,label])=>
+          <button key={key} type="button" onClick={()=>setSettingsSection(key)} className="sans"
+            style={{flex:"0 0 auto",border:`1px solid ${settingsSection===key?"var(--primary)":"var(--border-2)"}`,background:settingsSection===key?"var(--primary)":"var(--card)",color:settingsSection===key?"var(--on-primary)":"var(--muted)",borderRadius:20,padding:"7px 13px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+            {label}{key==="system" && errors.length>0 ? ` · ${errors.length}` : ""}
+          </button>
+        )}
+      </div>
     </div>
 
     {settingsSection==="general" && <>

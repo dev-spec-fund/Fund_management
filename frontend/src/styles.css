@@ -469,3 +469,27 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   gap: 8px;
 }
+
+
+/* v35: Settings sub-navigation stays visible while section content scrolls underneath. */
+.settings-subnav-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bg);
+  padding: 2px 0 10px;
+  margin: -2px 0 12px;
+  border-bottom: 1px solid var(--divider);
+}
+.settings-subnav-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.settings-subnav-scroll::-webkit-scrollbar {
+  display: none;
+}
