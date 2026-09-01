@@ -62,3 +62,28 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
   const filename=`fund-report-${month}.pdf`;
   return sendExportToTelegram(doc.output("blob"), filename, `${monthLabel} · Fund report PDF`);
 }
+
+export async function exportAnnualAgmPdf(data) {
+  const year=String(data?.year||new Date().getFullYear());
+  const t=data?.totals||{};
+  const doc=new jsPDF(); let y=18;
+  const add=(label,value)=>{doc.text(String(label),14,y);doc.text(String(value),125,y);y+=7;};
+  const page=()=>{if(y>274){doc.addPage();y=18;}};
+  doc.setFontSize(17);doc.text(`Annual / AGM Fund Report ${year}`,14,y);y+=10;
+  doc.setFontSize(10);
+  add("Opening balance",`MVR ${fmt(t.opening_balance)}`);
+  add("Contributions received",`MVR ${fmt(t.contributions)}`);
+  add("Donations received",`MVR ${fmt(t.donations)}`);
+  add("Expenses",`MVR ${fmt(t.expenses)}`);
+  add("Net cash change",`MVR ${fmt(t.net)}`);
+  add("Closing balance",`MVR ${fmt(t.closing_balance)}`);
+  add("Annual collection rate",`${Number(t.collection_rate||0).toFixed(1)}%`);
+  add("Meetings",String(data?.meetings||0));
+  add("Financial reversals",String(data?.reversals?.count||0));
+  y+=5; doc.setFontSize(12);doc.text("Monthly summary",14,y);y+=7;doc.setFontSize(8.5);
+  for(const m of data?.months||[]){page();doc.text(`${m.month}  Collected MVR ${fmt(m.total_collected)} / ${fmt(m.total_due)}  Expenses MVR ${fmt(m.expenses)}  Closing MVR ${fmt(m.closing_balance)}  ${Number(m.collection_rate||0).toFixed(0)}%`,14,y);y+=5;}
+  y+=5;page();doc.setFontSize(12);doc.text("Expense categories",14,y);y+=7;doc.setFontSize(9);
+  for(const c of data?.expense_categories||[]){page();add(c.category,`MVR ${fmt(c.total)}`);}
+  const filename=`annual-agm-report-${year}.pdf`;
+  return sendExportToTelegram(doc.output("blob"),filename,`${year} · Annual / AGM Fund Report`);
+}

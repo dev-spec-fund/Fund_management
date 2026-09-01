@@ -22,7 +22,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 12;
+const REQUIRED_SCHEMA_VERSION = 13;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -41,6 +41,10 @@ export async function ensureOperationalSchema(env: Env) {
       ["expense_categories", ["active"]],
       ["meetings", ["updated_at","last_notification_at","cancelled_at","cancelled_by","cancel_reason"]],
       ["error_log", ["status","resolved_at","resolved_by"]],
+      ["monthly_snapshots", ["month","closing_balance","collection_rate"]],
+      ["financial_reversals", ["reversal_id","entity_type","entity_id","reason"]],
+      ["meeting_minutes", ["meeting_id","minutes","decisions"]],
+      ["meeting_action_items", ["meeting_id","description","status"]],
     ];
     for (const [table,required] of checks) {
       const rows=await env.DB.prepare(`PRAGMA table_info(${table})`).all<any>();
@@ -100,7 +104,7 @@ export async function duplicateSlip(env: Env, ref: string | null, amount: number
   const key = contributionDuplicateKey(ref, amount, date);
   if (!key) return null;
   const byKey = await env.DB.prepare(`SELECT id, txn_id, member_id, amount, ref_number, bank_date, status, submitted_at
-    FROM contributions WHERE duplicate_key=? AND status NOT IN ('rejected','voided') ${excludeId ? "AND id<>?" : ""} LIMIT 1`)
+    FROM contributions WHERE duplicate_key=? AND status NOT IN ('rejected','voided','reversed') ${excludeId ? "AND id<>?" : ""} LIMIT 1`)
     .bind(...(excludeId ? [key, excludeId] : [key])).first<any>();
   if (byKey) return byKey;
 
@@ -108,7 +112,7 @@ export async function duplicateSlip(env: Env, ref: string | null, amount: number
   const nref = normalizeRef(ref);
   const stmt = env.DB.prepare(`SELECT id, txn_id, member_id, amount, ref_number, bank_date, status, submitted_at
     FROM contributions
-    WHERE status NOT IN ('rejected','voided') AND ABS(amount-?) < 0.005
+    WHERE status NOT IN ('rejected','voided','reversed') AND ABS(amount-?) < 0.005
       AND COALESCE(bank_date, substr(submitted_at,1,10)) = ?
       ${excludeId ? "AND id != ?" : ""}
     ORDER BY submitted_at DESC LIMIT 30`);

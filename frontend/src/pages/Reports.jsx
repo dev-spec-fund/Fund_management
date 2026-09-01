@@ -14,6 +14,10 @@ export default function Reports({ setTab }) {
   const [showExpense, setShowExpense] = useState(false);
   const [showDonation, setShowDonation] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [annualYear,setAnnualYear]=useState(String(new Date().getFullYear()));
+  const [annual,setAnnual]=useState(null);
+  const [analytics,setAnalytics]=useState(null);
+  const [annualBusy,setAnnualBusy]=useState(false);
 
   const load = () => api.reports.summary(month).then(setSummary).catch(() => {});
   useEffect(() => {
@@ -26,6 +30,12 @@ export default function Reports({ setTab }) {
 
   const shiftMonth = (delta) => {
     setMonth(shiftMonthValue(month, delta));
+  };
+
+  const loadAnnual=async()=>{
+    setAnnualBusy(true);
+    try{const [a,x]=await Promise.all([api.governance.annual(annualYear),api.governance.analytics(annualYear)]);setAnnual(a);setAnalytics(x)}
+    catch(e){window.alert(e.message||"Could not load annual analytics")}finally{setAnnualBusy(false)}
   };
 
   const monthLabel = new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" })
@@ -170,6 +180,29 @@ export default function Reports({ setTab }) {
         </div>
       ))}
       {activeCategories.length === 0 && <div className="sans" style={{ fontSize: 12, color: "var(--soft)", marginBottom: 8 }}>No expenses for this month.</div>}
+
+      <div className="sans" style={{fontSize:12,color:"var(--muted)",margin:"20px 0 7px",fontWeight:700}}>ANNUAL / AGM & ANALYTICS</div>
+      <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:14}}>
+        <div style={{display:"flex",gap:8}}>
+          <input className="sans" type="number" min="2000" max="2100" value={annualYear} onChange={e=>setAnnualYear(e.target.value.slice(0,4))} style={{width:90,border:"1px solid var(--border-strong)",borderRadius:9,padding:"8px 10px",background:"var(--bg)"}}/>
+          <button disabled={annualBusy||annualYear.length!==4} onClick={loadAnnual} style={{...smallBtn("var(--primary-text)"),flex:1}}>{annualBusy?"Loading…":"Load annual report"}</button>
+          {annual&&<button onClick={async()=>{const {exportAnnualAgmPdf}=await import("../utils/exports");await exportAnnualAgmPdf(annual)}} style={{...smallBtn("var(--primary-text)"),flex:"0 0 auto"}}><Download size={13}/> AGM PDF</button>}
+        </div>
+        {annual&&<>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+            {[['Contributions',annual.totals?.contributions,'var(--success)'],['Donations',annual.totals?.donations,'var(--success)'],['Expenses',annual.totals?.expenses,'var(--danger)'],['Closing balance',annual.totals?.closing_balance,'var(--text)']].map(([l,v,c])=><div key={l} style={{background:"var(--bg)",borderRadius:9,padding:10}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>{l}</div><b style={{fontSize:13,color:c}}>MVR {fmt(v)}</b></div>)}
+          </div>
+          <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid var(--divider)",display:"flex",justifyContent:"space-between",fontSize:12}}><span>Annual collection rate</span><b style={{color:"var(--success)"}}>{Number(annual.totals?.collection_rate||0).toFixed(1)}%</b></div>
+        </>}
+        {analytics&&<>
+          <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:16,marginBottom:7}}>12-MONTH COLLECTION PERFORMANCE</div>
+          <div style={{display:"flex",alignItems:"flex-end",gap:4,height:90}}>{(annual.months||[]).map(m=><div key={m.month} title={`${m.month} · ${Number(m.collection_rate||0).toFixed(0)}%`} style={{flex:1,height:`${Math.max(3,Math.min(100,Number(m.collection_rate||0)))}%`,background:"var(--success)",borderRadius:"3px 3px 0 0",opacity:.85}}/>)}</div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"var(--soft)",marginTop:4}}><span>Jan</span><span>Dec</span></div>
+          <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:14,marginBottom:6}}>TOP MEMBER COLLECTION</div>
+          {(analytics.member_performance||[]).slice(0,5).map(m=><div key={m.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"6px 0",borderTop:"1px solid var(--divider)"}}><span>{m.member_code} · {m.name}</span><b>{Number(m.rate||0).toFixed(0)}% · MVR {fmt(m.collected)}</b></div>)}
+          <div style={{fontSize:10,color:"var(--soft)",marginTop:10}}>Reversals this year: {analytics.reversals?.count||0} · Meetings: {analytics.meetings||0}</div>
+        </>}
+      </div>
 
       {showExpense && <ExpenseModal onClose={() => setShowExpense(false)} onSaved={load} />}
       {showDonation && <DonationModal onClose={() => setShowDonation(false)} onSaved={load} />}

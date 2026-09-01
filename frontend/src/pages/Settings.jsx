@@ -62,6 +62,8 @@ export default function Settings({ admin }) {
   const [membersForAdmin,setMembersForAdmin]=useState([]);
   const [promoteMemberId,setPromoteMemberId]=useState("");
   const [promoteRole,setPromoteRole]=useState("treasurer");
+  const [closeCheck,setCloseCheck]=useState(null);
+  const [closeBusy,setCloseBusy]=useState(false);
 
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
   const superAdmin = role === "super_admin";
@@ -130,14 +132,24 @@ export default function Settings({ admin }) {
     }catch(e){ setMessage(e.message); }
   };
 
+  const reviewMonthClose=async()=>{
+    setCloseBusy(true); setCloseCheck(null);
+    try{ setCloseCheck(await api.governance.monthCloseCheck(currentMonth)); }
+    catch(e){ setMessage(e.message); }
+    finally{ setCloseBusy(false); }
+  };
+
   const closeMonth=async()=>{
+    const check=closeCheck || await api.governance.monthCloseCheck(currentMonth);
+    if((check.blockers||[]).length) return setMessage(`Cannot close month: ${check.blockers.join(", ")}`);
     const label = new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${currentMonth}-01T00:00:00Z`));
-    if(!confirm(`Close ${label}?\n\nApproved financial records for this month will be locked until a Super Admin reopens it.`)) return;
+    const note=window.prompt(`Close ${label}?\n\nA permanent monthly balance snapshot will be created. Optional closing note:`,"Closed from Fund App");
+    if(note===null) return;
+    setCloseBusy(true);
     try{
-      await api.admin.closeMonth(currentMonth,"Closed from Fund App");
-      load();
-      setMessage(`${label} closed`);
-    }catch(e){setMessage(e.message)}
+      await api.governance.closeMonth(currentMonth,note);
+      setCloseCheck(null); await load(); setMessage(`${label} closed and snapshot saved`);
+    }catch(e){setMessage(e.message)} finally{setCloseBusy(false)}
   };
 
   const backup=async()=>{
@@ -246,9 +258,22 @@ export default function Settings({ admin }) {
           <span style={{color:"var(--muted)"}}>Status</span>
           <span style={{fontWeight:700,color:monthClosed?"var(--danger)":"var(--success)"}}>{monthClosed?"Closed":"Open"}</span>
         </div>
-        {superAdmin && !monthClosed && <button onClick={closeMonth} style={{...rejectBtn,marginTop:12}}>Close current month</button>}
-        {superAdmin && monthClosed && <button onClick={()=>api.admin.reopenMonth(currentMonth).then(load).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen current month</button>}
+        {superAdmin && !monthClosed && <button disabled={closeBusy} onClick={reviewMonthClose} style={{...rejectBtn,marginTop:12}}>{closeBusy?"Checking…":"Review month closing"}</button>}
+        {superAdmin && monthClosed && <button onClick={()=>api.admin.reopenMonth(currentMonth).then(()=>{setCloseCheck(null);return load()}).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen current month</button>}
       </div>
+
+      {superAdmin && !monthClosed && closeCheck && <div style={{...cardStyle,marginTop:10,borderColor:(closeCheck.blockers||[]).length?"var(--danger-border)":"var(--success-border)"}}>
+        <div className="sans" style={{fontSize:13,fontWeight:700,marginBottom:8}}>Monthly Closing Assistant</div>
+        <div className="sans" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:11,marginBottom:10}}>
+          <div><span style={{color:"var(--soft)"}}>Opening balance</span><br/><b>MVR {Number(closeCheck.opening_balance||0).toLocaleString()}</b></div>
+          <div><span style={{color:"var(--soft)"}}>Closing balance</span><br/><b>MVR {Number(closeCheck.closing_balance||0).toLocaleString()}</b></div>
+          <div><span style={{color:"var(--soft)"}}>Collected</span><br/><b>MVR {Number(closeCheck.total_collected||0).toLocaleString()} / {Number(closeCheck.total_due||0).toLocaleString()}</b></div>
+          <div><span style={{color:"var(--soft)"}}>Collection rate</span><br/><b>{Math.round(Number(closeCheck.collection_rate||0))}%</b></div>
+        </div>
+        {(closeCheck.blockers||[]).map((x,i)=><div key={`b-${i}`} className="sans" style={{fontSize:11,color:"var(--danger)",marginTop:4}}>⛔ {x}</div>)}
+        {(closeCheck.warnings||[]).map((x,i)=><div key={`w-${i}`} className="sans" style={{fontSize:11,color:"var(--warning)",marginTop:4}}>⚠ {x}</div>)}
+        {(closeCheck.blockers||[]).length===0 && <button disabled={closeBusy} onClick={closeMonth} style={{...rejectBtn,width:"100%",marginTop:12}}>Create snapshot & close month</button>}
+      </div>}
 
       {closures.length>0 && <>
         <SectionTitle>CLOSED MONTHS</SectionTitle>

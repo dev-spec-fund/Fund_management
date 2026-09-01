@@ -23,7 +23,7 @@ function activityTime(a) {
   return d ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
 }
 
-export function ActivityRow({ a, isAdmin, canFinance = false, onExpenseClick }) {
+export function ActivityRow({ a, isAdmin, canFinance = false, onExpenseClick, onReverse }) {
   const isIn = a.kind === "contribution" || a.kind === "donation";
   const type = a.kind === "contribution" ? "Contribution" : a.kind === "donation" ? "Donation" : "Expense";
   return (
@@ -47,6 +47,7 @@ export function ActivityRow({ a, isAdmin, canFinance = false, onExpenseClick }) 
       <div className="sans" style={{ flex: "0 0 auto", marginLeft: 10, fontSize: 14, fontWeight: 700, color: isIn ? "var(--success)" : "var(--danger)" }}>
         <div>{isIn ? "+" : "−"} MVR {fmt(a.amount)}</div>
         {a.kind === "expense" && canFinance && <div style={{fontSize:10,fontWeight:500,color:"var(--soft)",marginTop:3,textAlign:"right"}}><Pencil size={10} style={{verticalAlign:"-1px",marginRight:3}}/>Edit</div>}
+        {canFinance && <button type="button" onClick={(e)=>{e.stopPropagation();onReverse?.(a)}} className="sans" style={{display:"block",margin:"4px 0 0 auto",border:0,background:"transparent",padding:0,color:"var(--danger)",fontSize:9,fontWeight:700,cursor:"pointer"}}>Reverse</button>}
       </div>
     </div>
   );

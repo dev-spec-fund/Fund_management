@@ -140,6 +140,20 @@ export const api = {
     auditLog: () => request("/api/settings/audit-log"),
   },
 
+  governance: {
+    monthCloseCheck: (month) => request(`/api/governance/month-close/${month}/check`),
+    closeMonth: (month, note = "") => request(`/api/governance/month-close/${month}`, { method: "POST", body: JSON.stringify({ note }) }),
+    snapshots: (year = "") => request(`/api/governance/snapshots${year ? `?year=${encodeURIComponent(year)}` : ""}`),
+    reverse: (entity_type, entity_id, reason) => request("/api/governance/reverse", { method: "POST", body: JSON.stringify({ entity_type, entity_id, reason }) }),
+    reversals: () => request("/api/governance/reversals"),
+    meetingMinutes: (id) => request(`/api/governance/meetings/${id}/minutes`),
+    saveMeetingMinutes: (id, data) => request(`/api/governance/meetings/${id}/minutes`, { method: "PUT", body: JSON.stringify(data) }),
+    addMeetingAction: (id, data) => request(`/api/governance/meetings/${id}/actions`, { method: "POST", body: JSON.stringify(data) }),
+    updateMeetingAction: (id, data) => request(`/api/governance/meeting-actions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    annual: (year) => request(`/api/governance/annual/${year}`),
+    analytics: (year) => request(`/api/governance/analytics/${year}`),
+  },
+
   admin: {
     pending: () => request("/api/admin/pending"),
     sendPaymentReminders: (data = {}) => request("/api/admin/payment-reminders", { method: "POST", body: JSON.stringify(data) }),

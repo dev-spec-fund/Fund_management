@@ -119,7 +119,7 @@ export default function App() {
     if (page === "fund" && memberView) return <FundView />;
     if (page === "activity") return <Activity isAdmin={adminView} canFinance={canFinance} />;
     if (page === "reports" && adminView) return <Reports setTab={openTab} />;
-    if (page === "meetings" && adminView) return <Meetings />;
+    if (page === "meetings" && adminView) return <Meetings admin={me.admin} />;
     if (page === "settings" && adminView) return <Settings admin={me.admin} />;
     return null;
   };

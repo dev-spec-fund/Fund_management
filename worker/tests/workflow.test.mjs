@@ -31,7 +31,7 @@ test("allocation planner prefetches future state", () => {
 
 test("schema version is current", () => {
   const ops=read("src/ops.ts");
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 12/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 13/);
 });
 
 test("demotion preserves member record and removes admin access only", () => {
@@ -73,4 +73,13 @@ test("Telegram registration captures the requesting user phone before approval",
   assert.match(bot,/message\.contact/);
   assert.match(bot,/contact\.user_id/);
   assert.match(schema,/ADD COLUMN phone TEXT/);
+});
+
+
+test("governance reporting migration is present", () => {
+  const migration = read("migrations/0013_governance_reporting.sql");
+  assert.match(migration,/CREATE TABLE IF NOT EXISTS monthly_snapshots/);
+  assert.match(migration,/CREATE TABLE IF NOT EXISTS financial_reversals/);
+  assert.match(migration,/CREATE TABLE IF NOT EXISTS meeting_minutes/);
+  assert.match(migration,/CREATE TABLE IF NOT EXISTS meeting_action_items/);
 });

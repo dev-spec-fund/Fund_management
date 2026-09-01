@@ -33,7 +33,7 @@ export type AppEnv = {
 
 export type Contribution = {
   id:number; txn_id:string; member_id:number; amount:number; month:string;
-  ref_number:string|null; bank_date:string|null; status:"pending"|"approved"|"rejected"|"voided";
+  ref_number:string|null; bank_date:string|null; status:"pending"|"approved"|"rejected"|"voided"|"reversed";
   slip_file_id:string|null; ocr_raw:string|null; approved_by:number|null;
   submitted_at:string; approved_at:string|null;
 };

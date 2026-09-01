@@ -10,6 +10,7 @@ import { donationsRoute } from "./routes/donations";
 import { reportsRoute } from "./routes/reports";
 import { settingsRoute } from "./routes/settings";
 import { adminRoute } from "./routes/admin";
+import { governanceRoute } from "./routes/governance";
 import { consumeRateLimit, safeLogError } from "./ops";
 
 const app = new Hono<AppEnv>();
@@ -54,6 +55,7 @@ app.route("/api/donations", donationsRoute);
 app.route("/api/reports", reportsRoute);
 app.route("/api/settings", settingsRoute);
 app.route("/api/admin", adminRoute);
+app.route("/api/governance", governanceRoute);
 
 app.get("/api/me", async (c) => {
   const user = c.get("telegramUser");

@@ -4,7 +4,7 @@ import { Modal, Field } from "../components/FormControls";
 import { Center, MessageBanner, PageHeader, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
 
-export default function Meetings(){
+export default function Meetings({admin}){
   const emptyForm={title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:""};
   const [rows,setRows]=useState(null);
   const [showCreate,setShowCreate]=useState(false);
@@ -15,9 +15,15 @@ export default function Meetings(){
   const [message,setMessage]=useState("");
   const [form,setForm]=useState(emptyForm);
   const [openGroups,setOpenGroups]=useState({yes:true,maybe:false,no:false,pending:true});
+  const [minutesData,setMinutesData]=useState(null);
+  const [minutesDraft,setMinutesDraft]=useState({minutes:"",decisions:""});
+  const [actionDraft,setActionDraft]=useState({description:"",assigned_member_id:"",due_date:""});
+  const [memberOptions,setMemberOptions]=useState([]);
+  const role=admin?.role==="owner"?"super_admin":admin?.role;
+  const canFinance=role==="super_admin"||role==="treasurer";
 
   const load=()=>api.admin.meetings().then(setRows).catch(e=>setMessage(e.message));
-  useEffect(()=>{load()},[]);
+  useEffect(()=>{load();api.members.list().then(setMemberOptions).catch(()=>{})},[]);
 
   const fmtMeetingDateTime=(date,time)=>{
     if(!date)return "";
@@ -39,9 +45,11 @@ export default function Meetings(){
   };
 
   const openDetails=async(m)=>{
-    setSelected(m);setDetails(null);setEditing(false);setMessage("");
-    try{setDetails(await api.admin.meeting(m.id))}
-    catch(e){setMessage(e.message||"Could not load meeting details")}
+    setSelected(m);setDetails(null);setMinutesData(null);setEditing(false);setMessage("");
+    try{
+      const [detail,minutes]=await Promise.all([api.admin.meeting(m.id),api.governance.meetingMinutes(m.id)]);
+      setDetails(detail);setMinutesData(minutes);setMinutesDraft({minutes:minutes?.minutes?.minutes||"",decisions:minutes?.minutes?.decisions||""});
+    }catch(e){setMessage(e.message||"Could not load meeting details")}
   };
 
   const create=async()=>{
@@ -128,6 +136,18 @@ export default function Meetings(){
       setDetails(await api.admin.meeting(details.id));
       await load();
     }catch(e){setMessage(e.message||"Could not send RSVP reminder")}finally{setBusy(false)}
+  };
+
+  const saveMinutes=async()=>{
+    if(!details||!canFinance)return;setBusy(true);
+    try{await api.governance.saveMeetingMinutes(details.id,minutesDraft);const m=await api.governance.meetingMinutes(details.id);setMinutesData(m);setMessage("Meeting minutes saved")}catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
+  const addAction=async()=>{
+    if(!details||!canFinance||!actionDraft.description.trim())return;setBusy(true);
+    try{await api.governance.addMeetingAction(details.id,{description:actionDraft.description.trim(),assigned_member_id:actionDraft.assigned_member_id?Number(actionDraft.assigned_member_id):null,due_date:actionDraft.due_date||null});setActionDraft({description:"",assigned_member_id:"",due_date:""});setMinutesData(await api.governance.meetingMinutes(details.id));setMessage("Action item added")}catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
+  const setActionStatus=async(action,status)=>{
+    if(!canFinance)return;try{await api.governance.updateMeetingAction(action.id,{status});setMinutesData(await api.governance.meetingMinutes(details.id))}catch(e){setMessage(e.message)}
   };
 
   const group=(key,label,list,color)=>{
@@ -246,6 +266,18 @@ export default function Meetings(){
               <div className="sans" style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:14,marginBottom:5}}>AGENDA / MESSAGE</div>
               <div className="sans" style={{fontSize:12,lineHeight:1.5,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,padding:11}}>{details.agenda}</div>
             </>}
+
+            <div className="sans" style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:16,marginBottom:6}}>MINUTES & ACTION ITEMS</div>
+            <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,padding:11}}>
+              {canFinance?<>
+                <label className="sans" style={{display:"block",fontSize:10,color:"var(--soft)",marginBottom:8}}>Minutes<textarea rows={5} value={minutesDraft.minutes} onChange={e=>setMinutesDraft({...minutesDraft,minutes:e.target.value})} style={{width:"100%",marginTop:5,padding:9,border:"1px solid var(--border-strong)",borderRadius:8,background:"var(--bg)",resize:"vertical"}}/></label>
+                <label className="sans" style={{display:"block",fontSize:10,color:"var(--soft)",marginBottom:8}}>Decisions<textarea rows={3} value={minutesDraft.decisions} onChange={e=>setMinutesDraft({...minutesDraft,decisions:e.target.value})} style={{width:"100%",marginTop:5,padding:9,border:"1px solid var(--border-strong)",borderRadius:8,background:"var(--bg)",resize:"vertical"}}/></label>
+                <button disabled={busy} onClick={saveMinutes} style={{...approveBtn,width:"100%",padding:9}}>Save minutes</button>
+              </>:<div className="sans" style={{fontSize:11,lineHeight:1.5,color:"var(--muted)",whiteSpace:"pre-wrap"}}>{minutesData?.minutes?.minutes||"No minutes recorded."}{minutesData?.minutes?.decisions?`\n\nDecisions\n${minutesData.minutes.decisions}`:""}</div>}
+              <div className="sans" style={{fontSize:10,fontWeight:700,color:"var(--muted)",margin:"13px 0 6px"}}>ACTION ITEMS</div>
+              {(minutesData?.actions||[]).map(a=><div key={a.id} className="sans" style={{borderTop:"1px solid var(--divider)",padding:"8px 0",fontSize:11}}><div style={{display:"flex",justifyContent:"space-between",gap:8}}><span style={{textDecoration:a.status==="done"?"line-through":"none"}}>{a.description}</span><b style={{color:a.status==="done"?"var(--success)":"var(--warning)"}}>{a.status}</b></div><div style={{fontSize:9,color:"var(--soft)",marginTop:3}}>{a.member_name?`Assigned: ${a.member_name}`:"Unassigned"}{a.due_date?` · Due ${a.due_date}`:""}</div>{canFinance&&a.status==="open"&&<button onClick={()=>setActionStatus(a,"done")} style={{...compactBtn,padding:"4px 7px",marginTop:5,fontSize:9}}>Mark done</button>}</div>)}
+              {canFinance&&<div style={{borderTop:"1px solid var(--divider)",marginTop:8,paddingTop:9}}><input className="sans" placeholder="New action item" value={actionDraft.description} onChange={e=>setActionDraft({...actionDraft,description:e.target.value})} style={{width:"100%",padding:9,border:"1px solid var(--border-strong)",borderRadius:8,background:"var(--bg)",marginBottom:6}}/><div style={{display:"grid",gridTemplateColumns:"1fr 110px",gap:6}}><select value={actionDraft.assigned_member_id} onChange={e=>setActionDraft({...actionDraft,assigned_member_id:e.target.value})} style={{minWidth:0,padding:8,border:"1px solid var(--border-strong)",borderRadius:8,background:"var(--bg)"}}><option value="">Unassigned</option>{memberOptions.filter(m=>m.active!==0).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select><input type="date" value={actionDraft.due_date} onChange={e=>setActionDraft({...actionDraft,due_date:e.target.value})} style={{minWidth:0,padding:8,border:"1px solid var(--border-strong)",borderRadius:8,background:"var(--bg)"}}/></div><button disabled={busy||!actionDraft.description.trim()} onClick={addAction} style={{...approveBtn,width:"100%",padding:8,marginTop:6}}>Add action item</button></div>}
+            </div>
 
             {details.status==="cancelled"&&<div className="sans" style={{fontSize:11,lineHeight:1.45,background:"var(--danger-bg)",color:"var(--danger)",padding:10,borderRadius:9,marginTop:12}}>
               <b>Cancelled</b>{details.cancelled_at?` · ${formatLocalDateTime(details.cancelled_at)}`:""}<br/>{details.cancel_reason||"Cancelled by admin"}
