@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
-import { api } from "../api";
+import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, SectionTitle, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
@@ -18,6 +18,7 @@ export default function PendingApprovals() {
     .catch((e) => setError(e.message));
 
   useEffect(() => { load(); }, []);
+  useEffect(() => onDataChange(() => load()), []);
 
   if (!data) return <Center>{error || "Loading approvals…"}</Center>;
 

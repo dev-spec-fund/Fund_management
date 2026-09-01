@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Plus, X, Download, ChevronLeft, ChevronRight } from "lucide-react";
-import { api } from "../api";
+import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
-import { currentMonthValue, shiftMonthValue, todayValue } from "../utils/date";
+import { currentMonthValue, shiftMonthValue } from "../utils/date";
 import { fmt } from "../utils/format";
 
 export default function Reports({ setTab }) {
@@ -27,6 +27,19 @@ export default function Reports({ setTab }) {
       api.reports.trend(month).then(setTrend),
     ]).catch(() => {});
   }, [month]);
+
+  useEffect(() => onDataChange(() => {
+    Promise.all([
+      api.reports.summary(month).then(setSummary),
+      api.reports.trend(month).then(setTrend),
+    ]).catch(() => {});
+    if (annual || analytics) {
+      Promise.all([
+        api.governance.annual(annualYear).then(setAnnual),
+        api.governance.analytics(annualYear).then(setAnalytics),
+      ]).catch(() => {});
+    }
+  }), [month, annualYear, Boolean(annual), Boolean(analytics)]);
 
   const shiftMonth = (delta) => {
     setMonth(shiftMonthValue(month, delta));
@@ -53,9 +66,7 @@ export default function Reports({ setTab }) {
   const activeCategories = (summary.byCategory || []).filter((c) => Number(c.spent || 0) > 0);
 
   const exportCsv = async () => {
-    const brand=await api.branding();
     const rows = [
-      ["Group", brand.fund_name],
       ["Fund report", monthLabel],
       ["Contribution cash received", summary.memberIncome],
       ["Allocated to contribution month", allocatedContributions],
@@ -74,9 +85,8 @@ export default function Reports({ setTab }) {
       const safe = String(v ?? "").replace(/"/g, '""');
       return `"${/^[=+\-@]/.test(safe) ? "'" + safe : safe}"`;
     }).join(",")).join("\n");
-    const slug=String(brand.short_name||"fund").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"fund";
-    const filename=`${slug}-fund-report-${month}.csv`;
-    await (await import("../utils/exports")).sendExportToTelegram(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename, `${brand.fund_name} · ${monthLabel} · Fund report CSV`);
+    const filename=`fund-report-${month}.csv`;
+    await (await import("../utils/exports")).sendExportToTelegram(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename, `${monthLabel} · Fund report CSV`);
   };
 
   return (
@@ -226,12 +236,12 @@ function Row({ label, value, color }) {
 
 function ExpenseModal({ onClose, onSaved }) {
   const [categories, setCategories] = useState([]);
-  const [form, setForm] = useState({ description: "", category_id: "", amount: "", expense_date: todayValue() });
+  const [form, setForm] = useState({ description: "", category_id: "", amount: "" });
   useEffect(() => { api.expenses.categories().then(setCategories).catch(() => {}); }, []);
 
   const save = async () => {
     if (!form.description.trim()) return;
-    await api.expenses.create({ description: form.description, category_id: form.category_id || null, amount: Number(form.amount) || 0, expense_date: form.expense_date });
+    await api.expenses.create({ description: form.description, category_id: form.category_id || null, amount: Number(form.amount) || 0 });
     onSaved();
     onClose();
   };
@@ -246,7 +256,6 @@ function ExpenseModal({ onClose, onSaved }) {
         {categories.filter((c)=>Number(c.active)!==0).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
       <Field label="Amount" type="number" prefix="MVR" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
-      <Field label="Expense date" type="date" value={form.expense_date} onChange={(v) => setForm({ ...form, expense_date: v })} />
       <PrimaryButton onClick={save}>Save expense</PrimaryButton>
     </Modal>
   );
