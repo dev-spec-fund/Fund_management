@@ -255,7 +255,14 @@ export const api = {
   },
 
   expenses: {
-    list: () => request("/api/expenses"),
+    list: ({ month = "", status = "", q = "" } = {}) => {
+      const params = new URLSearchParams();
+      if (month) params.set("month", month);
+      if (status) params.set("status", status);
+      if (q) params.set("q", q);
+      const query = params.toString();
+      return request(`/api/expenses${query ? `?${query}` : ""}`);
+    },
     create: (data) => request("/api/expenses", { method: "POST", body: JSON.stringify(data) }),
     update: (id, data) => request(`/api/expenses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     remove: (id, reason) => request(`/api/expenses/${id}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
