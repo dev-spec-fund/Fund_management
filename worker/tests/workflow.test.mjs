@@ -31,7 +31,7 @@ test("allocation planner prefetches future state", () => {
 
 test("schema version is current", () => {
   const ops=read("src/ops.ts");
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 13/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 14/);
 });
 
 test("demotion preserves member record and removes admin access only", () => {
@@ -82,4 +82,17 @@ test("governance reporting migration is present", () => {
   assert.match(migration,/CREATE TABLE IF NOT EXISTS financial_reversals/);
   assert.match(migration,/CREATE TABLE IF NOT EXISTS meeting_minutes/);
   assert.match(migration,/CREATE TABLE IF NOT EXISTS meeting_action_items/);
+});
+
+
+test("financial integrity v14 removes legacy close bypass and adds expense dates", () => {
+  const admin=read("src/routes/admin.ts");
+  const expenses=read("src/routes/expenses.ts");
+  const governance=read("src/routes/governance.ts");
+  const migration=read("migrations/0014_expense_dates_and_financial_integrity.sql");
+  assert.doesNotMatch(admin,/adminRoute\.post\('\/month-close\/:month'/);
+  assert.match(expenses,/requireOpenMonth\(c\.env,originalMonth\)/);
+  assert.match(expenses,/expense_date/);
+  assert.match(governance,/source:'snapshot'/);
+  assert.match(migration,/ADD COLUMN expense_date TEXT/);
 });

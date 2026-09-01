@@ -219,7 +219,7 @@ export function FundView() {
           </div>
           <div className="sans" style={{display:"grid",gridTemplateColumns:"1fr auto",gap:"5px 10px",fontSize:10,marginTop:10,paddingTop:9,borderTop:"1px solid var(--divider)"}}>
             <span style={{color:"var(--soft)"}}>Category</span><span>{e.category}</span>
-            <span style={{color:"var(--soft)"}}>Expense month</span><span>{e.transaction_month || month}</span>
+            <span style={{color:"var(--soft)"}}>Expense date</span><span>{e.expense_date || `${e.transaction_month || month}-01`}</span>
             <span style={{color:"var(--soft)"}}>Logged</span><span>{e.created_at ? formatLocalDateTime(e.created_at) : "—"}</span>
           </div>
         </div>)}
@@ -315,6 +315,7 @@ export function Activity({ isAdmin, canFinance = false }) {
       ...row,
       description: row.description || row.who || "",
       category_id: row.category_id || "",
+      expense_date: row.expense_date || (row.transaction_month ? `${row.transaction_month}-01` : String(row.created_at || "").slice(0, 10)),
       transaction_month: row.transaction_month || String(row.created_at || "").slice(0, 7),
       amount: Number(row.amount || 0),
     });
@@ -330,7 +331,7 @@ export function Activity({ isAdmin, canFinance = false }) {
         description: editingExpense.description.trim(),
         category_id: editingExpense.category_id ? Number(editingExpense.category_id) : null,
         amount: Number(editingExpense.amount),
-        transaction_month: editingExpense.transaction_month,
+        expense_date: editingExpense.expense_date,
       });
       setEditingExpense(null);
       await loadActivity();
@@ -463,7 +464,7 @@ export function Activity({ isAdmin, canFinance = false }) {
             {expenseCategories.filter(c=>Number(c.active)!==0 || Number(c.id)===Number(editingExpense.category_id)).map(c=><option key={c.id} value={c.id}>{c.name}{Number(c.active)===0?" (inactive)":""}</option>)}
           </select>
         </label>
-        <Field label="Expense month" type="month" value={editingExpense.transaction_month || ""} onChange={(v)=>setEditingExpense({...editingExpense,transaction_month:v})}/>
+        <Field label="Expense date" type="date" value={editingExpense.expense_date || ""} onChange={(v)=>setEditingExpense({...editingExpense,expense_date:v,transaction_month:String(v||"").slice(0,7)})}/>
         {expenseError && <div className="sans" style={{fontSize:11,color:"var(--danger)",background:"var(--danger-bg)",padding:9,borderRadius:8,marginBottom:10}}>{expenseError}</div>}
         <button disabled={expenseBusy} onClick={saveExpense} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:expenseBusy?.6:1}}>
           {expenseBusy ? "Saving…" : "Save changes"}

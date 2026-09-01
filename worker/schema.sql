@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   receipt_file_id TEXT,
   logged_by INTEGER NOT NULL REFERENCES admins(id),
   edited_by INTEGER REFERENCES admins(id),
+  expense_date TEXT,
   transaction_month TEXT,
   status TEXT NOT NULL DEFAULT 'approved',
   approval_required INTEGER NOT NULL DEFAULT 0,
@@ -142,10 +143,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
   admin_id INTEGER REFERENCES admins(id),
   action TEXT NOT NULL,
   detail TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  status TEXT NOT NULL DEFAULT 'open',
-  resolved_at TEXT,
-  resolved_by INTEGER REFERENCES admins(id)
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ('fund_name', 'Kanditheemu Youth Society');
@@ -311,7 +309,7 @@ CREATE TABLE IF NOT EXISTS meeting_action_items (
 CREATE INDEX IF NOT EXISTS idx_meeting_action_items_meeting ON meeting_action_items(meeting_id,status,due_date);
 
 
--- Schema migration ledger. Fresh databases created from schema.sql are current through v13.
+-- Schema migration ledger. Fresh databases created from schema.sql are current through v14.
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -329,6 +327,7 @@ INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (10,'performance_an
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (11,'integrity_privacy_and_error_resolution');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (12,'registration_phone_capture');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (13,'governance_reporting_and_reversals');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (14,'expense_dates_and_financial_integrity');
 
 CREATE INDEX IF NOT EXISTS idx_members_normalized_name ON members(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_members_normalized_phone ON members(normalized_phone);
@@ -337,8 +336,18 @@ CREATE INDEX IF NOT EXISTS idx_allocations_month_contribution ON contribution_al
 CREATE INDEX IF NOT EXISTS idx_exemptions_member_month ON exemptions(member_id,month);
 CREATE INDEX IF NOT EXISTS idx_month_closures_month ON month_closures(month);
 CREATE INDEX IF NOT EXISTS idx_expenses_status_transaction_month_category ON expenses(status,transaction_month,category_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_expense_date ON expenses(expense_date);
 CREATE INDEX IF NOT EXISTS idx_donations_status_transaction_month ON donations(status,transaction_month);
 CREATE INDEX IF NOT EXISTS idx_meeting_rsvps_meeting_member ON meeting_rsvps(meeting_id,member_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_status_date ON meetings(status,meeting_date);
 
 CREATE INDEX IF NOT EXISTS idx_error_log_status_created ON error_log(status,created_at DESC);
+
+-- Performance indexes mirrored from migrations so a fresh schema matches an upgraded database.
+CREATE INDEX IF NOT EXISTS idx_members_telegram_active ON members(telegram_id, active);
+CREATE INDEX IF NOT EXISTS idx_admins_telegram_active_role ON admins(telegram_id, active, role);
+CREATE INDEX IF NOT EXISTS idx_contributions_status_month_member ON contributions(status, month, member_id);
+CREATE INDEX IF NOT EXISTS idx_contributions_status_approved_at ON contributions(status, approved_at);
+CREATE INDEX IF NOT EXISTS idx_expenses_status_created ON expenses(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_donations_status_created ON donations(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_registrations_status_requested ON member_registration_requests(status, requested_at);

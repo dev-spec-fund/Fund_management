@@ -199,7 +199,20 @@ async function yearData(env:any, year:string){
   const nowYear=now.slice(0,4), nowMonthNumber=Number(now.slice(5,7));
   const count=year<nowYear?12:year===nowYear?nowMonthNumber:0;
   const months=Array.from({length:count},(_,i)=>`${year}-${String(i+1).padStart(2,'0')}`);
-  const metrics=await Promise.all(months.map(m=>monthMetrics(env,m)));
+  // Closed months are immutable accounting periods. Annual/AGM totals must use
+  // the snapshot captured at close time instead of recalculating from current member state.
+  const snapshots=await env.DB.prepare("SELECT * FROM monthly_snapshots WHERE month LIKE ? ORDER BY month").bind(`${year}-%`).all<any>();
+  const snapshotMap=new Map(snapshots.results.map((r:any)=>[String(r.month),r]));
+  const metrics=await Promise.all(months.map(async m=>{
+    const snap:any=snapshotMap.get(m);
+    if(snap) return {
+      month:m,opening_balance:n(snap.opening_balance),contribution_cash:n(snap.contribution_cash),donation_cash:n(snap.donation_cash),
+      expenses:n(snap.expenses),closing_balance:n(snap.closing_balance),total_due:n(snap.total_due),total_collected:n(snap.total_collected),
+      collection_rate:n(snap.collection_rate),active_members:n(snap.active_members),paid_members:n(snap.paid_members),partial_members:n(snap.partial_members),
+      unpaid_members:n(snap.unpaid_members),exempt_members:n(snap.exempt_members),source:'snapshot',closed_at:snap.closed_at
+    };
+    return {...await monthMetrics(env,m),source:'live'};
+  }));
   const categories=await env.DB.prepare(`SELECT COALESCE(cat.name,'Uncategorised') category,COALESCE(SUM(e.amount),0) total FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id WHERE e.status='approved' AND e.transaction_month LIKE ? GROUP BY COALESCE(cat.name,'Uncategorised') ORDER BY total DESC`).bind(`${year}-%`).all<any>();
   const reversals=await env.DB.prepare("SELECT COUNT(*) count,COALESCE(SUM(amount),0) total FROM financial_reversals WHERE month LIKE ?").bind(`${year}-%`).first<any>();
   const meetings=await env.DB.prepare("SELECT COUNT(*) count FROM meetings WHERE meeting_date LIKE ?").bind(`${year}-%`).first<any>();

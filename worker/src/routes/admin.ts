@@ -116,7 +116,6 @@ adminRoute.delete('/contributions/:id', requireFinance, async c => {
 });
 
 adminRoute.get('/month-close', requireAdmin, async c => { await ensureOperationalSchema(c.env); return c.json((await c.env.DB.prepare("SELECT mc.*,a.name closed_by_name FROM month_closures mc LEFT JOIN admins a ON a.id=mc.closed_by ORDER BY month DESC").all()).results); });
-adminRoute.post('/month-close/:month', requireSuperAdmin, async c => { const admin=c.get('admin')!; const month=c.req.param('month') || ""; if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return c.json({error:'Use YYYY-MM'},400); const b=await c.req.json().catch(()=>({})) as any; await ensureOperationalSchema(c.env); await c.env.DB.prepare("INSERT OR REPLACE INTO month_closures(month,closed_by,closed_at,note) VALUES(?,?,datetime('now'),?)").bind(month,admin.id,b.note||null).run(); await auditEntity(c.env,admin.id,'month_closed','month',month,null,{note:b.note||null}); return c.json({ok:true}); });
 adminRoute.delete('/month-close/:month', requireSuperAdmin, async c => { const admin=c.get('admin')!; const month=c.req.param('month') || ""; await c.env.DB.batch([c.env.DB.prepare("DELETE FROM month_closures WHERE month=?").bind(month),c.env.DB.prepare("DELETE FROM monthly_snapshots WHERE month=?").bind(month)]); await auditEntity(c.env,admin.id,'month_reopened','month',month,null,{snapshot_removed:true}); return c.json({ok:true}); });
 
 

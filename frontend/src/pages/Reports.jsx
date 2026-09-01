@@ -3,7 +3,7 @@ import { Plus, X, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
-import { currentMonthValue, shiftMonthValue } from "../utils/date";
+import { currentMonthValue, shiftMonthValue, todayValue } from "../utils/date";
 import { fmt } from "../utils/format";
 
 export default function Reports({ setTab }) {
@@ -223,12 +223,12 @@ function Row({ label, value, color }) {
 
 function ExpenseModal({ onClose, onSaved }) {
   const [categories, setCategories] = useState([]);
-  const [form, setForm] = useState({ description: "", category_id: "", amount: "" });
+  const [form, setForm] = useState({ description: "", category_id: "", amount: "", expense_date: todayValue() });
   useEffect(() => { api.expenses.categories().then(setCategories).catch(() => {}); }, []);
 
   const save = async () => {
     if (!form.description.trim()) return;
-    await api.expenses.create({ description: form.description, category_id: form.category_id || null, amount: Number(form.amount) || 0 });
+    await api.expenses.create({ description: form.description, category_id: form.category_id || null, amount: Number(form.amount) || 0, expense_date: form.expense_date });
     onSaved();
     onClose();
   };
@@ -243,6 +243,7 @@ function ExpenseModal({ onClose, onSaved }) {
         {categories.filter((c)=>Number(c.active)!==0).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
       <Field label="Amount" type="number" prefix="MVR" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
+      <Field label="Expense date" type="date" value={form.expense_date} onChange={(v) => setForm({ ...form, expense_date: v })} />
       <PrimaryButton onClick={save}>Save expense</PrimaryButton>
     </Modal>
   );

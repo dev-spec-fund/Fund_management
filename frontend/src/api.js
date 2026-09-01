@@ -181,7 +181,6 @@ export const api = {
     resolveError: (id) => request(`/api/admin/errors/${id}/resolve`, { method: "POST" }),
     resolveAllErrors: () => request("/api/admin/errors/resolve-all", { method: "POST" }),
     monthClosures: () => request("/api/admin/month-close"),
-    closeMonth: (month, note) => request(`/api/admin/month-close/${month}`, { method: "POST", body: JSON.stringify({ note }) }),
     reopenMonth: (month) => request(`/api/admin/month-close/${month}`, { method: "DELETE" }),
     backup: () => request("/api/admin/backup"),
   },

@@ -26,7 +26,7 @@ function auditSummary(detail) {
   if (!d || typeof d !== "object") return [];
   const after=d.after && typeof d.after==="object" ? d.after : {};
   const before=d.before && typeof d.before==="object" ? d.before : {};
-  const preferred=["member_code","txn_id","donor_name","description","amount","month","transaction_month","ref_number","status","role","name","note","reason"];
+  const preferred=["member_code","txn_id","donor_name","description","amount","expense_date","month","transaction_month","ref_number","status","role","name","note","reason"];
   const rows=[];
   if (d.entity) rows.push({label:"Record",value:`${auditLabel(String(d.entity))}${d.entity_id!=null?` #${d.entity_id}`:""}`});
   for (const key of preferred) {
