@@ -15,6 +15,17 @@ function initData() {
 }
 
 const GET_CACHE_TTL_MS = 20_000;
+
+function cacheTtlForPath(path) {
+  // Member self-service reads are ideal prefetch targets: they change only after
+  // a mutation, and mutations already invalidate the cache immediately.
+  if (path === "/api/me/dashboard") return 60_000;
+  if (path === "/api/me/meetings" || path === "/api/me/actions") return 45_000;
+  if (/^\/api\/members\/\d+\/statement(?:\?|$)/.test(path)) return 60_000;
+  if (path.startsWith("/api/reports/public-summary")) return 45_000;
+  if (path.startsWith("/api/reports/activity")) return 30_000;
+  return GET_CACHE_TTL_MS;
+}
 const responseCache = new Map();
 const inFlightGets = new Map();
 let cacheGeneration = 0;
@@ -89,7 +100,7 @@ async function request(path, options = {}) {
     const data = await res.json();
     if (isGet) {
       if (requestGeneration === cacheGeneration) {
-        responseCache.set(key, { data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
+        responseCache.set(key, { data, expiresAt: Date.now() + cacheTtlForPath(path) });
       }
     } else {
       clearGetCache();
@@ -132,6 +143,19 @@ export const api = {
   myActions: () => request("/api/me/actions"),
   rsvpMeeting: (id, response) => request(`/api/me/meetings/${id}/rsvp`, { method: "POST", body: JSON.stringify({ response }) }),
   completeMyAction: (id) => request(`/api/me/actions/${id}/done`, { method: "POST" }),
+  prefetchMemberData: async (memberId) => {
+    if (!memberId) return;
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Indian/Maldives" }));
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    await Promise.allSettled([
+      request("/api/me/dashboard"),
+      request(`/api/members/${memberId}/statement`),
+      request(`/api/reports/public-summary?month=${month}`),
+      request("/api/reports/activity"),
+      request("/api/me/meetings"),
+      request("/api/me/actions"),
+    ]);
+  },
 
   members: {
     list: () => request("/api/members"),

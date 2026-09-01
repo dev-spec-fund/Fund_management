@@ -76,10 +76,18 @@ export default function App() {
       items.filter((name) => tabs.includes(name)).forEach((name) => loaderForTab(name)?.());
     };
 
+    const warmMemberData = () => {
+      if (!isMember || !me?.member?.id) return;
+      // Warm the API cache without mounting hidden React pages. This keeps the
+      // v40 crash protection while making first visits to Member tabs instant.
+      api.prefetchMemberData(me.member.id).catch(() => {});
+    };
+
     const timers = [
       setTimeout(() => warm(likelyNext), 180),
-      setTimeout(() => warm(secondary), 700),
-      setTimeout(() => warm(later), 1400),
+      setTimeout(() => warmMemberData(), adminView ? 650 : 260),
+      setTimeout(() => warm(secondary), 900),
+      setTimeout(() => warm(later), 1500),
     ];
     return () => timers.forEach(clearTimeout);
   }, [me, adminView, canFinance, tabs]);
