@@ -18,6 +18,13 @@ const GET_CACHE_TTL_MS = 30_000;
 const responseCache = new Map();
 const inFlightGets = new Map();
 let cacheGeneration = 0;
+const PERF_DEBUG = Boolean(import.meta.env.DEV);
+
+function perfLog(label, startedAt, extra = "") {
+  if (!PERF_DEBUG || typeof performance === "undefined") return;
+  const elapsed = Math.round(performance.now() - startedAt);
+  if (elapsed >= 120) console.debug(`[Fund perf] ${label}: ${elapsed}ms${extra ? ` · ${extra}` : ""}`);
+}
 
 function clearGetCache() {
   cacheGeneration += 1;
@@ -74,6 +81,7 @@ async function request(path, options = {}) {
 
   const requestGeneration = cacheGeneration;
   const run = async () => {
+    const startedAt = PERF_DEBUG && typeof performance !== "undefined" ? performance.now() : 0;
     const res = await fetch(apiUrl(path), {
       ...options,
       headers: {
@@ -87,6 +95,7 @@ async function request(path, options = {}) {
       throw new Error(body.error || `Request failed: ${res.status}`);
     }
     const data = await res.json();
+    if (startedAt) perfLog(`${method} ${path}`, startedAt);
     if (isGet) {
       if (requestGeneration === cacheGeneration) {
         responseCache.set(key, { data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
@@ -119,17 +128,19 @@ function currentMaldivesPeriod() {
   return { year, month: `${year}-${month}` };
 }
 
-async function prefetchMemberData(memberId) {
+async function prefetchMemberData(memberId, stage = "primary") {
   if (!memberId) return [];
   const { month } = currentMaldivesPeriod();
-  return Promise.allSettled([
-    request("/api/me/dashboard"),
-    request(`/api/members/${memberId}/statement`),
-    request(`/api/reports/public-summary?month=${month}`),
-    request("/api/reports/activity"),
-    request("/api/me/meetings"),
-    request("/api/me/actions"),
-  ]);
+  const paths = stage === "secondary"
+    ? ["/api/me/actions"]
+    : [
+        "/api/me/dashboard",
+        `/api/members/${memberId}/statement`,
+        `/api/reports/public-summary?month=${month}`,
+        "/api/reports/activity",
+        "/api/me/meetings",
+      ];
+  return Promise.allSettled(paths.map((path) => request(path)));
 }
 
 async function prefetchAdminData(stage = "primary", canFinance = false) {
@@ -169,6 +180,38 @@ async function prefetchAdminData(stage = "primary", canFinance = false) {
   return Promise.allSettled(paths.map((path) => request(path)));
 }
 
+async function prefetchTabData({ tab, adminView = false, canFinance = false, memberId = null } = {}) {
+  const { year, month } = currentMaldivesPeriod();
+  let paths = [];
+
+  if (adminView) {
+    if (tab === "members") paths = ["/api/members"];
+    else if (tab === "pending" && canFinance) paths = ["/api/admin/pending"];
+    else if (tab === "activity") paths = ["/api/reports/activity"];
+    else if (tab === "expenses" && canFinance) paths = ["/api/expenses", "/api/expenses/categories"];
+    else if (tab === "meetings") paths = ["/api/admin/meetings"];
+    else if (tab === "reports") paths = [
+      `/api/reports/summary?month=${month}`,
+      `/api/reports/trend?month=${month}`,
+      `/api/governance/annual/${year}`,
+      `/api/governance/analytics/${year}`,
+    ];
+    else if (tab === "settings") paths = [
+      "/api/settings", "/api/settings/admins", "/api/expenses/categories",
+      "/api/admin/month-close", "/api/admin/health", "/api/admin/errors", "/api/settings/audit-log",
+    ];
+  } else {
+    if (tab === "history" && memberId) paths = [`/api/members/${memberId}/statement`];
+    else if (tab === "fund") paths = [`/api/reports/public-summary?month=${month}`];
+    else if (tab === "activity") paths = ["/api/reports/activity"];
+    else if (tab === "meetings") paths = ["/api/me/meetings"];
+    else if (tab === "actions") paths = ["/api/me/actions"];
+    else if (tab === "profile") paths = ["/api/me/dashboard"];
+  }
+
+  return Promise.allSettled(paths.map((path) => request(path)));
+}
+
 async function upload(path, formData) {
   const res = await fetch(apiUrl(path), {
     method: "POST",
@@ -189,6 +232,7 @@ export const api = {
   me: () => request("/api/me"),
   prefetchMemberData,
   prefetchAdminData,
+  prefetchTabData,
   branding: () => request("/api/branding"),
   myDashboard: () => request("/api/me/dashboard"),
   myContributions: () => request("/api/me/contributions"),

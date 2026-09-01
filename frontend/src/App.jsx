@@ -40,6 +40,7 @@ export default function App() {
   const [mode, setMode] = useState("member");
   const [mountedTabs, setMountedTabs] = useState(() => new Set(["overview"]));
   const contentScrollRef = useRef(null);
+  const bootStartedAt = useRef(typeof performance !== "undefined" ? performance.now() : 0);
 
   const isAdmin = !!me?.admin;
   const isMember = !!me?.member;
@@ -54,7 +55,13 @@ export default function App() {
     // Start the safe overview request immediately so it overlaps the /me round-trip.
     api.reports.publicSummary().then(setBootstrapSummary).catch(() => {});
     api.me()
-      .then((data) => { setMe(data); setMode(data?.admin ? "admin" : "member"); })
+      .then((data) => {
+        setMe(data);
+        setMode(data?.admin ? "admin" : "member");
+        if (import.meta.env.DEV && bootStartedAt.current && typeof performance !== "undefined") {
+          console.debug(`[Fund perf] app identity ready: ${Math.round(performance.now() - bootStartedAt.current)}ms`);
+        }
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -67,30 +74,39 @@ export default function App() {
     // are staged so they do not compete with the Overview bootstrap request.
     const likelyNext = adminView
       ? (canFinance ? ["pending", "members", "activity"] : ["members", "activity"])
-      : ["history", "fund", "activity", "meetings", "actions", "profile"];
-    const secondary = adminView ? (canFinance ? ["expenses", "reports", "meetings"] : ["reports", "meetings"]) : [];
+      : ["history", "fund", "activity", "meetings"];
+    const secondary = adminView
+      ? (canFinance ? ["expenses", "reports", "meetings"] : ["reports", "meetings"])
+      : ["actions", "profile"];
     const later = adminView ? ["settings"] : [];
 
     const warmCode = (items) => {
       items.filter((name) => tabs.includes(name)).forEach((name) => loaderForTab(name)?.());
     };
 
-    const timers = [
+    const timers = adminView ? [
       setTimeout(() => warmCode(likelyNext), 180),
+      setTimeout(() => api.prefetchAdminData("primary", canFinance).catch(() => {}), 280),
+      setTimeout(() => warmCode(secondary), 850),
+      setTimeout(() => api.prefetchAdminData("operations", canFinance).catch(() => {}), 950),
+      setTimeout(() => api.prefetchAdminData("reports", canFinance).catch(() => {}), 1450),
+      // Settings is deliberately last because it is rarely the first destination
+      // and its health/audit requests are the heaviest background group.
+      setTimeout(() => warmCode(later), 2400),
+      setTimeout(() => api.prefetchAdminData("settings", canFinance).catch(() => {}), 3000),
+      // Dual-role Member data warms after the Admin UI has settled.
       setTimeout(() => {
-        if (adminView) api.prefetchAdminData("primary", canFinance).catch(() => {});
-        else if (isMember && me?.member?.id) api.prefetchMemberData(me.member.id).catch(() => {});
-      }, 260),
-      setTimeout(() => warmCode(secondary), 700),
-      setTimeout(() => { if (adminView) api.prefetchAdminData("operations", canFinance).catch(() => {}); }, 780),
-      setTimeout(() => { if (adminView) api.prefetchAdminData("reports", canFinance).catch(() => {}); }, 1150),
-      setTimeout(() => warmCode(later), 1350),
-      setTimeout(() => { if (adminView) api.prefetchAdminData("settings", canFinance).catch(() => {}); }, 1550),
-      // Dual-role users get Member data quietly after Admin has settled so
-      // switching to My Account is also fast without slowing Admin startup.
+        if (isMember && me?.member?.id) api.prefetchMemberData(me.member.id, "primary").catch(() => {});
+      }, 2550),
       setTimeout(() => {
-        if (adminView && isMember && me?.member?.id) api.prefetchMemberData(me.member.id).catch(() => {});
-      }, 2200),
+        if (isMember && me?.member?.id) api.prefetchMemberData(me.member.id, "secondary").catch(() => {});
+      }, 4200),
+    ] : [
+      setTimeout(() => warmCode(likelyNext), 180),
+      setTimeout(() => { if (isMember && me?.member?.id) api.prefetchMemberData(me.member.id, "primary").catch(() => {}); }, 280),
+      // Actions/Profile are lower priority than History/Fund/Activity/Meetings.
+      setTimeout(() => warmCode(secondary), 1100),
+      setTimeout(() => { if (isMember && me?.member?.id) api.prefetchMemberData(me.member.id, "secondary").catch(() => {}); }, 1500),
     ];
     return () => timers.forEach(clearTimeout);
   }, [me, adminView, canFinance, isMember, tabs]);
@@ -106,14 +122,24 @@ export default function App() {
   if (loading) return <Shell><InitialAppSkeleton /></Shell>;
   if (error) return <Shell><Center>Couldn't connect: {error}</Center></Shell>;
 
+  const warmTab = (nextTab) => {
+    loaderForTab(nextTab)?.();
+    api.prefetchTabData({
+      tab: nextTab,
+      adminView,
+      canFinance,
+      memberId: me?.member?.id || null,
+    }).catch(() => {});
+  };
+
   const openTab = (nextTab) => {
+    warmTab(nextTab);
     setMountedTabs((current) => {
       if (current.has(nextTab)) return current;
       const next = new Set(current);
       next.add(nextTab);
       return next;
     });
-    loaderForTab(nextTab)?.();
     setTab(nextTab);
   };
 
@@ -157,7 +183,7 @@ export default function App() {
       )}
       <div className="sans" style={{ flexShrink: 0, display: "flex", gap: 18, padding: "0 20px", marginTop: 18, overflowX: "auto" }}>
         {tabs.map((t) => (
-          <button key={t} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "var(--primary-text)" : "var(--muted-2)", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
+          <button key={t} onPointerDown={() => warmTab(t)} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "var(--primary-text)" : "var(--muted-2)", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
         ))}
       </div>
       <main ref={contentScrollRef} className="app-page-content" style={{ padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>
