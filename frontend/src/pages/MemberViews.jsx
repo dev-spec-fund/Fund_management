@@ -3,7 +3,7 @@ import { X, Eye } from "lucide-react";
 import { api } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
-import { currentMonthValue, formatLocalDateTime } from "../utils/date";
+import { currentMonthValue, formatLocalDateTime, shiftMonthValue, todayValue } from "../utils/date";
 import { fmt } from "../utils/format";
 import { ActivityRow, activityDayLabel } from "../components/ActivityRow";
 
@@ -235,14 +235,78 @@ export function FundView() {
 export function Activity({ isAdmin, canFinance = false }) {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [datePreset, setDatePreset] = useState("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState(todayValue());
+  const [appliedRange, setAppliedRange] = useState({ from: "", to: "", label: "All recent" });
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState("");
   const [editingExpense, setEditingExpense] = useState(null);
   const [expenseCategories, setExpenseCategories] = useState([]);
   const [expenseBusy, setExpenseBusy] = useState(false);
   const [expenseError, setExpenseError] = useState("");
 
-  const loadActivity = () => api.reports.activity().then(setRows).catch(() => setRows([]));
-  useEffect(() => { loadActivity(); }, []);
+  const monthEnd = (month) => {
+    const [year, mon] = String(month).split("-").map(Number);
+    return `${month}-${String(new Date(Date.UTC(year, mon, 0)).getUTCDate()).padStart(2, "0")}`;
+  };
+  const rangeForPreset = (preset) => {
+    const currentMonth = currentMonthValue();
+    const today = todayValue();
+    if (preset === "this_month") return { from: `${currentMonth}-01`, to: today, label: "This month" };
+    if (preset === "last_month") {
+      const month = shiftMonthValue(currentMonth, -1);
+      return { from: `${month}-01`, to: monthEnd(month), label: "Last month" };
+    }
+    if (preset === "3_months") {
+      const month = shiftMonthValue(currentMonth, -2);
+      return { from: `${month}-01`, to: today, label: "Last 3 months" };
+    }
+    if (preset === "6_months") {
+      const month = shiftMonthValue(currentMonth, -5);
+      return { from: `${month}-01`, to: today, label: "Last 6 months" };
+    }
+    if (preset === "this_year") return { from: `${currentMonth.slice(0,4)}-01-01`, to: today, label: "This year" };
+    return { from: "", to: "", label: "All recent" };
+  };
+
+  const loadActivity = async (range = appliedRange) => {
+    setActivityLoading(true);
+    setActivityError("");
+    try {
+      setRows(await api.reports.activity({ from: range.from, to: range.to }));
+    } catch (e) {
+      setRows([]);
+      setActivityError(e?.message || "Could not load activity.");
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+  useEffect(() => { loadActivity(appliedRange); }, [appliedRange.from, appliedRange.to]);
   useEffect(() => { if (canFinance) api.expenses.categories().then(setExpenseCategories).catch(() => {}); }, [canFinance]);
+
+  const changeDatePreset = (value) => {
+    setDatePreset(value);
+    if (value === "custom") {
+      if (!customFrom) setCustomFrom(`${currentMonthValue()}-01`);
+      return;
+    }
+    setAppliedRange(rangeForPreset(value));
+  };
+
+  const applyCustomRange = () => {
+    if (!customFrom || !customTo) return setActivityError("Choose both From and To dates.");
+    if (customFrom > customTo) return setActivityError("From date cannot be after To date.");
+    setActivityError("");
+    setAppliedRange({ from: customFrom, to: customTo, label: `${customFrom} – ${customTo}` });
+  };
+
+  const clearDateRange = () => {
+    setDatePreset("all");
+    setCustomFrom("");
+    setCustomTo(todayValue());
+    setAppliedRange(rangeForPreset("all"));
+  };
 
   const openExpense = (row) => {
     if (!canFinance || row.kind !== "expense") return;
@@ -334,19 +398,46 @@ export function Activity({ isAdmin, canFinance = false }) {
 
   return (
     <>
-      <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-        <div style={{ fontSize: 12, color: "var(--soft)" }}>Recent activity</div>
-        <div style={{ fontSize: 12, color: income - expenses >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 700 }}>Net {income - expenses >= 0 ? "+" : "−"}MVR {fmt(Math.abs(income - expenses))}</div>
+      <div className="activity-filter-sticky">
+        <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 9 }}>
+          <div>
+            <div style={{ fontSize: 12, color: "var(--soft)" }}>Activity</div>
+            <div style={{ fontSize: 10, color: "var(--soft-2)", marginTop: 2 }}>{appliedRange.label}</div>
+          </div>
+          <div style={{ fontSize: 12, color: income - expenses >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 700 }}>Net {income - expenses >= 0 ? "+" : "−"}MVR {fmt(Math.abs(income - expenses))}</div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 7, marginBottom: 8 }}>
+          <select value={datePreset} onChange={(e) => changeDatePreset(e.target.value)} className="sans activity-date-select" aria-label="Activity date range">
+            <option value="all">All recent</option>
+            <option value="this_month">This month</option>
+            <option value="last_month">Last month</option>
+            <option value="3_months">Last 3 months</option>
+            <option value="6_months">Last 6 months</option>
+            <option value="this_year">This year</option>
+            <option value="custom">Custom dates</option>
+          </select>
+          {(datePreset !== "all" || appliedRange.from || appliedRange.to) && <button type="button" className="sans activity-clear-filter" onClick={clearDateRange}>Clear</button>}
+        </div>
+
+        {datePreset === "custom" && <div className="activity-custom-range">
+          <label className="sans"><span>From</span><input type="date" value={customFrom} max={customTo || undefined} onChange={(e)=>setCustomFrom(e.target.value)} /></label>
+          <label className="sans"><span>To</span><input type="date" value={customTo} min={customFrom || undefined} onChange={(e)=>setCustomTo(e.target.value)} /></label>
+          <button type="button" className="sans" onClick={applyCustomRange}>Apply</button>
+        </div>}
+
+        <div className="activity-type-filters">
+          {filters.map(([value, label]) => (
+            <button key={value} type="button" onClick={() => setFilter(value)} aria-pressed={filter === value} className="sans"
+              style={{ flex: "0 0 auto", background: filter === value ? "var(--primary)" : "var(--card)", color: filter === value ? "var(--on-primary)" : "var(--muted)", border: "1px solid " + (filter === value ? "var(--primary)" : "var(--border)"), borderRadius: 20, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer", touchAction: "manipulation" }}>
+              {label} <span style={{ opacity: filter === value ? .82 : .68, marginLeft: 3 }}>{counts[value]}</span>
+            </button>
+          ))}
+        </div>
+        {activityError && <div className="sans activity-filter-error">{activityError}</div>}
+        {activityLoading && rows !== null && <div className="sans activity-filter-loading">Refreshing activity…</div>}
       </div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
-        {filters.map(([value, label]) => (
-          <button key={value} type="button" onClick={() => setFilter(value)} aria-pressed={filter === value} className="sans"
-            style={{ flex: "0 0 auto", background: filter === value ? "var(--primary)" : "var(--card)", color: filter === value ? "var(--on-primary)" : "var(--muted)", border: "1px solid " + (filter === value ? "var(--primary)" : "var(--border)"), borderRadius: 20, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer", touchAction: "manipulation" }}>
-            {label} <span style={{ opacity: filter === value ? .82 : .68, marginLeft: 3 }}>{counts[value]}</span>
-          </button>
-        ))}
-      </div>
-      <div key={`activity-results-${filter}`} className="activity-results">
+      <div key={`activity-results-${filter}-${appliedRange.from}-${appliedRange.to}`} className="activity-results">
         {groups.map((group) => (
           <div key={`${filter}-${group.label}`}>
             <div className="sans" style={{ display: "flex", alignItems: "center", gap: 8, margin: "13px 2px 7px", fontSize: 10, fontWeight: 700, letterSpacing: 1.1, textTransform: "uppercase", color: "var(--soft)" }}>

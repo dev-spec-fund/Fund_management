@@ -66,33 +66,44 @@ async function advanceAllocatedForMonth(env:any, month:string){
 /** Combined activity feed. Normal members receive privacy-safe labels only. */
 reportsRoute.get("/activity", requireMemberOrAdmin, async (c) => {
   const admin = c.get("admin");
-  if (!admin) {
-    const rows = await c.env.DB.prepare(`
-      SELECT * FROM (
-        SELECT c.id, NULL as txn_id, 'Member contribution' as who, NULL as member_code,
-               'contribution' as kind, c.amount, c.month, NULL as ref,
-               COALESCE(c.approved_at,c.submitted_at) as at, NULL as by_name, NULL as category
-        FROM contributions c
-        WHERE c.status='approved'
-        UNION ALL
-        SELECT e.id, NULL, COALESCE(NULLIF(TRIM(e.description),''),'Expense'), NULL,
-               'expense', e.amount, e.transaction_month, NULL,
-               COALESCE(e.approved_at,e.created_at), NULL, cat.name
-        FROM expenses e
-        LEFT JOIN expense_categories cat ON cat.id=e.category_id
-        WHERE COALESCE(e.status,'approved')='approved'
-        UNION ALL
-        SELECT d.id, NULL, 'Donation', NULL,
-               'donation', d.amount, d.transaction_month, NULL,
-               d.created_at, NULL, NULL
-        FROM donations d
-        WHERE COALESCE(d.status,'active')='active'
-      ) ORDER BY at DESC LIMIT 100
-    `).all<any>();
-    return c.json(rows.results);
-  }
+  const from = String(c.req.query("from") || "").trim();
+  const to = String(c.req.query("to") || "").trim();
+  const validDate = (value:string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+  if (from && !validDate(from)) return c.json({error:"from must use YYYY-MM-DD"},400);
+  if (to && !validDate(to)) return c.json({error:"to must use YYYY-MM-DD"},400);
+  if (from && to && from > to) return c.json({error:"from date cannot be after to date"},400);
 
-  const rows = await c.env.DB.prepare(`
+  const rangeClauses:string[]=[];
+  const bindings:string[]=[];
+  // Financial timestamps are stored in UTC. Activity filters are shown in Maldives local time (UTC+5).
+  if (from) { rangeClauses.push("date(datetime(at, '+5 hours')) >= ?"); bindings.push(from); }
+  if (to) { rangeClauses.push("date(datetime(at, '+5 hours')) <= ?"); bindings.push(to); }
+  const rangeSql = rangeClauses.length ? `WHERE ${rangeClauses.join(" AND ")}` : "";
+  const limit = rangeClauses.length ? 1000 : 100;
+
+  const privacySafeSql = `
+    SELECT * FROM (
+      SELECT c.id, NULL as txn_id, 'Member contribution' as who, NULL as member_code,
+             'contribution' as kind, c.amount, c.month, NULL as ref,
+             COALESCE(c.approved_at,c.submitted_at) as at, NULL as by_name, NULL as category
+      FROM contributions c
+      WHERE c.status='approved'
+      UNION ALL
+      SELECT e.id, NULL, COALESCE(NULLIF(TRIM(e.description),''),'Expense'), NULL,
+             'expense', e.amount, e.transaction_month, NULL,
+             COALESCE(e.approved_at,e.created_at), NULL, cat.name
+      FROM expenses e
+      LEFT JOIN expense_categories cat ON cat.id=e.category_id
+      WHERE COALESCE(e.status,'approved')='approved'
+      UNION ALL
+      SELECT d.id, NULL, 'Donation', NULL,
+             'donation', d.amount, d.transaction_month, NULL,
+             d.created_at, NULL, NULL
+      FROM donations d
+      WHERE COALESCE(d.status,'active')='active'
+    ) ${rangeSql} ORDER BY at DESC LIMIT ${limit}`;
+
+  const adminSql = `
     SELECT * FROM (
       SELECT c.id, c.txn_id, m.name as who, m.member_code, 'contribution' as kind, c.amount, c.month, NULL as ref,
              COALESCE(c.approved_at,c.submitted_at) as at, a.name as by_name, NULL as category
@@ -108,11 +119,14 @@ reportsRoute.get("/activity", requireMemberOrAdmin, async (c) => {
              d.created_at, a.name, NULL as category
       FROM donations d LEFT JOIN admins a ON a.id=d.logged_by
       WHERE COALESCE(d.status,'active')='active'
-    ) ORDER BY at DESC LIMIT 100
-  `).all<any>();
+    ) ${rangeSql} ORDER BY at DESC LIMIT ${limit}`;
+
+  let sql = adminSql;
+  if (!admin) sql = privacySafeSql;
+  const statement = c.env.DB.prepare(sql);
+  const rows = bindings.length ? await statement.bind(...bindings).all<any>() : await statement.all<any>();
   return c.json(rows.results);
 });
-
 
 /** Read-only fund summary available to every authenticated Mini App user. */
 reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {

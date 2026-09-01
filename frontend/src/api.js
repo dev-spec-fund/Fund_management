@@ -114,7 +114,13 @@ export const api = {
   },
 
   reports: {
-    activity: () => request("/api/reports/activity"),
+    activity: (filters = {}) => {
+      const params = new URLSearchParams();
+      if (filters.from) params.set("from", filters.from);
+      if (filters.to) params.set("to", filters.to);
+      const qs = params.toString();
+      return request(`/api/reports/activity${qs ? `?${qs}` : ""}`);
+    },
     summary: (month) => request(`/api/reports/summary${month ? `?month=${month}` : ""}`),
     publicSummary: (month) => request(`/api/reports/public-summary${month ? `?month=${month}` : ""}`),
     publicExpenses: (month, categoryId) => request(`/api/reports/public-expenses?month=${encodeURIComponent(month)}&category_id=${encodeURIComponent(categoryId)}`),
