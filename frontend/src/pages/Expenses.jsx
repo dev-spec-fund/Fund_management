@@ -1,0 +1,206 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Plus, Search, Pencil, RotateCcw, Check, X } from "lucide-react";
+import { api } from "../api";
+import { Modal, Field } from "../components/FormControls";
+import { Center, MessageBanner, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
+import { currentMonthValue, shiftMonthValue, todayValue } from "../utils/date";
+import { fmt } from "../utils/format";
+
+const FILTERS = [
+  ["all", "All"],
+  ["pending", "Pending"],
+  ["approved", "Approved"],
+  ["reversed", "Reversed"],
+  ["voided", "Voided/Rejected"],
+];
+
+function monthLabel(month) {
+  return new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${month}-01T00:00:00Z`));
+}
+
+function statusLabel(row) {
+  if (row.status === "voided" && String(row.void_reason || "").toLowerCase().includes("reject")) return "Rejected";
+  return String(row.status || "").replace(/^./, (c) => c.toUpperCase());
+}
+
+function statusTone(status) {
+  if (status === "approved") return { bg: "var(--success-bg)", color: "var(--success-strong)", border: "var(--success-border)" };
+  if (status === "pending") return { bg: "var(--warning-bg)", color: "var(--warning)", border: "var(--warning-border)" };
+  return { bg: "var(--danger-bg)", color: "var(--danger)", border: "var(--danger-border)" };
+}
+
+export default function Expenses() {
+  const [month, setMonth] = useState(currentMonthValue());
+  const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [rows, setRows] = useState(null);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const load = async () => {
+    setError("");
+    try {
+      const data = await api.expenses.list({ month, status: filter === "all" ? "" : filter, q: debouncedQuery });
+      setRows(data);
+    } catch (e) {
+      setError(e.message || "Could not load expenses");
+      setRows([]);
+    }
+  };
+
+  useEffect(() => { setRows(null); load(); }, [month, filter, debouncedQuery]);
+
+  const totals = useMemo(() => {
+    const base = rows || [];
+    return {
+      total: base.reduce((s, r) => s + (r.status === "approved" ? Number(r.amount || 0) : 0), 0),
+      pending: base.filter((r) => r.status === "pending").reduce((s, r) => s + Number(r.amount || 0), 0),
+      count: base.length,
+    };
+  }, [rows]);
+
+  const saved = async (text = "Expense saved") => {
+    setSelected(null); setShowAdd(false); setMessage(text); await load();
+  };
+
+  return (
+    <>
+      <div className="page-sticky-controls expenses-sticky-controls">
+        <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>EXPENSES</div>
+            <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 2 }}>{totals.count} records · Approved MVR {fmt(totals.total)}</div>
+          </div>
+          <button type="button" onClick={() => setShowAdd(true)} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "8px 11px" }}><Plus size={14} /> Add</button>
+        </div>
+
+        <div className="reports-month-selector" style={{ marginBottom: 8 }}>
+          <button type="button" onClick={() => setMonth(shiftMonthValue(month, -1))} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
+          <div className="sans" style={{ textAlign: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 10px", fontSize: 14, fontWeight: 600 }}>{monthLabel(month)}</div>
+          <button type="button" onClick={() => setMonth(shiftMonthValue(month, 1))} aria-label="Next month" style={monthNavBtn()}><ChevronRight size={18} /></button>
+        </div>
+
+        <div className="expense-filter-row sans">
+          {FILTERS.map(([value, label]) => <button type="button" key={value} onClick={() => setFilter(value)} className={filter === value ? "expense-filter-chip active" : "expense-filter-chip"}>{label}</button>)}
+        </div>
+
+        <div className="expense-search sans">
+          <Search size={14} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search description, category or ID" />
+          {query && <button type="button" aria-label="Clear search" onClick={() => setQuery("")}><X size={14} /></button>}
+        </div>
+      </div>
+
+      <MessageBanner>{message}</MessageBanner>
+      <MessageBanner tone="error">{error}</MessageBanner>
+      {totals.pending > 0 && <div className="sans" style={{ fontSize: 11, color: "var(--warning)", marginBottom: 10 }}>Pending approval: MVR {fmt(totals.pending)}</div>}
+
+      {rows === null ? <Center>Loading expenses…</Center> : rows.length === 0 ? <Center>No expenses found.</Center> : rows.map((row) => {
+        const tone = statusTone(row.status);
+        return <button type="button" key={row.id} onClick={() => setSelected(row)} className="expense-row">
+          <div style={{ minWidth: 0, textAlign: "left" }}>
+            <div className="sans" style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+              <strong style={{ fontSize: 13 }}>{row.description}</strong>
+              <span style={{ fontSize: 9, padding: "3px 6px", borderRadius: 999, background: tone.bg, color: tone.color, border: `1px solid ${tone.border}` }}>{statusLabel(row)}</span>
+            </div>
+            <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 4 }}>
+              {row.expense_date || row.transaction_month} · {row.category_name || "Uncategorized"} · {row.txn_id || `#${row.id}`}
+            </div>
+          </div>
+          <div className="sans" style={{ color: "var(--danger)", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>MVR {fmt(row.amount)}</div>
+        </button>;
+      })}
+
+      {showAdd && <ExpenseForm onClose={() => setShowAdd(false)} onSaved={() => saved("Expense added")} />}
+      {selected && <ExpenseDetails row={selected} onClose={() => setSelected(null)} onSaved={saved} />}
+    </>
+  );
+}
+
+function ExpenseForm({ onClose, onSaved, row = null }) {
+  const [categories, setCategories] = useState([]);
+  const [form, setForm] = useState({
+    description: row?.description || "",
+    category_id: row?.category_id || "",
+    amount: row?.amount ?? "",
+    expense_date: row?.expense_date || (row?.transaction_month ? `${row.transaction_month}-01` : todayValue()),
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { api.expenses.categories().then(setCategories).catch(() => {}); }, []);
+
+  const save = async () => {
+    if (!form.description.trim() || !form.expense_date || Number(form.amount) <= 0) return setError("Description, amount and expense date are required.");
+    setBusy(true); setError("");
+    try {
+      const payload = { description: form.description.trim(), category_id: form.category_id || null, amount: Number(form.amount), expense_date: form.expense_date };
+      if (row) await api.expenses.update(row.id, payload); else await api.expenses.create(payload);
+      await onSaved(row ? "Expense updated" : "Expense added");
+    } catch (e) { setError(e.message || "Could not save expense"); } finally { setBusy(false); }
+  };
+
+  return <Modal onClose={onClose} title={row ? "Edit expense" : "Add expense"}>
+    <MessageBanner tone="error">{error}</MessageBanner>
+    <Field label="Description" value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
+    <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Category</div>
+    <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className="sans" style={{ width: "100%", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, background: "var(--card)" }}>
+      <option value="">Select category</option>
+      {categories.filter((c) => Number(c.active) !== 0 || Number(c.id) === Number(form.category_id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+    </select>
+    <Field label="Amount" type="number" prefix="MVR" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
+    <Field label="Expense date" type="date" value={form.expense_date} onChange={(v) => setForm({ ...form, expense_date: v })} />
+    <PrimaryButton onClick={busy ? undefined : save}>{busy ? "Saving…" : row ? "Save changes" : "Save expense"}</PrimaryButton>
+  </Modal>;
+}
+
+function ExpenseDetails({ row, onClose, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  if (editing) return <ExpenseForm row={row} onClose={onClose} onSaved={onSaved} />;
+
+  const approve = async () => { setBusy(true); setError(""); try { await api.expenses.approve(row.id); await onSaved("Expense approved"); } catch (e) { setError(e.message); } finally { setBusy(false); } };
+  const reject = async () => { if (!confirm("Reject this pending expense?")) return; setBusy(true); setError(""); try { await api.expenses.reject(row.id); await onSaved("Expense rejected"); } catch (e) { setError(e.message); } finally { setBusy(false); } };
+  const reverse = async () => {
+    const reason = prompt("Reason for reversing this approved expense:");
+    if (!reason || reason.trim().length < 3) return;
+    setBusy(true); setError("");
+    try { const r = await api.governance.reverse("expense", row.id, reason.trim()); await onSaved(`Expense reversed · ${r.reversal_id}`); }
+    catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  return <Modal onClose={onClose} title={row.txn_id || "Expense details"}>
+    <MessageBanner tone="error">{error}</MessageBanner>
+    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, marginBottom: 14 }}>
+      <Detail label="Description" value={row.description} />
+      <Detail label="Amount" value={`MVR ${fmt(row.amount)}`} />
+      <Detail label="Expense date" value={row.expense_date || row.transaction_month || "—"} />
+      <Detail label="Category" value={row.category_name || "Uncategorized"} />
+      <Detail label="Status" value={statusLabel(row)} />
+      <Detail label="Logged by" value={row.logged_by_name || `Admin #${row.logged_by}`} />
+      {row.approved_by_name && <Detail label="Approved by" value={row.approved_by_name} />}
+      {row.void_reason && <Detail label="Reason" value={row.void_reason} />}
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      {row.status !== "reversed" && row.status !== "voided" && <button type="button" disabled={busy} onClick={() => setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13} /> Edit</button>}
+      {row.status === "pending" && <button type="button" disabled={busy} onClick={approve} style={smallBtn("var(--success-strong)")}><Check size={13} /> Approve</button>}
+      {row.status === "pending" && <button type="button" disabled={busy} onClick={reject} style={smallBtn("var(--danger)")}><X size={13} /> Reject</button>}
+      {row.status === "approved" && <button type="button" disabled={busy} onClick={reverse} style={smallBtn("var(--danger)")}><RotateCcw size={13} /> Reverse</button>}
+    </div>
+    {row.status === "pending" && <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 10 }}>If you created this expense and it requires second approval, another finance admin must approve it.</div>}
+  </Modal>;
+}
+
+function Detail({ label, value }) {
+  return <div className="sans" style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0", borderBottom: "1px solid var(--divider)", fontSize: 12 }}><span style={{ color: "var(--muted)" }}>{label}</span><strong style={{ textAlign: "right" }}>{value}</strong></div>;
+}

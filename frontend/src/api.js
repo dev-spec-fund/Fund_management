@@ -95,7 +95,14 @@ export const api = {
   },
 
   expenses: {
-    list: () => request("/api/expenses"),
+    list: (filters = {}) => {
+      const params = new URLSearchParams();
+      if (filters.month) params.set("month", filters.month);
+      if (filters.status) params.set("status", filters.status);
+      if (filters.q) params.set("q", filters.q);
+      const qs = params.toString();
+      return request(`/api/expenses${qs ? `?${qs}` : ""}`);
+    },
     create: (data) => request("/api/expenses", { method: "POST", body: JSON.stringify(data) }),
     update: (id, data) => request(`/api/expenses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     remove: (id, reason) => request(`/api/expenses/${id}`, { method: "DELETE", body: JSON.stringify({ reason }) }),

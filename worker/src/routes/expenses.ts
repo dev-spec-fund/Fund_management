@@ -9,12 +9,22 @@ export const expensesRoute = new Hono<AppEnv>();
 
 expensesRoute.get("/", requireAdmin, async (c) => {
   await ensureOperationalSchema(c.env);
-  const rows = await c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.category_id,e.amount,e.logged_by,e.edited_by,e.expense_date,e.transaction_month,
+  const month=String(c.req.query("month")||"").trim();
+  const status=String(c.req.query("status")||"").trim();
+  const q=String(c.req.query("q")||"").trim().slice(0,100);
+  if(month && !validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
+  if(status && !["pending","approved","reversed","voided"].includes(status)) return c.json({error:"Invalid expense status"},400);
+  const where:string[]=[]; const vals:any[]=[];
+  if(month){where.push("e.transaction_month=?");vals.push(month);}
+  if(status){where.push("e.status=?");vals.push(status);}
+  if(q){where.push("(e.description LIKE ? OR e.txn_id LIKE ? OR c.name LIKE ?)");const like=`%${q}%`;vals.push(like,like,like);}
+  const rows = await c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.category_id,e.amount,e.receipt_file_id,e.logged_by,e.edited_by,e.expense_date,e.transaction_month,
       e.status,e.approval_required,e.approved_by,e.approved_at,e.voided_by,e.voided_at,e.void_reason,e.created_at,e.updated_at,
       c.name category_name,la.name logged_by_name,aa.name approved_by_name
     FROM expenses e LEFT JOIN expense_categories c ON c.id=e.category_id
     LEFT JOIN admins la ON la.id=e.logged_by LEFT JOIN admins aa ON aa.id=e.approved_by
-    ORDER BY e.created_at DESC`).all();
+    ${where.length?`WHERE ${where.join(" AND ")}`:""}
+    ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC LIMIT 500`).bind(...vals).all();
   return c.json(rows.results);
 });
 
