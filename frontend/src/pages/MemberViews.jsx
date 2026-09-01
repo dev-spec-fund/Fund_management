@@ -486,3 +486,111 @@ export function Activity({ isAdmin, canFinance = false }) {
   );
 }
 /* ---------- Reports (admin) ---------- */
+
+export function MemberMeetings() {
+  const [rows, setRows] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState("");
+  const load = ({ silent = false } = {}) => {
+    if (!silent) { setRows(null); setError(""); }
+    return api.myMeetings().then(setRows).catch((e) => { if (!silent) setError(e?.message || "Could not load meetings"); });
+  };
+  useEffect(() => { load(); }, []);
+  useEffect(() => onDataChange(() => load({ silent: true })), []);
+  const rsvp = async (id, response) => {
+    setBusyId(id); setError("");
+    try { await api.rsvpMeeting(id, response); await load({ silent: true }); }
+    catch (e) { setError(e?.message || "Could not save RSVP"); }
+    finally { setBusyId(null); }
+  };
+  if (error && rows === null) return <div className="sans" style={{color:"var(--danger)",background:"var(--danger-bg)",border:"1px solid var(--danger-border)",padding:12,borderRadius:10}}>{error}</div>;
+  if (rows === null) return <Center>Loading meetings…</Center>;
+  return <>
+    <div className="sans" style={{fontSize:15,fontWeight:700,color:"var(--primary-text)",marginBottom:3}}>Meetings</div>
+    <div className="sans" style={{fontSize:11,color:"var(--soft)",marginBottom:13}}>Invitations, RSVP, minutes and decisions</div>
+    {error && <div className="sans" style={{fontSize:11,color:"var(--danger)",marginBottom:10}}>{error}</div>}
+    {rows.map((m) => <div key={m.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:9}}>
+      <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start"}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:17,fontWeight:600}}>{m.title}</div>
+          <div className="sans" style={{fontSize:11,color:"var(--soft)",marginTop:3}}>{m.meeting_date} · {m.meeting_time}{m.venue ? ` · ${m.venue}` : ""}</div>
+        </div>
+        <span className="sans" style={{fontSize:10,padding:"5px 8px",borderRadius:14,background:m.status==="cancelled"?"var(--danger-bg)":"var(--success-bg)",color:m.status==="cancelled"?"var(--danger)":"var(--success-strong)"}}>{m.status || "upcoming"}</span>
+      </div>
+      {m.agenda && <div className="sans" style={{fontSize:11,color:"var(--muted)",marginTop:10,lineHeight:1.45}}>Agenda: {m.agenda}</div>}
+      {m.cancel_reason && <div className="sans" style={{fontSize:11,color:"var(--danger)",marginTop:8}}>Cancelled: {m.cancel_reason}</div>}
+      {m.status !== "cancelled" && <div className="sans" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginTop:12}}>
+        {[['yes','Going'],['maybe','Maybe'],['no','Decline']].map(([value,label]) => <button key={value} type="button" disabled={busyId===m.id} onClick={()=>rsvp(m.id,value)} style={{background:m.rsvp===value?"var(--primary)":"var(--button-soft)",color:m.rsvp===value?"var(--on-primary)":"var(--muted)",border:"1px solid var(--border)",borderRadius:8,padding:"9px 6px",fontSize:11,fontWeight:600,cursor:"pointer"}}>{label}</button>)}
+      </div>}
+      {(m.minutes || m.decisions) && <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid var(--divider-2)"}}>
+        {m.minutes && <div className="sans" style={{fontSize:11,lineHeight:1.5,color:"var(--muted)",marginBottom:m.decisions?8:0}}><b style={{color:"var(--text)"}}>Minutes:</b> {m.minutes}</div>}
+        {m.decisions && <div className="sans" style={{fontSize:11,lineHeight:1.5,color:"var(--muted)"}}><b style={{color:"var(--text)"}}>Decisions:</b> {m.decisions}</div>}
+      </div>}
+    </div>)}
+    {!rows.length && <div className="sans" style={{fontSize:12,color:"var(--soft)"}}>No meetings yet.</div>}
+  </>;
+}
+
+export function MyActions() {
+  const [rows, setRows] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState("");
+  const load = ({ silent = false } = {}) => {
+    if (!silent) { setRows(null); setError(""); }
+    return api.myActions().then(setRows).catch((e)=>{ if(!silent) setError(e?.message || "Could not load action items"); });
+  };
+  useEffect(()=>{ load(); },[]);
+  useEffect(()=>onDataChange(()=>load({silent:true})),[]);
+  const done = async (id) => {
+    setBusyId(id); setError("");
+    try { await api.completeMyAction(id); await load({silent:true}); }
+    catch(e){ setError(e?.message || "Could not complete action item"); }
+    finally { setBusyId(null); }
+  };
+  if(error && rows===null) return <div className="sans" style={{color:"var(--danger)",background:"var(--danger-bg)",border:"1px solid var(--danger-border)",padding:12,borderRadius:10}}>{error}</div>;
+  if(rows===null) return <Center>Loading action items…</Center>;
+  const open=rows.filter(x=>x.status==="open"), completed=rows.filter(x=>x.status!=="open");
+  const render=(a)=><div key={a.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:8}}>
+    <div style={{display:"flex",justifyContent:"space-between",gap:10}}>
+      <div style={{minWidth:0}}>
+        <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>{a.description}</div>
+        <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:4}}>{a.meeting_title}{a.due_date?` · Due ${a.due_date}`:""}</div>
+      </div>
+      <span className="sans" style={{fontSize:10,color:a.status==="open"?"var(--warning)":"var(--success)",whiteSpace:"nowrap"}}>{a.status}</span>
+    </div>
+    {a.status==="open" && <button type="button" disabled={busyId===a.id} onClick={()=>done(a.id)} className="sans" style={{width:"100%",marginTop:10,background:"var(--success-bg)",color:"var(--success-strong)",border:"1px solid var(--success-border)",borderRadius:8,padding:9,fontSize:11,fontWeight:700,cursor:"pointer"}}>{busyId===a.id?"Saving…":"Mark done"}</button>}
+  </div>;
+  return <>
+    <div className="sans" style={{fontSize:15,fontWeight:700,color:"var(--primary-text)",marginBottom:3}}>My Actions</div>
+    <div className="sans" style={{fontSize:11,color:"var(--soft)",marginBottom:13}}>Tasks assigned to you from meetings</div>
+    {error && <div className="sans" style={{fontSize:11,color:"var(--danger)",marginBottom:10}}>{error}</div>}
+    {open.map(render)}
+    {!open.length && <div className="sans" style={{background:"var(--success-bg)",border:"1px solid var(--success-border)",borderRadius:11,padding:13,color:"var(--success-strong)",fontSize:12,marginBottom:14}}>✓ No open action items.</div>}
+    {!!completed.length && <><div className="sans" style={{fontSize:11,fontWeight:700,color:"var(--muted)",letterSpacing:.7,margin:"18px 0 8px"}}>COMPLETED</div>{completed.map(render)}</>}
+  </>;
+}
+
+export function MyProfile({ member }) {
+  const [dashboard, setDashboard] = useState(null);
+  const [error, setError] = useState("");
+  const load=({silent=false}={})=>{ if(!silent){setDashboard(null);setError("");} return api.myDashboard().then(setDashboard).catch(e=>{if(!silent)setError(e?.message||"Could not load profile");}); };
+  useEffect(()=>{load();},[]);
+  useEffect(()=>onDataChange(()=>load({silent:true})),[]);
+  if(error && !dashboard) return <div className="sans" style={{color:"var(--danger)",background:"var(--danger-bg)",border:"1px solid var(--danger-border)",padding:12,borderRadius:10}}>{error}</div>;
+  if(!dashboard) return <Center>Loading profile…</Center>;
+  const m=dashboard.member || member || {};
+  const c=dashboard.contribution || {};
+  return <>
+    <div className="theme-brand-surface" style={{background:"var(--primary)",color:"var(--on-primary)",borderRadius:16,padding:"20px 22px",marginBottom:12}}>
+      <div className="sans" style={{fontSize:10,letterSpacing:1.1,opacity:.65}}>MEMBER PROFILE</div>
+      <div style={{fontSize:25,fontWeight:600,marginTop:4}}>{m.name || "Member"}</div>
+      <div className="sans" style={{fontSize:11,opacity:.72,marginTop:3}}>{m.member_code || "—"}</div>
+    </div>
+    <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:10}}>
+      {[['Phone',m.phone||'Not added'],['Joined',m.joined_at||m.created_at||'—'],['Current month',dashboard.month||'—'],['Monthly contribution',`MVR ${fmt(c.monthly_amount||m.monthly_amount||0)}`],['Paid this month',`MVR ${fmt(c.paid||0)}`],['Remaining',`MVR ${fmt(c.due||0)}`]].map(([label,value])=><div key={label} className="sans" style={{display:"flex",justifyContent:"space-between",gap:12,padding:"9px 0",borderBottom:"1px solid var(--divider-2)",fontSize:11}}><span style={{color:"var(--muted)"}}>{label}</span><strong style={{color:"var(--text)",textAlign:"right"}}>{value}</strong></div>)}
+      <div className="sans" style={{display:"flex",justifyContent:"space-between",gap:12,paddingTop:10,fontSize:11}}><span style={{color:"var(--muted)"}}>Status</span><strong style={{color:c.status==="paid"?"var(--success)":c.status==="partial"?"var(--warning)":c.status==="exempt"?"var(--muted)":"var(--danger)",textTransform:"capitalize"}}>{c.status||'—'}</strong></div>
+    </div>
+    {!!dashboard.pending_payments?.length && <div className="sans" style={{background:"var(--warning-bg)",border:"1px solid var(--warning-border)",color:"var(--warning)",padding:12,borderRadius:10,fontSize:11,marginBottom:10}}>{dashboard.pending_payments.length} payment submission{dashboard.pending_payments.length===1?' is':'s are'} awaiting approval.</div>}
+    {dashboard.next_meeting && <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:10}}><div className="sans" style={{fontSize:10,color:"var(--soft)",marginBottom:5}}>NEXT MEETING</div><div style={{fontSize:16,fontWeight:600}}>{dashboard.next_meeting.title}</div><div className="sans" style={{fontSize:11,color:"var(--muted)",marginTop:3}}>{dashboard.next_meeting.meeting_date} · {dashboard.next_meeting.meeting_time}{dashboard.next_meeting.venue?` · ${dashboard.next_meeting.venue}`:''}</div></div>}
+  </>;
+}
