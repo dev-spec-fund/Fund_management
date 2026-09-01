@@ -352,19 +352,32 @@ input:focus, textarea:focus, select:focus {
 }
 
 /* v33: Activity date/type filters stay available while the result list scrolls. */
-.activity-filter-sticky {
+
+.page-sticky-controls {
+  box-sizing: border-box;
+  width: 100%;
+}
+.activity-filter-sticky,
+.reports-filter-sticky,
+.settings-subnav-sticky {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 6;
+  isolation: isolate;
   background: var(--bg);
-  padding: 2px 0 10px;
-  margin: -2px 0 4px;
+  padding: 4px 0 9px;
+  margin: -4px 0 10px;
   border-bottom: 1px solid var(--divider);
+}
+
+/* Keep each sticky control area visually aligned while its page body scrolls below it. */
+.activity-filter-sticky {
+  z-index: 7;
 }
 .activity-date-select {
   width: 100%;
   min-width: 0;
-  padding: 9px 11px;
+  padding: 8px 11px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--card);
@@ -377,7 +390,7 @@ input:focus, textarea:focus, select:focus {
   border-radius: 10px;
   background: var(--card);
   color: var(--muted);
-  padding: 8px 11px;
+  padding: 7px 11px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -453,16 +466,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 
-/* v34: Reports controls remain visible; report content scrolls underneath. */
-.reports-filter-sticky {
-  position: sticky;
-  top: 0;
-  z-index: 6;
-  background: var(--bg);
-  padding: 2px 0 10px;
-  margin: -2px 0 12px;
-  border-bottom: 1px solid var(--divider);
-}
+/* v34/v36: Reports controls use the shared sticky-control shell. */
 .reports-month-selector {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) 38px;
@@ -471,16 +475,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 
-/* v35: Settings sub-navigation stays visible while section content scrolls underneath. */
-.settings-subnav-sticky {
-  position: sticky;
-  top: 0;
-  z-index: 6;
-  background: var(--bg);
-  padding: 2px 0 10px;
-  margin: -2px 0 12px;
-  border-bottom: 1px solid var(--divider);
-}
+/* v35/v36: Settings sub-navigation uses the shared sticky-control shell. */
 .settings-subnav-scroll {
   display: flex;
   gap: 6px;

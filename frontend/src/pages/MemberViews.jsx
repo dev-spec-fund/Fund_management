@@ -398,8 +398,8 @@ export function Activity({ isAdmin, canFinance = false }) {
 
   return (
     <>
-      <div className="activity-filter-sticky">
-        <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 9 }}>
+      <div className="activity-filter-sticky page-sticky-controls">
+        <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 7 }}>
           <div>
             <div style={{ fontSize: 12, color: "var(--soft)" }}>Activity</div>
             <div style={{ fontSize: 10, color: "var(--soft-2)", marginTop: 2 }}>{appliedRange.label}</div>
@@ -407,7 +407,7 @@ export function Activity({ isAdmin, canFinance = false }) {
           <div style={{ fontSize: 12, color: income - expenses >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 700 }}>Net {income - expenses >= 0 ? "+" : "−"}MVR {fmt(Math.abs(income - expenses))}</div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 7, marginBottom: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 7, marginBottom: 7 }}>
           <select value={datePreset} onChange={(e) => changeDatePreset(e.target.value)} className="sans activity-date-select" aria-label="Activity date range">
             <option value="all">All recent</option>
             <option value="this_month">This month</option>

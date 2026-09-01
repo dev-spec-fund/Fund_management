@@ -167,7 +167,7 @@ export default function Settings({ admin }) {
   return <>
     <MessageBanner>{message}</MessageBanner>
 
-    <div className="settings-subnav-sticky">
+    <div className="settings-subnav-sticky page-sticky-controls">
       <div className="settings-subnav-scroll">
         {tabs.map(([key,label])=>
           <button key={key} type="button" onClick={()=>setSettingsSection(key)} className="sans"
