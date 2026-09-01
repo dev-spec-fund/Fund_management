@@ -22,7 +22,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 14;
+const REQUIRED_SCHEMA_VERSION = 15;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;

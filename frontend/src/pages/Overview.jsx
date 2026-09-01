@@ -10,6 +10,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   const [summary, setSummary] = useState(bootstrapSummary);
   const [activity, setActivity] = useState([]);
   const [pendingCount, setPendingCount] = useState(null);
+  const [memberDashboard, setMemberDashboard] = useState(null);
 
   useEffect(() => {
     if (!bootstrapSummary) return;
@@ -23,6 +24,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       setSummary(data);
       setActivity(normalizeRecentActivity(data?.recentActivity));
     }).catch(() => {});
+    if (!isAdmin) api.myDashboard().then(setMemberDashboard).catch(() => setMemberDashboard(null));
     if (canFinance) {
       api.admin.pending().then((p) => {
         const count =
@@ -43,8 +45,9 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   const netMonth = contributions + donations - expenses;
   const outstandingTotal = Number(summary.outstanding?.total || 0);
   const outstandingMembers = (summary.outstanding?.members || []).length;
-  const expected = allocatedContributions + outstandingTotal;
-  const collectionPct = expected > 0 ? Math.min(100, Math.round((allocatedContributions / expected) * 100)) : 0;
+  const expected = isAdmin ? allocatedContributions + outstandingTotal : Number(summary.collection?.expected || 0);
+  const collectedForPct = isAdmin ? allocatedContributions : Number(summary.collection?.collected || 0);
+  const collectionPct = expected > 0 ? Math.min(100, Math.round((collectedForPct / expected) * 100)) : 0;
   const overviewMonth = summary.month || currentMonthValue();
   const monthLabel = (() => {
     try {
@@ -57,6 +60,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
   return (
     <>
+      {!isAdmin && memberDashboard && <MemberContributionHero data={memberDashboard} setTab={setTab} />}
       <div className="theme-brand-surface" style={{ background: "var(--primary)", borderRadius: 16, padding: "23px 22px", color: "var(--on-primary)" }}>
         <div className="sans" style={{ fontSize: 11, opacity: 0.62, letterSpacing: 1.1 }}>FUND BALANCE</div>
         <div style={{ fontSize: 39, fontWeight: 600, marginTop: 4 }}>MVR {fmt(summary.fundBalance)}</div>
@@ -80,7 +84,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       <div className="sans" style={{ fontSize: 11, color: "var(--muted)", marginTop: 18, marginBottom: 7, fontWeight: 700, letterSpacing: .5 }}>MONTHLY COLLECTION · {monthLabel.toUpperCase()}</div>
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 13, padding: "13px 14px" }}>
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12 }}>
-          <span><b style={{ color: "var(--primary-text)" }}>MVR {fmt(allocatedContributions)}</b> <span style={{ color: "var(--soft-2)" }}>/ MVR {fmt(expected)}</span></span>
+          <span><b style={{ color: "var(--primary-text)" }}>MVR {fmt(collectedForPct)}</b> <span style={{ color: "var(--soft-2)" }}>/ MVR {fmt(expected)}</span></span>
           <b style={{ color: "var(--success)" }}>{collectionPct}% collected</b>
         </div>
         <div style={{ height: 6, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", marginTop: 8 }}>
@@ -116,6 +120,28 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       {activity.length === 0 && <div className="sans" style={{ fontSize: 12, color: "var(--soft)" }}>No activity yet.</div>}
     </>
   );
+}
+
+function MemberContributionHero({ data, setTab }) {
+  const c=data?.contribution||{}; const pending=data?.pending_payments||[];
+  const status=String(c.status||"unpaid");
+  const color=status==="paid"?"var(--success)":status==="partial"?"var(--warning)":status==="exempt"?"var(--muted)":"var(--danger)";
+  const label=status==="paid"?"PAID":status==="partial"?"PARTIAL":status==="exempt"?"EXEMPT":"UNPAID";
+  const monthLabel=(()=>{try{const [y,m]=String(data.month).split('-').map(Number);return new Intl.DateTimeFormat('en',{month:'long',year:'numeric'}).format(new Date(y,m-1,1));}catch{return data.month;}})();
+  return <div style={{marginBottom:12}}>
+    <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,padding:"16px 18px"}}>
+      <div className="sans" style={{fontSize:10,color:"var(--soft)",letterSpacing:1}}>MY CONTRIBUTION · {String(monthLabel||'').toUpperCase()}</div>
+      <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginTop:7,gap:10}}>
+        <b style={{fontSize:20,color}}>{label}</b><b style={{fontSize:14}}>MVR {fmt(c.paid||0)} / {fmt(c.monthly_amount||0)}</b>
+      </div>
+      <div className="sans" style={{fontSize:11,color:"var(--muted)",marginTop:5}}>{status==='exempt'?(c.exemption_reason||'Exempt this month'):Number(c.due||0)>0?`MVR ${fmt(c.due)} remaining`:'Contribution complete for this month'}</div>
+      {pending.length>0 && <button type="button" onClick={()=>setTab('history')} style={{width:"100%",marginTop:11,padding:"10px 12px",borderRadius:10,border:"1px solid var(--warning-border-2)",background:"var(--warning-bg-2)",color:"var(--warning)",fontWeight:700,cursor:"pointer"}} className="sans">⏳ {pending.length} payment{pending.length===1?'':'s'} under review ›</button>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
+        {data.next_meeting && <button className="sans" type="button" onClick={()=>setTab('meetings')} style={{padding:"9px",borderRadius:9,border:"1px solid var(--border)",background:"var(--surface-2)",color:"var(--primary-text)",fontSize:11,fontWeight:700,cursor:"pointer"}}>Next meeting ›</button>}
+        {(data.open_actions||[]).length>0 && <button className="sans" type="button" onClick={()=>setTab('actions')} style={{padding:"9px",borderRadius:9,border:"1px solid var(--border)",background:"var(--surface-2)",color:"var(--primary-text)",fontSize:11,fontWeight:700,cursor:"pointer"}}>{data.open_actions.length} action item{data.open_actions.length===1?'':'s'} ›</button>}
+      </div>
+    </div>
+  </div>;
 }
 
 function normalizeRecentActivity(rows) {

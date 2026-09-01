@@ -5,6 +5,7 @@ import { auditEntity, ensureOperationalSchema, isMonthClosed, requireOpenMonth }
 import { validMonth } from "../validation";
 import { currentMonth } from "../db";
 import { sendMessage } from "../telegram";
+import { rateForMonthFromRows } from "../contributionRates";
 
 export const governanceRoute = new Hono<AppEnv>();
 
@@ -25,11 +26,13 @@ async function monthMetrics(env:any, month:string){
           SELECT c.member_id,c.amount FROM contributions c WHERE c.month=? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
         ) GROUP BY member_id
       )
-      SELECT m.id,m.monthly_amount,COALESCE(p.paid,0) paid,
-        CASE WHEN ex.member_id IS NOT NULL THEN 'exempt' WHEN COALESCE(p.paid,0)<=0 THEN 'unpaid' WHEN COALESCE(p.paid,0)<m.monthly_amount THEN 'partial' ELSE 'paid' END payment_status
+      SELECT m.id,
+        COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) monthly_amount,
+        COALESCE(p.paid,0) paid,
+        CASE WHEN ex.member_id IS NOT NULL THEN 'exempt' WHEN COALESCE(p.paid,0)<=0 THEN 'unpaid' WHEN COALESCE(p.paid,0)<COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) THEN 'partial' ELSE 'paid' END payment_status
       FROM members m LEFT JOIN paid p ON p.member_id=m.id LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=?
       WHERE m.active=1 AND substr(COALESCE(m.joined_at,m.created_at),1,7)<=?
-    `).bind(month,month,month,month).all<any>(),
+    `).bind(month,month,month,month,month,month,month,month).all<any>(),
     env.DB.prepare("SELECT COUNT(*) count FROM contributions WHERE status='pending' AND month=?").bind(month).first<any>(),
     env.DB.prepare("SELECT COUNT(*) count FROM expenses WHERE status='pending' AND transaction_month=?").bind(month).first<any>(),
     env.DB.prepare("SELECT COUNT(*) count FROM error_log WHERE status='open'").first<any>(),
@@ -237,5 +240,17 @@ governanceRoute.get('/analytics/:year', requireAdmin, async c=>{
     c.env.DB.prepare("SELECT COUNT(*) count,COALESCE(SUM(amount),0) total FROM financial_reversals WHERE month LIKE ?").bind(`${year}-%`).first<any>(),
     c.env.DB.prepare("SELECT COUNT(*) count FROM meetings WHERE meeting_date LIKE ?").bind(`${year}-%`).first<any>()
   ]);
-  return c.json({year,reversals:{count:n(reversals?.count),total:n(reversals?.total)},meetings:n(meetings?.count),member_performance:memberPerformance.results.map((r:any)=>({...r,collected:n(r.collected),annual_target:n(r.monthly_amount)*12,rate:n(r.monthly_amount)>0?Math.min(100,n(r.collected)/(n(r.monthly_amount)*12)*100):100}))});
+  const now=currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
+  const lastMonth=year<now.slice(0,4)?12:year===now.slice(0,4)?Number(now.slice(5,7)):0;
+  const performance=await Promise.all(memberPerformance.results.map(async(r:any)=>{
+    const [rates,exemptions,member]=await Promise.all([
+      c.env.DB.prepare("SELECT amount,effective_from,effective_to FROM member_contribution_rates WHERE member_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) ORDER BY effective_from").bind(r.id,`${year}-12`,`${year}-01`).all<any>(),
+      c.env.DB.prepare("SELECT month FROM exemptions WHERE member_id=? AND month LIKE ?").bind(r.id,`${year}-%`).all<any>(),
+      c.env.DB.prepare("SELECT joined_at,created_at FROM members WHERE id=?").bind(r.id).first<any>()
+    ]);
+    const ex=new Set(exemptions.results.map((x:any)=>String(x.month))); const joined=String(member?.joined_at||member?.created_at||`${year}-01`).slice(0,7);
+    let target=0; for(let m=1;m<=lastMonth;m++){const month=`${year}-${String(m).padStart(2,'0')}`;if(month<joined||ex.has(month))continue;target+=rateForMonthFromRows(rates.results as any[],month,n(r.monthly_amount));}
+    const collected=n(r.collected); return {...r,collected,annual_target:target,rate:target>0?Math.min(100,collected/target*100):100};
+  }));
+  return c.json({year,reversals:{count:n(reversals?.count),total:n(reversals?.total)},meetings:n(meetings?.count),member_performance:performance});
 });

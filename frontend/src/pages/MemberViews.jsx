@@ -30,12 +30,18 @@ export function MyHistory({ member }) {
   const recentStatuses=statuses.slice(-12).reverse();
   const monthLabel=(m)=>{if(!m)return"—";const [y,mo]=String(m).split("-");return new Date(Number(y),Number(mo)-1,1).toLocaleDateString("en-GB",{month:"short",year:"numeric"});};
   const statusColor=(x)=>x==="paid"?"var(--success)":x==="partial"?"var(--warning)":x==="exempt"?"var(--muted)":"var(--danger)";
+  const pending=rows.filter(r=>String(r.status).toLowerCase()==="pending");
+  const rates=statement.contribution_rates||[];
   return <>
     <div className="theme-brand-surface" style={{background:"var(--primary)",borderRadius:16,padding:"20px 22px",marginBottom:12,color:"var(--on-primary)"}}>
       <div className="sans" style={{fontSize:11,opacity:.62,letterSpacing:1.1}}>MY MEMBER ACCOUNT</div>
       <div style={{fontSize:28,fontWeight:600,marginTop:4}}>{statement.member?.member_code||member?.member_code||"—"}</div>
       <div className="sans" style={{fontSize:13,opacity:.72,marginTop:4}}>{statement.member?.name||member?.name} · MVR {fmt(statement.member?.monthly_amount||member?.monthly_amount)}/month</div>
     </div>
+    {pending.length>0 && <div style={{background:"var(--warning-bg-2)",border:"1px solid var(--warning-border-2)",borderRadius:12,padding:"11px 13px",marginBottom:10}}>
+      <div className="sans" style={{fontSize:11,fontWeight:800,color:"var(--warning)",marginBottom:6}}>PAYMENT UNDER REVIEW</div>
+      {pending.map(p=><div key={p.id} className="sans" style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11,padding:"5px 0"}}><span>{p.txn_id} · {monthLabel(p.month)}</span><b>MVR {fmt(p.amount)}</b></div>)}
+    </div>}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"var(--soft)"}}>TOTAL CONTRIBUTED</div><b className="sans">MVR {fmt(total)}</b></div>
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"var(--soft)"}}>OUTSTANDING</div><b className="sans" style={{color:outstanding>0?"var(--danger)":"var(--success)"}}>MVR {fmt(outstanding)}</b></div>
@@ -46,6 +52,12 @@ export function MyHistory({ member }) {
     <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"4px 14px",marginBottom:16}}>
       {recentStatuses.map(x=><div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",gap:10,padding:"9px 0",borderBottom:"1px solid var(--divider)",fontSize:12}}><span>{monthLabel(x.month)}</span><span style={{textAlign:"right"}}><b style={{color:statusColor(x.status),textTransform:"capitalize"}}>{x.status}</b><div style={{fontSize:10,color:"var(--soft)"}}>Paid MVR {fmt(x.paid)}{Number(x.due)>0?` · Due MVR ${fmt(x.due)}`:""}</div></span></div>)}
     </div>
+    {rates.length>0 && <>
+      <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--muted)",marginBottom:9}}>CONTRIBUTION RATE HISTORY</div>
+      <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"4px 14px",marginBottom:16}}>
+        {rates.map((r,i)=><div key={`${r.effective_from}-${i}`} className="sans" style={{display:"flex",justifyContent:"space-between",gap:10,padding:"9px 0",borderBottom:i===rates.length-1?"none":"1px solid var(--divider)",fontSize:12}}><span>{monthLabel(r.effective_from)}{r.effective_to?` – ${monthLabel(r.effective_to)}`:" – Current"}</span><b>MVR {fmt(r.amount)}/month</b></div>)}
+      </div>
+    </>}
     <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--muted)",marginBottom:9}}>CONTRIBUTION TRANSACTIONS</div>
     {rows.map((h)=><div key={h.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"13px 16px",marginBottom:8}}>
       <div style={{display:"flex",justifyContent:"space-between",gap:10}}><div><div className="sans" style={{fontSize:14,fontWeight:600}}>{monthLabel(h.month)}</div><div className="sans" style={{fontSize:11,color:"var(--soft)",marginTop:3}}>{h.txn_id}{h.ref_number?` · Bank ref: ${h.ref_number}`:""}</div></div><div style={{textAlign:"right"}}><div className="sans" style={{fontSize:14,fontWeight:600}}>MVR {fmt(h.amount)}</div><span className="sans" style={{color:h.status==="approved"?"var(--success)":h.status==="reversed"?"var(--warning)":"var(--muted)",fontSize:10,fontWeight:600,textTransform:"capitalize"}}>{h.status||"pending"}</span></div></div>
@@ -476,4 +488,56 @@ export function Activity({ isAdmin, canFinance = false }) {
     </>
   );
 }
+
+export function MemberMeetings() {
+  const [rows,setRows]=useState(null); const [error,setError]=useState(""); const [busy,setBusy]=useState(null);
+  const load=()=>api.myMeetings().then(setRows).catch(e=>setError(e.message||"Could not load meetings"));
+  useEffect(()=>{load();},[]);
+  const rsvp=async(id,response)=>{setBusy(id);setError("");try{await api.myMeetingRsvp(id,response);await load();}catch(e){setError(e.message||"Could not save RSVP");}finally{setBusy(null);}};
+  if(rows===null&&!error)return <Center>Loading meetings…</Center>;
+  const now=todayValue();
+  return <>
+    <div className="sans" style={{fontSize:13,fontWeight:800,color:"var(--muted)",marginBottom:10}}>MY MEETINGS</div>
+    {error&&<div className="sans" style={{padding:10,borderRadius:9,background:"var(--danger-bg)",color:"var(--danger)",marginBottom:10,fontSize:11}}>{error}</div>}
+    {(rows||[]).map(m=>{const past=String(m.meeting_date)<now;return <div key={m.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:13,padding:14,marginBottom:9}}>
+      <div className="sans" style={{display:"flex",justifyContent:"space-between",gap:10}}><div><b style={{fontSize:13}}>{m.title}</b><div style={{fontSize:10,color:"var(--soft)",marginTop:3}}>{m.meeting_date} · {m.meeting_time}{m.venue?` · ${m.venue}`:""}</div></div><span style={{fontSize:10,fontWeight:700,color:m.status==='cancelled'?"var(--danger)":past?"var(--muted)":"var(--success)"}}>{m.status==='cancelled'?"Cancelled":past?"Past":"Upcoming"}</span></div>
+      {m.agenda&&<div className="sans" style={{fontSize:11,color:"var(--muted)",marginTop:9,lineHeight:1.5}}><b>Agenda:</b> {m.agenda}</div>}
+      {!past&&m.status!=='cancelled'&&<div style={{display:"flex",gap:6,marginTop:10}}>{[["yes","Going"],["maybe","Maybe"],["no","Not going"]].map(([v,l])=><button key={v} type="button" disabled={busy===m.id} onClick={()=>rsvp(m.id,v)} className="sans" style={{flex:1,padding:"8px 6px",borderRadius:8,border:"1px solid var(--border)",background:m.rsvp===v?"var(--primary)":"var(--surface-2)",color:m.rsvp===v?"var(--on-primary)":"var(--muted)",fontSize:10,fontWeight:700}}>{l}</button>)}</div>}
+      {past&&(m.minutes||m.decisions)&&<div style={{marginTop:10,paddingTop:9,borderTop:"1px solid var(--divider)"}}>{m.minutes&&<div className="sans" style={{fontSize:11,lineHeight:1.5}}><b>Minutes</b><div style={{color:"var(--muted)",whiteSpace:"pre-wrap",marginTop:3}}>{m.minutes}</div></div>}{m.decisions&&<div className="sans" style={{fontSize:11,lineHeight:1.5,marginTop:8}}><b>Decisions</b><div style={{color:"var(--muted)",whiteSpace:"pre-wrap",marginTop:3}}>{m.decisions}</div></div>}</div>}
+    </div>})}
+    {(rows||[]).length===0&&<div className="sans" style={{fontSize:12,color:"var(--soft)"}}>No meetings yet.</div>}
+  </>;
+}
+
+export function MyActions() {
+  const [rows,setRows]=useState(null); const [error,setError]=useState(""); const [busy,setBusy]=useState(null);
+  const load=()=>api.myActions().then(setRows).catch(e=>setError(e.message||"Could not load action items"));
+  useEffect(()=>{load();},[]);
+  const done=async id=>{setBusy(id);try{await api.completeMyAction(id);await load();}catch(e){setError(e.message||"Could not complete action item");}finally{setBusy(null);}};
+  if(rows===null&&!error)return <Center>Loading action items…</Center>;
+  const today=todayValue();
+  return <>
+    <div className="sans" style={{fontSize:13,fontWeight:800,color:"var(--muted)",marginBottom:10}}>MY ACTION ITEMS</div>
+    {error&&<div className="sans" style={{padding:10,borderRadius:9,background:"var(--danger-bg)",color:"var(--danger)",marginBottom:10,fontSize:11}}>{error}</div>}
+    {(rows||[]).map(a=>{const overdue=a.status==='open'&&a.due_date&&a.due_date<today;return <div key={a.id} style={{background:"var(--card)",border:`1px solid ${overdue?'var(--danger-border)':'var(--border)'}`,borderRadius:13,padding:14,marginBottom:9}}>
+      <div className="sans" style={{fontSize:13,fontWeight:700}}>{a.description}</div>
+      <div className="sans" style={{fontSize:10,color:overdue?"var(--danger)":"var(--soft)",marginTop:4}}>{a.meeting_title}{a.due_date?` · Due ${a.due_date}`:""}{overdue?" · OVERDUE":""}</div>
+      <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:9}}><span style={{fontSize:10,fontWeight:700,color:a.status==='done'?"var(--success)":"var(--warning)",textTransform:"uppercase"}}>{a.status}</span>{a.status==='open'&&<button type="button" disabled={busy===a.id} onClick={()=>done(a.id)} style={{...approveBtn,padding:"7px 10px",fontSize:10}}>Mark done</button>}</div>
+    </div>})}
+    {(rows||[]).length===0&&<div className="sans" style={{fontSize:12,color:"var(--soft)"}}>No action items assigned to you.</div>}
+  </>;
+}
+
+export function MyProfile({ member }) {
+  const [rates,setRates]=useState(null);
+  useEffect(()=>{if(member?.id)api.members.contributionRates(member.id).then(setRates).catch(()=>setRates([]));},[member?.id]);
+  const joined=member?.joined_at||member?.created_at;
+  return <>
+    <div className="theme-brand-surface" style={{background:"var(--primary)",borderRadius:16,padding:"20px 22px",marginBottom:12,color:"var(--on-primary)"}}><div className="sans" style={{fontSize:10,opacity:.65,letterSpacing:1}}>MY PROFILE</div><div style={{fontSize:27,fontWeight:600,marginTop:4}}>{member?.name||"Member"}</div><div className="sans" style={{fontSize:12,opacity:.72,marginTop:3}}>{member?.member_code||"—"}</div></div>
+    <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:13,padding:"4px 14px"}}>{[["Member ID",member?.member_code],["Phone",member?.phone||"Not set"],["Monthly contribution",`MVR ${fmt(member?.monthly_amount||0)}`],["Member since",joined?String(joined).slice(0,10):"—"],["Status",Number(member?.active)!==0?"Active":"Inactive"]].map(([k,v])=><div key={k} className="sans" style={{display:"flex",justifyContent:"space-between",gap:12,padding:"11px 0",borderBottom:"1px solid var(--divider)",fontSize:12}}><span style={{color:"var(--soft)"}}>{k}</span><b style={{textAlign:"right"}}>{v}</b></div>)}</div>
+    <div className="sans" style={{fontSize:11,color:"var(--soft)",marginTop:10,lineHeight:1.5}}>Profile details are managed by fund administrators. Your Telegram account is linked automatically.</div>
+    {rates&&rates.length>0&&<><div className="sans" style={{fontSize:12,fontWeight:800,color:"var(--muted)",margin:"18px 0 8px"}}>CONTRIBUTION RATE HISTORY</div>{rates.map(r=><div key={r.id} className="sans" style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:7,display:"flex",justifyContent:"space-between",fontSize:11}}><span>{r.effective_from}{r.effective_to?` – ${r.effective_to}`:" – Current"}</span><b>MVR {fmt(r.amount)}</b></div>)}</>}
+  </>;
+}
+
 /* ---------- Reports (admin) ---------- */

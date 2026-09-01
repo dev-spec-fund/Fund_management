@@ -309,7 +309,20 @@ CREATE TABLE IF NOT EXISTS meeting_action_items (
 CREATE INDEX IF NOT EXISTS idx_meeting_action_items_meeting ON meeting_action_items(meeting_id,status,due_date);
 
 
--- Schema migration ledger. Fresh databases created from schema.sql are current through v14.
+
+CREATE TABLE IF NOT EXISTS member_contribution_rates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id INTEGER NOT NULL REFERENCES members(id),
+  amount REAL NOT NULL CHECK(amount > 0),
+  effective_from TEXT NOT NULL,
+  effective_to TEXT,
+  created_by INTEGER REFERENCES admins(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(member_id,effective_from)
+);
+CREATE INDEX IF NOT EXISTS idx_member_contribution_rates_member_period ON member_contribution_rates(member_id,effective_from,effective_to);
+
+-- Schema migration ledger. Fresh databases created from schema.sql are current through v15.
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -328,6 +341,7 @@ INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (11,'integrity_priv
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (12,'registration_phone_capture');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (13,'governance_reporting_and_reversals');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (14,'expense_dates_and_financial_integrity');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (15,'member_contribution_rate_history_and_member_app');
 
 CREATE INDEX IF NOT EXISTS idx_members_normalized_name ON members(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_members_normalized_phone ON members(normalized_phone);

@@ -1,4 +1,5 @@
 import type { Env } from "./types";
+import { rateForMonthFromRows } from "./contributionRates";
 
 export type Allocation = { month: string; amount: number; status_after: "paid" | "partial" };
 
@@ -33,8 +34,8 @@ export async function paidForMonth(env: Env, memberId: number, month: string): P
 export async function buildAllocationPlan(env: Env, contribution: any): Promise<Allocation[]> {
   const member=await env.DB.prepare("SELECT id,monthly_amount FROM members WHERE id=?").bind(contribution.member_id).first<any>();
   if(!member) throw new Error("Member not found");
-  const monthly=Number(member.monthly_amount||0);
-  if(!Number.isFinite(monthly) || monthly<=0) throw new Error("Member monthly contribution amount is invalid");
+  const fallbackMonthly=Number(member.monthly_amount||0);
+  if(!Number.isFinite(fallbackMonthly) || fallbackMonthly<=0) throw new Error("Member monthly contribution amount is invalid");
 
   let remaining=Number(contribution.amount||0);
   if(!Number.isFinite(remaining) || remaining<=0) throw new Error("Contribution amount is invalid");
@@ -44,7 +45,7 @@ export async function buildAllocationPlan(env: Env, contribution: any): Promise<
   for(let i=0;i<120;i++){ months.push(cursor); cursor=nextMonth(cursor); }
   const lastMonth=months[months.length-1];
 
-  const [exemptions, closures, paidRows] = await Promise.all([
+  const [exemptions, closures, paidRows, rateRows] = await Promise.all([
     env.DB.prepare("SELECT month FROM exemptions WHERE member_id=? AND month>=? AND month<=?")
       .bind(member.id,months[0],lastMonth).all<any>(),
     env.DB.prepare("SELECT month FROM month_closures WHERE month>=? AND month<=?")
@@ -61,7 +62,8 @@ export async function buildAllocationPlan(env: Env, contribution: any): Promise<
         WHERE c.member_id=? AND c.month>=? AND c.month<=? AND c.status='approved'
           AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
       ) GROUP BY month
-    `).bind(member.id,months[0],lastMonth,member.id,months[0],lastMonth).all<any>()
+    `).bind(member.id,months[0],lastMonth,member.id,months[0],lastMonth).all<any>(),
+    env.DB.prepare("SELECT amount,effective_from,effective_to FROM member_contribution_rates WHERE member_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) ORDER BY effective_from").bind(member.id,lastMonth,months[0]).all<any>()
   ]);
 
   const exemptSet=new Set(exemptions.results.map((r:any)=>String(r.month)));
@@ -72,6 +74,7 @@ export async function buildAllocationPlan(env: Env, contribution: any): Promise<
   for(const month of months){
     if(remaining<=0.004) break;
     if(exemptSet.has(month) || closedSet.has(month)) continue;
+    const monthly=rateForMonthFromRows(rateRows.results as any[],month,fallbackMonthly);
     const already=Number(paidMap.get(month)||0);
     const needed=Math.max(0,monthly-already);
     if(needed<=0.004) continue;

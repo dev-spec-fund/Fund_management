@@ -133,7 +133,7 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
 
-  const [income,allocatedContributions,advanceAllocated,donationTotal,expenseTotal,byCategory,lifetime,recent] = await Promise.all([
+  const [income,allocatedContributions,advanceAllocated,donationTotal,expenseTotal,byCategory,lifetime,recent,collection] = await Promise.all([
     c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) as total FROM contributions WHERE status='approved' AND month = ?").bind(month).first<{total:number}>(),
     allocatedTotalForMonth(c.env,month),
     advanceAllocatedForMonth(c.env,month),
@@ -173,7 +173,25 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     WHERE event_at IS NOT NULL
     ORDER BY event_at DESC
     LIMIT 5
-    `).all<any>()
+    `).all<any>(),
+    c.env.DB.prepare(`
+      WITH paid AS (
+        SELECT member_id,SUM(amount) paid FROM (
+          SELECT ca.member_id,ca.amount FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id WHERE ca.month=? AND c.status='approved'
+          UNION ALL
+          SELECT c.member_id,c.amount FROM contributions c WHERE c.month=? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
+        ) GROUP BY member_id
+      ), eligible AS (
+        SELECT m.id,COALESCE(p.paid,0) paid,
+          COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) due_amount,
+          CASE WHEN ex.member_id IS NOT NULL THEN 1 ELSE 0 END exempt
+        FROM members m LEFT JOIN paid p ON p.member_id=m.id LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=? WHERE m.active=1
+      )
+      SELECT COALESCE(SUM(CASE WHEN exempt=0 THEN due_amount ELSE 0 END),0) expected,
+             COALESCE(SUM(CASE WHEN exempt=0 THEN MIN(paid,due_amount) ELSE 0 END),0) collected,
+             SUM(CASE WHEN exempt=0 AND paid+0.005<due_amount THEN 1 ELSE 0 END) outstanding_members
+      FROM eligible
+    `).bind(month,month,month,month,month).first<any>()
   ]);
 
   return c.json({
@@ -189,6 +207,7 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     totalReceived: lifetime?.total_received ?? 0,
     totalSpent: lifetime?.total_spent ?? 0,
     recentActivity: recent.results,
+    collection: { expected:Number(collection?.expected||0), collected:Number(collection?.collected||0), outstanding_members:Number(collection?.outstanding_members||0) },
   });
 });
 
@@ -239,10 +258,12 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
           SELECT c.member_id,c.amount FROM contributions c WHERE c.month=? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
         ) GROUP BY member_id
       )
-      SELECT m.id,m.member_code,m.name,m.monthly_amount,COALESCE(p.paid,0) paid,
-        CASE WHEN ex.member_id IS NOT NULL THEN 'exempt' WHEN COALESCE(p.paid,0)<=0 THEN 'unpaid' WHEN COALESCE(p.paid,0)<m.monthly_amount THEN 'partial' ELSE 'paid' END payment_status
+      SELECT m.id,m.member_code,m.name,
+        COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) monthly_amount,
+        COALESCE(p.paid,0) paid,
+        CASE WHEN ex.member_id IS NOT NULL THEN 'exempt' WHEN COALESCE(p.paid,0)<=0 THEN 'unpaid' WHEN COALESCE(p.paid,0)<COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) THEN 'partial' ELSE 'paid' END payment_status
       FROM members m LEFT JOIN paid p ON p.member_id=m.id LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=? WHERE m.active=1
-    `).bind(month,month,month).all<any>(),
+    `).bind(month,month,month,month,month,month,month).all<any>(),
     c.env.DB.prepare(`SELECT (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved')+(SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active')-(SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') balance`).first<{balance:number}>(),
     c.env.DB.prepare(`
       SELECT * FROM (
@@ -275,7 +296,12 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
     byCategory: byCategory.results,
     outstanding: {
       total: outstanding.results.filter((m:any)=>m.payment_status==='unpaid'||m.payment_status==='partial').reduce((s:number,m:any)=>s+Math.max(0,Number(m.monthly_amount)-Number(m.paid||0)),0),
-      members: outstanding.results.filter((m:any)=>m.payment_status!=='paid'),
+      members: outstanding.results.filter((m:any)=>m.payment_status==='unpaid'||m.payment_status==='partial'),
+    },
+    member_statuses: outstanding.results,
+    collection: {
+      expected: outstanding.results.reduce((sum:number,m:any)=>sum+(m.payment_status==='exempt'?0:Number(m.monthly_amount||0)),0),
+      collected: outstanding.results.reduce((sum:number,m:any)=>sum+(m.payment_status==='exempt'?0:Math.min(Number(m.paid||0),Number(m.monthly_amount||0))),0)
     },
     fundBalance: totalBalance?.balance ?? 0,
     recentActivity: recentActivity.results,

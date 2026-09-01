@@ -22,9 +22,12 @@ const Settings = lazy(pageLoaders.settings);
 const MyHistory = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyHistory })));
 const FundView = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.FundView })));
 const Activity = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.Activity })));
+const MemberMeetings = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MemberMeetings })));
+const MyActions = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyActions })));
+const MyProfile = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyProfile })));
 
 const loaderForTab = (tab) => {
-  if (["history", "fund", "activity"].includes(tab)) return pageLoaders.memberViews;
+  if (["history", "fund", "activity", "meetings", "actions", "profile"].includes(tab)) return pageLoaders.memberViews;
   return pageLoaders[tab] || null;
 };
 
@@ -45,7 +48,7 @@ export default function App() {
   const canFinance = adminView && ["owner", "super_admin", "treasurer"].includes(me?.admin?.role);
   const tabs = useMemo(() => adminView
     ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
-    : ["overview", "history", "fund", "activity"], [adminView, canFinance]);
+    : ["overview", "history", "fund", "activity", "meetings", "actions", "profile"], [adminView, canFinance]);
 
   useEffect(() => {
     // Start the safe overview request immediately so it overlaps the /me round-trip.
@@ -63,7 +66,7 @@ export default function App() {
     // pages run their normal data loaders and keep their state, making later tab taps instant.
     const likelyNext = adminView
       ? (canFinance ? ["pending", "members", "activity"] : ["members", "activity"])
-      : ["history", "fund", "activity"];
+      : ["history", "fund", "activity", "meetings", "actions", "profile"];
     const secondary = adminView ? (canFinance ? ["expenses", "reports", "meetings"] : ["reports", "meetings"]) : [];
     const later = adminView ? ["settings"] : [];
 
@@ -119,6 +122,9 @@ export default function App() {
     if (page === "history" && memberView) return <MyHistory member={me.member} />;
     if (page === "fund" && memberView) return <FundView />;
     if (page === "activity") return <Activity isAdmin={adminView} canFinance={canFinance} />;
+    if (page === "meetings" && memberView) return <MemberMeetings />;
+    if (page === "actions" && memberView) return <MyActions />;
+    if (page === "profile" && memberView) return <MyProfile member={me.member} />;
     if (page === "expenses" && canFinance) return <Expenses />;
     if (page === "reports" && adminView) return <Reports setTab={openTab} />;
     if (page === "meetings" && adminView) return <Meetings admin={me.admin} />;

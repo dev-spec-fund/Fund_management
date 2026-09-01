@@ -82,6 +82,11 @@ async function upload(path, formData) {
 export const api = {
   me: () => request("/api/me"),
   myContributions: () => request("/api/me/contributions"),
+  myDashboard: () => request("/api/me/dashboard"),
+  myMeetings: () => request("/api/me/meetings"),
+  myActions: () => request("/api/me/actions"),
+  myMeetingRsvp: (id, response) => request(`/api/me/meetings/${id}/rsvp`, { method: "POST", body: JSON.stringify({ response }) }),
+  completeMyAction: (id) => request(`/api/me/actions/${id}/done`, { method: "POST" }),
 
   members: {
     list: () => request("/api/members"),
@@ -92,6 +97,8 @@ export const api = {
       request(`/api/members/${id}/exempt`, { method: "POST", body: JSON.stringify({ month, reason }) }),
     statement: (id) => request(`/api/members/${id}/statement`),
     monthlyStatus: (id, month) => request(`/api/members/${id}/monthly-status${month ? `?month=${month}` : ""}`),
+    contributionRates: (id) => request(`/api/members/${id}/contribution-rates`),
+    setContributionRate: (id, data) => request(`/api/members/${id}/contribution-rates`, { method: "POST", body: JSON.stringify(data) }),
   },
 
   expenses: {

@@ -1,5 +1,6 @@
 import type { Env } from "./types";
 import { approveWithAllocations, allocationReceipt, paidForMonth } from "./allocations";
+import { contributionRateForMonth, ensureInitialContributionRate } from "./contributionRates";
 import {
   sendMessage,
   sendPhoto,
@@ -240,12 +241,11 @@ async function handleMessage(env: Env, message: any) {
     const member = await env.DB.prepare("SELECT * FROM members WHERE telegram_id = ?").bind(telegramId).first<any>();
     if (!member) return sendMessage(env, chatId, "You're not registered as a member yet. Contact an admin.");
     const month = currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");
-    const paidRow = await env.DB.prepare(
-      "SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE member_id = ? AND month = ? AND status = 'approved'"
-    ).bind(member.id, month).first<any>();
+    const paid = await paidForMonth(env, member.id, month);
+    const rate = await contributionRateForMonth(env, member.id, month, Number(member.monthly_amount||0));
     const exemption = await env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(member.id,month).first<any>();
-    const paid = Number(paidTotal || 0); const due = Math.max(0, Number(member.monthly_amount)-paid);
-    const status = exemption ? `✅ Exempt for ${month}.` : paid<=0 ? `⏳ Unpaid for ${month}. Due: MVR ${member.monthly_amount}.` : due>0.004 ? `🟡 Partial for ${month}: MVR ${paid} paid, MVR ${due.toFixed(2)} due.` : `✅ Paid for ${month}.`;
+    const due = exemption ? 0 : Math.max(0, rate-paid);
+    const status = exemption ? `✅ Exempt for ${month}.` : paid<=0 ? `⏳ Unpaid for ${month}. Due: MVR ${rate.toFixed(2)}.` : due>0.004 ? `🟡 Partial for ${month}: MVR ${paid.toFixed(2)} paid, MVR ${due.toFixed(2)} due.` : `✅ Paid for ${month}.`;
     return sendMessage(env, chatId, `Member ID: ${esc(member.member_code)}\n${status}`);
   }
 
@@ -486,6 +486,7 @@ async function handleCallback(env: Env, callback: any) {
         "INSERT INTO members (member_code, telegram_id, name, monthly_amount, normalized_name, normalized_phone) VALUES (?, ?, ?, ?, ?, NULL)"
       ).bind(memberCode, telegramId, displayName, defaultMonthly, normalizeName(displayName)).run();
       member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(insert.meta.last_row_id).first<any>();
+      await ensureInitialContributionRate(env,Number(insert.meta.last_row_id),defaultMonthly,currentMonth(env.FUND_TIMEZONE || "Indian/Maldives"));
       await logAudit(env, admin.id, "self_register_admin_as_member", `${member.member_code} — ${member.name}`);
     }
     await finishRegistrationMessage(env, callback, `✅ Registered as fund member ${esc(member.member_code)}.\n\nYour administrator access is unchanged. You can use My Account in the Fund App for your own contributions.`);
@@ -531,6 +532,7 @@ async function handleCallback(env: Env, callback: any) {
         "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount, normalized_name, normalized_phone) VALUES (?, ?, ?, ?, ?, ?, ?)"
       ).bind(memberCode, request.telegram_id, request.name, request.phone || null, defaultMonthly, normalizeName(request.name), normalizePhone(request.phone) || null).run();
       member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(insert.meta.last_row_id).first<any>();
+      await ensureInitialContributionRate(env,Number(insert.meta.last_row_id),defaultMonthly,currentMonth(env.FUND_TIMEZONE || "Indian/Maldives"));
     }
 
     const reviewed = await env.DB.prepare(

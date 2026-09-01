@@ -38,16 +38,16 @@ export default function Members({ isAdmin, admin }) {
     load();
   };
 
-  const outstandingByMember = new Map((monthlySummary?.outstanding?.members || []).map((m) => [Number(m.id), m]));
+  const monthlyByMember = new Map((monthlySummary?.member_statuses || monthlySummary?.outstanding?.members || []).map((m) => [Number(m.id), m]));
   const activeMembers = members.filter((m) => m.active);
   const memberStatus = (m) => {
     if (!m.active) return "inactive";
-    return outstandingByMember.get(Number(m.id))?.payment_status || "paid";
+    return monthlyByMember.get(Number(m.id))?.payment_status || "paid";
   };
   const counts = activeMembers.reduce((a, m) => { a[memberStatus(m)] = (a[memberStatus(m)] || 0) + 1; return a; }, { paid: 0, partial: 0, unpaid: 0, exempt: 0 });
-  const expected = activeMembers.reduce((sum, m) => sum + Number(m.monthly_amount || 0), 0);
+  const expected = Number(monthlySummary?.collection?.expected ?? activeMembers.reduce((sum, m) => sum + Number(m.monthly_amount || 0), 0));
   const dueTotal = Number(monthlySummary?.outstanding?.total || 0);
-  const collected = Math.max(0, expected - dueTotal);
+  const collected = Number(monthlySummary?.collection?.collected ?? Math.max(0, expected - dueTotal));
   const percent = expected > 0 ? Math.min(100, Math.round((collected / expected) * 100)) : 0;
   const filtered = members.filter((m) => {
     const q = search.trim().toLowerCase();
@@ -135,23 +135,24 @@ export default function Members({ isAdmin, admin }) {
       </div>
 
       {filtered.map((m) => {
-        const monthly = outstandingByMember.get(Number(m.id));
+        const monthly = monthlyByMember.get(Number(m.id));
         const status = memberStatus(m);
-        const paid = Number(monthly?.paid ?? (status === "paid" ? m.monthly_amount : 0));
-        const due = status === "exempt" || status === "inactive" ? 0 : Math.max(0, Number(m.monthly_amount) - paid);
-        const memberPercent = Number(m.monthly_amount) > 0 ? Math.min(100, Math.round((paid / Number(m.monthly_amount)) * 100)) : 0;
+        const rate = Number(monthly?.monthly_amount ?? m.monthly_amount ?? 0);
+        const paid = Number(monthly?.paid ?? (status === "paid" ? rate : 0));
+        const due = status === "exempt" || status === "inactive" ? 0 : Math.max(0, rate - paid);
+        const memberPercent = rate > 0 ? Math.min(100, Math.round((paid / rate) * 100)) : 0;
         return (
           <div key={m.id} onClick={() => setSelected(m)} style={{ background: m.active ? "var(--card)" : "var(--button-soft)", opacity: m.active ? 1 : 0.65, border: "1px solid var(--border)", borderRadius: 12, padding: "13px 14px", marginBottom: 8, cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="sans" style={{ fontSize: 14, fontWeight: 650, color: "var(--text-strong)" }}>{m.name} <span style={{ fontSize: 11, color: "var(--soft-4)", fontWeight: 500 }}>{m.member_code}</span></div>
-                <div className="sans" style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{m.phone ? m.phone : "Phone not added"} · MVR {fmt(m.monthly_amount)}/mo</div>
+                <div className="sans" style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{m.phone ? m.phone : "Phone not added"} · MVR {fmt(rate)}/mo</div>
               </div>
               <StatusBadge status={status} />
             </div>
             {m.active && status !== "exempt" && <>
               <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 10, color: "var(--muted)" }}>
-                <span>MVR {fmt(paid)} of {fmt(m.monthly_amount)} paid</span>
+                <span>MVR {fmt(paid)} of {fmt(rate)} paid</span>
                 <span style={{ color: due > 0 ? "var(--danger)" : "var(--success)", fontWeight: 650 }}>{due > 0 ? `MVR ${fmt(due)} due` : "Complete"}</span>
               </div>
               <div style={{ height: 4, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", marginTop: 6 }}><div style={{ width: `${memberPercent}%`, height: "100%", background: status === "partial" ? "var(--warning-4)" : "var(--success)" }} /></div>
@@ -200,12 +201,15 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   const [reminding, setReminding] = useState(false);
   const [reminderNote, setReminderNote] = useState("");
   const [showRejected, setShowRejected] = useState(false);
-  const [form, setForm] = useState({ name: member.name, phone: member.phone, monthly_amount: member.monthly_amount });
+  const [form, setForm] = useState({ name: member.name, phone: member.phone, monthly_amount: member.monthly_amount, rate_effective_from: currentMonthValue() });
 
   useEffect(() => { api.members.statement(member.id).then(setDetail).catch(() => {}); }, [member.id]);
 
   const save = async () => {
-    await api.members.update(member.id, { ...form, monthly_amount: Number(form.monthly_amount) });
+    await api.members.update(member.id, { name: form.name, phone: form.phone });
+    if (Number(form.monthly_amount) !== Number(member.monthly_amount)) {
+      await api.members.setContributionRate(member.id, { amount: Number(form.monthly_amount), effective_from: form.rate_effective_from });
+    }
     setEditing(false);
     onChanged();
     onClose();
@@ -223,7 +227,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   const allocations = detail?.allocations || [];
   const monthlyStatuses = detail?.monthly_status || [];
   const currentStatus = monthlyStatuses.find((x) => x.month === month);
-  const monthlyAmount = Number(member.monthly_amount || 0);
+  const monthlyAmount = Number(currentStatus?.monthly_amount ?? member.monthly_amount ?? 0);
   const currentPaid = Number(currentStatus?.paid || 0);
   const currentDue = currentStatus?.status === "exempt" ? 0 : Number(currentStatus?.due ?? Math.max(0, monthlyAmount - currentPaid));
   const currentLabel = currentStatus?.status || (currentPaid >= monthlyAmount && monthlyAmount > 0 ? "paid" : currentPaid > 0 ? "partial" : "unpaid");
@@ -307,6 +311,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
           <Field label="Phone" value={form.phone || ""} onChange={(v) => setForm({ ...form, phone: v })} />
           <Field label="Monthly amount" type="number" prefix="MVR" value={form.monthly_amount} onChange={(v) => setForm({ ...form, monthly_amount: v })} />
+          {Number(form.monthly_amount) !== Number(member.monthly_amount) && <Field label="New rate effective from" type="month" value={form.rate_effective_from} onChange={(v) => setForm({ ...form, rate_effective_from: v })} />}
           <PrimaryButton onClick={save}>Save changes</PrimaryButton>
         </>
       ) : (
@@ -342,6 +347,12 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
             </div>
           </div>
 
+          {(detail?.contribution_rates||[]).length>0 && <>
+            <div className="sans" style={{fontSize:11,color:"var(--muted)",marginBottom:8,fontWeight:700,letterSpacing:.5}}>CONTRIBUTION RATE HISTORY</div>
+            <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:11,padding:"3px 11px",marginBottom:14}}>
+              {(detail.contribution_rates||[]).slice().reverse().map((r,i)=><div key={`${r.effective_from}-${i}`} className="sans" style={{display:"flex",justifyContent:"space-between",fontSize:10,padding:"8px 0",borderBottom:i===detail.contribution_rates.length-1?"none":"1px solid var(--divider)"}}><span>{r.effective_from}{r.effective_to?` – ${r.effective_to}`:" – Current"}</span><b>MVR {fmt(r.amount)}/mo</b></div>)}
+            </div>
+          </>}
           <div className="sans" style={{fontSize:11,color:"var(--muted)",marginBottom:8,fontWeight:700,letterSpacing:.5}}>CONTRIBUTION HISTORY</div>
           {approved.map(contributionCard)}
           {approved.length===0 && <div className="sans" style={{fontSize:12,color:"var(--soft)",padding:"8px 0"}}>No approved contributions yet.</div>}

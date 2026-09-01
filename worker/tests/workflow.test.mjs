@@ -31,7 +31,7 @@ test("allocation planner prefetches future state", () => {
 
 test("schema version is current", () => {
   const ops=read("src/ops.ts");
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 14/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 15/);
 });
 
 test("demotion preserves member record and removes admin access only", () => {
@@ -95,4 +95,17 @@ test("financial integrity v14 removes legacy close bypass and adds expense dates
   assert.match(expenses,/expense_date/);
   assert.match(governance,/source:'snapshot'/);
   assert.match(migration,/ADD COLUMN expense_date TEXT/);
+});
+
+test('member app v15 adds rate history and self-service endpoints', () => {
+  const migration = read('migrations/0015_member_contribution_rates.sql');
+  const index = read('src/index.ts');
+  const members = read('src/routes/members.ts');
+  const bot = read('src/bot.ts');
+  assert.match(migration,/member_contribution_rates/);
+  assert.match(index,/\/api\/me\/dashboard/);
+  assert.match(index,/\/api\/me\/meetings/);
+  assert.match(index,/\/api\/me\/actions/);
+  assert.match(members,/contribution-rates/);
+  assert.match(bot,/paidForMonth\(env, member\.id, month\)/);
 });
