@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance, requireSuperAdmin } from "../auth";
 import { auditEntity, contributionDuplicateKey, duplicateSlip, ensureOperationalSchema, normalizeName, normalizePhone, requireOpenMonth, safeLogError } from "../ops";
-import { currentMonth, getSetting, generateMemberCode } from "../db";
+import { currentMonth, getSetting, getBranding, generateMemberCode } from "../db";
 import { ensureInitialContributionRate } from "../contributionRates";
 import { findDuplicateMembers } from "../ops";
 import { sendMessage, sendInBatches } from "../telegram";
@@ -10,6 +10,9 @@ import { approveWithAllocations, allocationReceipt, buildAllocationPlan, allocat
 import { money, validDate, validMonth, boundedText } from "../validation";
 
 export const adminRoute = new Hono<AppEnv>();
+
+
+async function groupName(env:any){ return (await getBranding(env)).fund_name; }
 
 async function sendMeetingBatch(env:any, items:any[], source:string){
   const messages=items.filter(x=>x.telegram_id).map(x=>({chatId:x.telegram_id,text:x.text,extra:x.extra||{},context:{meeting_id:x.meeting_id,member_id:x.id}}));
@@ -60,7 +63,8 @@ adminRoute.post('/pending/registrations/:id/approve', requireFinance, async c =>
   const changed=await c.env.DB.prepare("UPDATE member_registration_requests SET status='approved',reviewed_by=?,reviewed_at=datetime('now') WHERE id=? AND status='pending'").bind(admin.id,id).run();
   if(!changed.meta.changes)return c.json({error:'Already reviewed'},409);
   await auditEntity(c.env,admin.id,body.member_id?'member_linked':'member_registration_approved','member',member.id,null,{member_code:member.member_code,telegram_id:req.telegram_id,phone:req.phone||null});
-  await sendMessage(c.env, req.telegram_id, `✅ Your membership has been approved. Member ID: <b>${member.member_code}</b>. You can now submit contribution slips.`);
+  const branding=await getBranding(c.env);
+  await sendMessage(c.env, req.telegram_id, `✅ Your membership with <b>${branding.fund_name}</b> has been approved. Member ID: <b>${member.member_code}</b>. You can now submit contribution slips.`);
   return c.json({ok:true,member});
 });
 adminRoute.post('/pending/registrations/:id/reject', requireFinance, async c => {
@@ -95,9 +99,9 @@ adminRoute.post('/pending/contributions/:id/approve', requireFinance, async c =>
   catch(e:any){ return c.json({error:e.message},409); }
   await auditEntity(c.env,admin.id,'contribution_approved','contribution',id,row,{...row,status:'approved',allocations:approved.allocations});
   const member=await c.env.DB.prepare("SELECT * FROM members WHERE id=?").bind(row.member_id).first<any>();
-  if(member?.telegram_id) await sendMessage(c.env,member.telegram_id,
-    `✅ <b>Contribution approved</b>\n\nReceived: <b>MVR ${Number(row.amount).toFixed(2)}</b>\n\nApplied to:\n${allocationReceipt(approved.allocations)}`
-  );
+  if(member?.telegram_id) { const brand=await getBranding(c.env); await sendMessage(c.env,member.telegram_id,
+    `✅ <b>${brand.fund_name} · Contribution approved</b>\n\nReceived: <b>MVR ${Number(row.amount).toFixed(2)}</b>\n\nApplied to:\n${allocationReceipt(approved.allocations)}`
+  ); }
   return c.json({ok:true,allocations:approved.allocations});
 });
 
@@ -143,13 +147,14 @@ adminRoute.post('/payment-reminders', requireFinance, async c => {
     .map((m:any)=>({...m,paid:Number(m.paid||0),due:Math.max(0,Number(m.monthly_amount||0)-Number(m.paid||0))}))
     .filter((m:any)=>!Number(m.exempt) && m.due>0.005);
 
+  const reminderBrand=await getBranding(c.env);
   let sent=0, unlinked=0, failed=0;
   const results=await Promise.all(dueMembers.map(async (m:any)=>{
     if(!m.telegram_id){unlinked++;return;}
     const status=m.paid>0?'partially paid':'unpaid';
     try{
       await sendMessage(c.env,m.telegram_id,
-        `🔔 <b>Payment reminder</b>\n\n${month} is ${status}.\nPaid: <b>MVR ${m.paid.toFixed(2)}</b>\nRemaining: <b>MVR ${m.due.toFixed(2)}</b>\n\nPlease send your bank slip photo to the bot after payment.`
+        `🔔 <b>${reminderBrand.fund_name} · Payment reminder</b>\n\n${month} is ${status}.\nPaid: <b>MVR ${m.paid.toFixed(2)}</b>\nRemaining: <b>MVR ${m.due.toFixed(2)}</b>\n\nPlease send your bank slip photo to the bot after payment.`
       );
       sent++;
     }catch(e){failed++;await safeLogError(c.env,'manual.payment_reminder',e,{member_id:m.id,month});}
@@ -352,12 +357,13 @@ adminRoute.post('/meetings/:id/notify-update', requireFinance, async c => {
   const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
   const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
   const agenda=m.agenda?`\n\n${meetingEsc(m.agenda)}`:'';
+  const brandName=await groupName(c.env);
   const heading=rescheduled?'📅 <b>Meeting rescheduled</b>':'🔄 <b>Meeting updated</b>';
   const schedule=rescheduled && previousDate
     ? `\nPrevious: ${meetingEsc(meetingDisplayDateTime(previousDate,previousTime))}\nNew: <b>${meetingEsc(meetingDisplayDateTime(m.meeting_date,m.meeting_time))}</b>`
     : `\n${meetingEsc(meetingDisplayDateTime(m.meeting_date,m.meeting_time))}`;
   const delivery=await sendMeetingBatch(c.env,members.results.map((member:any)=>({...member,meeting_id:id,
-    text:`${heading}\n\n<b>${meetingEsc(m.title)}</b>${schedule}${venue}${deadline}${agenda}\n\nYour previous RSVP is still recorded. You can change it below.`,
+    text:`${heading} · <b>${meetingEsc(brandName)}</b>\n\n<b>${meetingEsc(m.title)}</b>${schedule}${venue}${deadline}${agenda}\n\nYour previous RSVP is still recorded. You can change it below.`,
     extra:{reply_markup:{inline_keyboard:[[
         {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
         {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
@@ -387,8 +393,9 @@ adminRoute.post('/meetings/:id/remind-pending', requireFinance, async c => {
 
   const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
   const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
+  const brandName=await groupName(c.env);
   const delivery=await sendMeetingBatch(c.env,members.results.map((member:any)=>({...member,meeting_id:id,
-    text:`🔔 <b>Meeting RSVP reminder</b>\n\n<b>${meetingEsc(m.title)}</b>\n${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}${venue}${deadline}\n\nPlease let us know if you can attend.`,
+    text:`🔔 <b>${meetingEsc(brandName)} · Meeting RSVP reminder</b>\n\n<b>${meetingEsc(m.title)}</b>\n${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}${venue}${deadline}\n\nPlease let us know if you can attend.`,
     extra:{reply_markup:{inline_keyboard:[[
         {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
         {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
@@ -417,8 +424,9 @@ adminRoute.post('/meetings/:id/cancel', requireFinance, async c => {
   `).bind(adminUser.id,reason,id).run();
 
   const members=await c.env.DB.prepare("SELECT id,telegram_id FROM members WHERE active=1").all<any>();
+  const brandName=await groupName(c.env);
   const delivery=await sendMeetingBatch(c.env,members.results.map((member:any)=>({...member,meeting_id:id,
-    text:`🚫 <b>Meeting cancelled</b>\n\n<b>${meetingEsc(before.title)}</b>\n${meetingEsc(before.meeting_date)} · ${meetingEsc(before.meeting_time)}\n\nReason: ${meetingEsc(reason)}`
+    text:`🚫 <b>${meetingEsc(brandName)} · Meeting cancelled</b>\n\n<b>${meetingEsc(before.title)}</b>\n${meetingEsc(before.meeting_date)} · ${meetingEsc(before.meeting_time)}\n\nReason: ${meetingEsc(reason)}`
   })),'meeting.cancel_notice');
   const {sent,unlinked,failed}=delivery;
 
@@ -438,8 +446,9 @@ adminRoute.post('/meetings/:id/send', requireFinance, async c => {
   const deadline=m.rsvp_deadline?`\nRSVP by: <b>${meetingEsc(m.rsvp_deadline)}</b>`:'';
   const venue=m.venue?`\nVenue: <b>${meetingEsc(m.venue)}</b>`:'';
   const agenda=m.agenda?`\n\n${meetingEsc(m.agenda)}`:'';
+  const brandName=await groupName(c.env);
   const delivery=await sendMeetingBatch(c.env,members.results.map((member:any)=>({...member,meeting_id:id,
-    text:`📅 <b>Meeting invitation</b>\n\n<b>${meetingEsc(m.title)}</b>\n${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}${venue}${deadline}${agenda}\n\nWill you attend?`,
+    text:`📅 <b>${meetingEsc(brandName)} · Meeting invitation</b>\n\n<b>${meetingEsc(m.title)}</b>\n${meetingEsc(m.meeting_date)} · ${meetingEsc(m.meeting_time)}${venue}${deadline}${agenda}\n\nWill you attend?`,
     extra:{reply_markup:{inline_keyboard:[[
         {text:'✅ Yes',callback_data:`meeting_rsvp:${id}:yes`},
         {text:'❔ Maybe',callback_data:`meeting_rsvp:${id}:maybe`},
@@ -471,8 +480,9 @@ adminRoute.get('/backup', requireSuperAdmin, async c => {
   await ensureOperationalSchema(c.env);
   const tables=['members','admins','member_registration_requests','contributions','contribution_allocations','donations','expense_categories','expenses','exemptions','settings','id_sequences','audit_log','month_closures','meetings','meeting_rsvps','meeting_minutes','meeting_action_items','monthly_snapshots','financial_reversals','error_log','rate_limits','schema_migrations'];
   const version=await c.env.DB.prepare("SELECT MAX(version) version FROM schema_migrations").first<any>();
-  const data:any={exported_at:new Date().toISOString(),format:'kys-fund-json-v2',schema_version:Number(version?.version||0),tables:{}};
+  const branding=await getBranding(c.env); const slug=branding.short_name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'fund';
+  const data:any={exported_at:new Date().toISOString(),format:`${slug}-fund-json-v2`,organization:branding,schema_version:Number(version?.version||0),tables:{}};
   for(const t of tables){data.tables[t]=(await c.env.DB.prepare(`SELECT * FROM ${t}`).all()).results;}
   const admin=c.get('admin')!; await auditEntity(c.env,admin.id,'database_backup_exported','database','D1',null,{tables:tables.length,schema_version:data.schema_version});
-  c.header('Content-Disposition',`attachment; filename="kys-fund-backup-${new Date().toISOString().slice(0,10)}.json"`); return c.json(data);
+  c.header('Content-Disposition',`attachment; filename="${slug}-fund-backup-${new Date().toISOString().slice(0,10)}.json"`); return c.json(data);
 });

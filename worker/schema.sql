@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ('fund_name', 'Kanditheemu Youth Society');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('short_name', 'KYS');
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ('default_monthly_amount', '250');
 
@@ -322,7 +323,7 @@ CREATE TABLE IF NOT EXISTS member_contribution_rates (
 );
 CREATE INDEX IF NOT EXISTS idx_member_contribution_rates_member_period ON member_contribution_rates(member_id,effective_from,effective_to);
 
--- Schema migration ledger. Fresh databases created from schema.sql are current through v15.
+-- Schema migration ledger. Fresh databases created from schema.sql are current through v16.
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -342,6 +343,7 @@ INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (12,'registration_p
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (13,'governance_reporting_and_reversals');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (14,'expense_dates_and_financial_integrity');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (15,'member_contribution_rate_history_and_member_app');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (16,'organization_branding_settings');
 
 CREATE INDEX IF NOT EXISTS idx_members_normalized_name ON members(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_members_normalized_phone ON members(normalized_phone);

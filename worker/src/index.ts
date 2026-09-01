@@ -12,7 +12,7 @@ import { settingsRoute } from "./routes/settings";
 import { adminRoute } from "./routes/admin";
 import { governanceRoute } from "./routes/governance";
 import { consumeRateLimit, safeLogError } from "./ops";
-import { currentMonth } from "./db";
+import { currentMonth, getBranding } from "./db";
 import { paidForMonth } from "./allocations";
 import { contributionRateForMonth } from "./contributionRates";
 
@@ -60,13 +60,16 @@ app.route("/api/settings", settingsRoute);
 app.route("/api/admin", adminRoute);
 app.route("/api/governance", governanceRoute);
 
+app.get("/api/branding", async (c) => c.json(await getBranding(c.env)));
+
 app.get("/api/me", async (c) => {
   const user = c.get("telegramUser");
   const member = await c.env.DB.prepare(
     "SELECT id, member_code, telegram_id, name, phone, monthly_amount, active, joined_at, created_at FROM members WHERE telegram_id = ? LIMIT 1"
   ).bind(String(user.id)).first<any>();
   if(member){ const month=currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives"); member.monthly_amount=await contributionRateForMonth(c.env,Number(member.id),month,Number(member.monthly_amount||0)); }
-  return c.json({ user, admin: c.get("admin"), member: member || null });
+  const branding = await getBranding(c.env);
+  return c.json({ user, admin: c.get("admin"), member: member || null, branding });
 });
 
 app.post("/api/me/meetings/:id/rsvp", async (c) => {
@@ -139,7 +142,7 @@ app.get("/api/me/contributions", async (c) => {
   return c.json(rows.results);
 });
 
-app.get("/", (c) => c.text("KYS Fund Worker — see /telegram/webhook and /api/*"));
+app.get("/", async (c) => { const branding=await getBranding(c.env); return c.text(`${branding.short_name} Fund Worker — see /telegram/webhook and /api/*`); });
 
 export default {
   fetch: app.fetch,

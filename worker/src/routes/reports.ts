@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireMemberOrAdmin } from "../auth";
-import { currentMonth } from "../db";
+import { currentMonth, getBranding } from "../db";
 import { validMonth } from "../validation";
 import { allocatedPaidSql } from "../allocations";
 import { sendDocument } from "../telegram";
@@ -28,7 +28,8 @@ reportsRoute.post("/send-document", requireMemberOrAdmin, async (c) => {
       return c.json({ error: "Only PDF, CSV and JSON documents are supported" }, 400);
 
     const blob = new Blob([await file.arrayBuffer()], { type: file.type || (lower.endsWith(".pdf") ? "application/pdf" : lower.endsWith(".json") ? "application/json" : "text/csv") });
-    await sendDocument(c.env, String(user.id), safeName, blob, caption || "Fund Manager export");
+    const branding=await getBranding(c.env);
+    await sendDocument(c.env, String(user.id), safeName, blob, caption || `${branding.fund_name} export`);
     return c.json({ ok: true, filename: safeName });
   } catch (e) {
     await safeLogError(c.env, "reports.send_document", e);

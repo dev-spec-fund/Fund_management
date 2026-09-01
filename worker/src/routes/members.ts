@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance, requireMemberOrAdmin } from "../auth";
-import { logAudit, generateMemberCode, currentMonth, getSetting } from "../db";
+import { logAudit, generateMemberCode, currentMonth, getSetting, getBranding } from "../db";
 import { auditEntity, ensureOperationalSchema, findDuplicateMembers, normalizeName, normalizePhone, requireOpenMonth } from "../ops";
 import { boundedText, flag, money, telegramId, validMonth } from "../validation";
 import { paidForMonth } from "../allocations";
@@ -98,7 +98,8 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
     const status=ex?'exempt':paid<=0?'unpaid':paid+0.005<rate?'partial':'paid';
     return {month,status,paid,due:ex?0:Math.max(0,rate-paid),monthly_amount:rate,reason:ex?.reason||null};
   });
-  return c.json({member,contributions:contributions.results,allocations:allocations.results,donations:donations.results,monthly_status:statuses,balance_history:balanceHistory,contribution_rates:rates.results});
+  const organization=await getBranding(c.env);
+  return c.json({organization,member,contributions:contributions.results,allocations:allocations.results,donations:donations.results,monthly_status:statuses,balance_history:balanceHistory,contribution_rates:rates.results});
 });
 
 membersRoute.post("/", requireFinance, async (c) => {

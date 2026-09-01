@@ -1,6 +1,6 @@
 import type { Env } from "./types";
 import { sendInBatches } from "./telegram";
-import { currentDayOfMonth, currentMonth, getSetting } from "./db";
+import { currentDayOfMonth, currentMonth, getSetting, getBranding } from "./db";
 import { isMonthClosed, safeLogError } from "./ops";
 import { allocatedPaidSql } from "./allocations";
 import { contributionRateForMonth } from "./contributionRates";
@@ -15,6 +15,7 @@ export async function runScheduled(env: Env) {
     const month = currentMonth(timeZone);
     if (await isMonthClosed(env, month)) return;
 
+    const branding = await getBranding(env);
     const members = await env.DB.prepare(`
       SELECT m.*, ${allocatedPaidSql} paid
       FROM members m
@@ -28,7 +29,7 @@ export async function runScheduled(env: Env) {
       const paid=Number(member.paid||0), due=Math.max(0,rate-paid);
       if (due <= 0.005) continue;
       const status=paid>0?"partially paid":"unpaid";
-      messages.push({chatId:member.telegram_id,text:`🔔 Reminder: ${month} is ${status}. Paid: MVR ${paid}. Remaining: MVR ${due}. Send a bank slip photo to submit the balance.`,context:{member_id:member.id}});
+      messages.push({chatId:member.telegram_id,text:`🔔 <b>${branding.fund_name}</b> contribution reminder\n\n${month} is ${status}. Paid: MVR ${paid}. Remaining: MVR ${due}. Send a bank slip photo to submit the balance.`,context:{member_id:member.id}});
     }
     const result = await sendInBatches(env, messages, 6);
     for (const failure of result.failures) {

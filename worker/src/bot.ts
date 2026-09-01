@@ -19,6 +19,7 @@ import {
   generateTxnId,
   generateMemberCode,
   getSetting,
+  getBranding,
   createMemberRegistrationRequest,
   ensureMemberRegistrationTable,
 } from "./db";
@@ -185,7 +186,7 @@ async function handleMessage(env: Env, message: any) {
       return sendMessage(
         env,
         chatId,
-        `Welcome to the fund bot! 👋\n\nSend your bank transfer slip photo — no caption is needed. I will automatically read the amount, bank reference and transaction date, then send it for admin review.\n\nUse /mybalance to check your status, /history for past payments.`,
+        `Welcome to <b>${(await getBranding(env)).fund_name}</b>! 👋\n\nSend your bank transfer slip photo — no caption is needed. I will automatically read the amount, bank reference and transaction date, then send it for admin review.\n\nUse /mybalance to check your status, /history for past payments.`,
         { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: await miniAppUrl(env) } }]] } }
       );
     }
@@ -415,7 +416,8 @@ async function renderMeetingRsvp(env: Env, callback: any, meeting: any, response
   const label=response==="yes"?"✅ Going":response==="maybe"?"❔ Maybe":response==="no"?"❌ Not attending":"⏳ Awaiting response";
   const venue=meeting.venue?`\nVenue: <b>${esc(meeting.venue)}</b>`:"";
   const agenda=meeting.agenda?`\n\n${esc(meeting.agenda)}`:"";
-  const text=`📅 <b>Meeting invitation</b>\n\n<b>${esc(meeting.title)}</b>\n${esc(meeting.meeting_date)} · ${esc(meeting.meeting_time)}${venue}${agenda}\n\nYour response: <b>${label}</b>`;
+  const branding=await getBranding(env);
+  const text=`📅 <b>${esc(branding.fund_name)} · Meeting invitation</b>\n\n<b>${esc(meeting.title)}</b>\n${esc(meeting.meeting_date)} · ${esc(meeting.meeting_time)}${venue}${agenda}\n\nYour response: <b>${label}</b>`;
   const rows:any[][]=[];
   if(showOptions){
     rows.push([
@@ -544,7 +546,7 @@ async function handleCallback(env: Env, callback: any) {
     await sendMessage(
       env,
       request.telegram_id,
-      `✅ Your membership has been approved!\n\nMember ID: <b>${esc(member.member_code)}</b>\nName: ${esc(member.name)}${member.phone ? `\nPhone: ${esc(member.phone)}` : ""}\n\nYou can now submit contribution slips and use the Fund App.`,
+      `✅ Your membership with <b>${(await getBranding(env)).fund_name}</b> has been approved!\n\nMember ID: <b>${esc(member.member_code)}</b>\nName: ${esc(member.name)}${member.phone ? `\nPhone: ${esc(member.phone)}` : ""}\n\nYou can now submit contribution slips and use the Fund App.`,
       { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: await miniAppUrl(env) } }]] } }
     );
     await finishRegistrationMessage(env, callback, `${callback.message.caption || callback.message.text}\n\n✅ Approved by ${esc(admin.name)}\nMember ID: ${esc(member.member_code)}`);

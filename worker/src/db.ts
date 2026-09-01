@@ -90,6 +90,16 @@ export async function getSetting(env: Env, key: string): Promise<string | null> 
   return row?.value ?? null;
 }
 
+
+export async function getBranding(env: Env): Promise<{ fund_name: string; short_name: string }> {
+  const rows = await env.DB.prepare("SELECT key,value FROM settings WHERE key IN ('fund_name','short_name')").all<{key:string;value:string}>();
+  const values: Record<string,string> = {};
+  for (const row of rows.results) values[row.key] = String(row.value || '').trim();
+  const fund_name = values.fund_name || 'Fund';
+  const short_name = values.short_name || fund_name.split(/\s+/).filter(Boolean).map((x) => x[0]).join('').slice(0,8).toUpperCase() || 'FUND';
+  return { fund_name, short_name };
+}
+
 export async function setSetting(env: Env, key: string, value: string) {
   await env.DB.prepare(
     "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"

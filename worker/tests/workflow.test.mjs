@@ -31,7 +31,7 @@ test("allocation planner prefetches future state", () => {
 
 test("schema version is current", () => {
   const ops=read("src/ops.ts");
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 15/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 16/);
 });
 
 test("demotion preserves member record and removes admin access only", () => {
@@ -108,4 +108,14 @@ test('member app v15 adds rate history and self-service endpoints', () => {
   assert.match(index,/\/api\/me\/actions/);
   assert.match(members,/contribution-rates/);
   assert.match(bot,/paidForMonth\(env, member\.id, month\)/);
+});
+
+
+test('organization branding settings are migration controlled', () => {
+  const migration = read('migrations/0016_organization_branding_settings.sql');
+  const settings = read('src/routes/settings.ts');
+  const db = read('src/db.ts');
+  assert.match(migration, /short_name/);
+  assert.match(settings, /fund_name.*short_name|short_name.*fund_name/s);
+  assert.match(db, /getBranding/);
 });

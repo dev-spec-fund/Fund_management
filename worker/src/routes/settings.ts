@@ -8,7 +8,7 @@ import { boundedText, telegramId } from "../validation";
 export const settingsRoute = new Hono<AppEnv>();
 
 const FINANCE_SETTINGS = new Set(["reminder_day","notify_new_slip","notify_member_deactivated","notify_budget_exceeded","notify_monthly_report"]);
-const SUPER_SETTINGS = new Set(["fund_name","default_monthly_amount","expense_approval_threshold","mini_app_url","reminder_schedule"]);
+const SUPER_SETTINGS = new Set(["fund_name","short_name","default_monthly_amount","expense_approval_threshold","mini_app_url","reminder_schedule"]);
 
 settingsRoute.get("/", requireAdmin, async (c) => {
   await ensureOperationalSchema(c.env);
@@ -22,6 +22,8 @@ settingsRoute.patch("/", requireFinance, async (c) => {
   for(const [key,raw] of Object.entries(body)) {
     if(!FINANCE_SETTINGS.has(key) && !(isSuper && SUPER_SETTINGS.has(key))) return c.json({error:`Setting '${key}' cannot be changed by this role`},403);
     const value=String(raw ?? '').trim();
+    if(key==='fund_name' && (value.length<2 || value.length>120)) return c.json({error:'Group Name must be 2-120 characters'},400);
+    if(key==='short_name' && (!/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,19}$/.test(value))) return c.json({error:'Short Name must be 1-20 letters, numbers, spaces, dots, hyphens or underscores'},400);
     if(key==='expense_approval_threshold' && (!Number.isFinite(Number(value)) || Number(value)<=0 || Number(value)>100000000)) return c.json({error:'Invalid expense approval threshold'},400);
     if(key==='default_monthly_amount' && (!Number.isFinite(Number(value)) || Number(value)<=0 || Number(value)>1000000)) return c.json({error:'Invalid default monthly amount'},400);
     if(key==='mini_app_url') { try { const u=new URL(value); if(u.protocol!=='https:') return c.json({error:'Mini App URL must use HTTPS'},400); } catch { return c.json({error:'Invalid Mini App URL'},400); } }

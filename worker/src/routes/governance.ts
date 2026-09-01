@@ -3,7 +3,7 @@ import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance, requireSuperAdmin } from "../auth";
 import { auditEntity, ensureOperationalSchema, isMonthClosed, requireOpenMonth } from "../ops";
 import { validMonth } from "../validation";
-import { currentMonth } from "../db";
+import { currentMonth, getBranding } from "../db";
 import { sendMessage } from "../telegram";
 import { rateForMonthFromRows } from "../contributionRates";
 
@@ -184,7 +184,7 @@ governanceRoute.post('/meetings/:id/actions', requireFinance, async c=>{
 
   if(memberId){
     const assigned=await c.env.DB.prepare("SELECT name,telegram_id FROM members WHERE id=?").bind(memberId).first<any>();
-    if(assigned?.telegram_id){try{await sendMessage(c.env,assigned.telegram_id,`📌 <b>Meeting action item</b>\n\n${String(meeting.title||'Meeting')}\n${description}${due?`\nDue: <b>${due}</b>`:''}`)}catch{}}
+    if(assigned?.telegram_id){try{const brand=await getBranding(c.env);await sendMessage(c.env,assigned.telegram_id,`📌 <b>${brand.fund_name} · Meeting action item</b>\n\n${String(meeting.title||'Meeting')}\n${description}${due?`\nDue: <b>${due}</b>`:''}`)}catch{}}
   }
   await auditEntity(c.env,admin.id,'meeting_action_created','meeting_action',actionId,null,{meeting_id:id,description,due_date:due,assigned_member_id:memberId});
   return c.json({ok:true,action:saved});
@@ -225,7 +225,8 @@ async function yearData(env:any, year:string){
 governanceRoute.get('/annual/:year', requireAdmin, async c=>{
   const year=c.req.param('year'); if(!yearRx.test(year))return c.json({error:'Use YYYY'},400); const data=await yearData(c.env,year);
   const totals=data.months.reduce((a:any,m:any)=>({contributions:a.contributions+m.contribution_cash,donations:a.donations+m.donation_cash,expenses:a.expenses+m.expenses,collected:a.collected+m.total_collected,due:a.due+m.total_due}),{contributions:0,donations:0,expenses:0,collected:0,due:0});
-  return c.json({...data,totals:{...totals,net:totals.contributions+totals.donations-totals.expenses,collection_rate:totals.due>0?totals.collected/totals.due*100:100,opening_balance:data.months[0]?.opening_balance||0,closing_balance:data.months[data.months.length-1]?.closing_balance||0}});
+  const branding=await getBranding(c.env);
+  return c.json({...data,organization:branding,totals:{...totals,net:totals.contributions+totals.donations-totals.expenses,collection_rate:totals.due>0?totals.collected/totals.due*100:100,opening_balance:data.months[0]?.opening_balance||0,closing_balance:data.months[data.months.length-1]?.closing_balance||0}});
 });
 
 governanceRoute.get('/analytics/:year', requireAdmin, async c=>{

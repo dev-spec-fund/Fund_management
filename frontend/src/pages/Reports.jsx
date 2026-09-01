@@ -53,7 +53,9 @@ export default function Reports({ setTab }) {
   const activeCategories = (summary.byCategory || []).filter((c) => Number(c.spent || 0) > 0);
 
   const exportCsv = async () => {
+    const brand=await api.branding();
     const rows = [
+      ["Group", brand.fund_name],
       ["Fund report", monthLabel],
       ["Contribution cash received", summary.memberIncome],
       ["Allocated to contribution month", allocatedContributions],
@@ -72,8 +74,9 @@ export default function Reports({ setTab }) {
       const safe = String(v ?? "").replace(/"/g, '""');
       return `"${/^[=+\-@]/.test(safe) ? "'" + safe : safe}"`;
     }).join(",")).join("\n");
-    const filename=`fund-report-${month}.csv`;
-    await (await import("../utils/exports")).sendExportToTelegram(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename, `${monthLabel} · Fund report CSV`);
+    const slug=String(brand.short_name||"fund").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"fund";
+    const filename=`${slug}-fund-report-${month}.csv`;
+    await (await import("../utils/exports")).sendExportToTelegram(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename, `${brand.fund_name} · ${monthLabel} · Fund report CSV`);
   };
 
   return (

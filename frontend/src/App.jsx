@@ -133,7 +133,7 @@ export default function App() {
   };
 
   return (
-    <Shell isAdmin={isAdmin} isMember={isMember} mode={mode} me={me}>
+    <Shell branding={me?.branding}>
       {isAdmin && isMember && (
         <div style={{ flexShrink: 0, padding: "14px 20px 0", maxWidth: 480, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
           <div className="sans" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "var(--border)", borderRadius: 12, padding: 3 }}>
@@ -211,12 +211,13 @@ function modeButton(active) {
   return { border: "none", borderRadius: 9, padding: "9px 10px", background: active ? "var(--primary)" : "transparent", color: active ? "var(--on-primary)" : "var(--muted)", fontSize: 12, fontWeight: 600, cursor: "pointer" };
 }
 
-function Shell({ children }) {
+function Shell({ children, branding }) {
   return (
     <div className="app-scroll-root" style={{ fontFamily: "'Fraunces','Georgia',serif", background: "var(--bg)", color: "var(--text)" }}>
       <div className="theme-brand-surface" style={{ flexShrink: 0, background: "var(--primary)", padding: "24px 24px 6px", color: "var(--on-primary)" }}>
-        <div className="sans" style={{ fontSize: 12, letterSpacing: 2, opacity: 0.65, textTransform: "uppercase" }}>Fund</div>
+        <div className="sans" style={{ fontSize: 11, letterSpacing: 2, opacity: 0.72, textTransform: "uppercase" }}>{branding?.short_name || "Fund"}</div>
         <div style={{ fontSize: 28, fontWeight: 600, marginTop: 2 }}>Ledger</div>
+        {branding?.fund_name && <div className="sans" style={{ fontSize: 10, opacity: 0.7, marginTop: 1 }}>{branding.fund_name}</div>}
       </div>
       {children}
     </div>

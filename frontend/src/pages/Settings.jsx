@@ -155,8 +155,9 @@ export default function Settings({ admin }) {
   const backup=async()=>{
     try{
       const data=await api.admin.backup();
-      const filename=`kys-fund-backup-${todayValue()}.json`;
-      await sendExportToTelegram(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),filename,"Super Admin database backup");
+      const slug=String(settings?.short_name||"fund").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"fund";
+      const filename=`${slug}-fund-backup-${todayValue()}.json`;
+      await sendExportToTelegram(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),filename,`${settings?.fund_name||"Fund"} · Super Admin database backup`);
       setMessage("Backup sent to your Telegram chat");
     }catch(e){setMessage(e.message)}
   };
@@ -179,6 +180,15 @@ export default function Settings({ admin }) {
     </div>
 
     {settingsSection==="general" && <>
+      <SectionTitle>ORGANIZATION</SectionTitle>
+      <div style={cardStyle}>
+        <div className="sans" style={{fontSize:12,color:"var(--muted)",marginBottom:5}}>Group Name</div>
+        <input disabled={!superAdmin} value={settings.fund_name ?? ""} onChange={e=>setSettings({...settings,fund_name:e.target.value})} onBlur={e=>superAdmin&&e.target.value.trim()&&saveSetting("fund_name",e.target.value.trim())} className="sans" placeholder="Organization / group name" style={{width:"100%",boxSizing:"border-box",border:"1px solid var(--border-strong)",borderRadius:9,padding:"10px 11px",fontSize:13,background:"var(--bg)",color:"var(--text)"}}/>
+        <div className="sans" style={{fontSize:12,color:"var(--muted)",margin:"12px 0 5px"}}>Short Name</div>
+        <input disabled={!superAdmin} maxLength={20} value={settings.short_name ?? ""} onChange={e=>setSettings({...settings,short_name:e.target.value})} onBlur={e=>superAdmin&&e.target.value.trim()&&saveSetting("short_name",e.target.value.trim())} className="sans" placeholder="e.g. KYS" style={{width:"100%",boxSizing:"border-box",border:"1px solid var(--border-strong)",borderRadius:9,padding:"10px 11px",fontSize:13,background:"var(--bg)",color:"var(--text)"}}/>
+        <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:7}}>Used automatically in Telegram messages, reports, statements, backups and compact app branding.</div>
+      </div>
+
       <SectionTitle>MEMBER CONTRIBUTIONS</SectionTitle>
       <div style={cardStyle}>
         <div className="sans" style={{fontSize:12,color:"var(--muted)",marginBottom:5}}>Default monthly contribution</div>

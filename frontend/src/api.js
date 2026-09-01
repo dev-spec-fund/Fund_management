@@ -81,6 +81,7 @@ async function upload(path, formData) {
 
 export const api = {
   me: () => request("/api/me"),
+  branding: () => request("/api/branding"),
   myContributions: () => request("/api/me/contributions"),
   myDashboard: () => request("/api/me/dashboard"),
   myMeetings: () => request("/api/me/meetings"),
