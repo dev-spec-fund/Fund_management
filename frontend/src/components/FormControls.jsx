@@ -15,8 +15,8 @@ export function Modal({ title, onClose, action, children }) {
     const previousTouchAction = appRoot?.style.touchAction || "";
     const previousScrollTop = appRoot?.scrollTop || 0;
 
-    // Normal navigation scrolls only inside the content viewport. Lock that viewport
-    // while a modal is open so iOS/Telegram cannot transfer gestures behind it.
+    // Lock only the normal page scroller. The modal body remains the single active
+    // vertical scroller, which avoids gesture transfer to the page behind it.
     if (appRoot) {
       appRoot.style.overflowY = "hidden";
       appRoot.style.touchAction = "none";
@@ -44,7 +44,7 @@ export function Modal({ title, onClose, action, children }) {
     if (!el || !["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
     window.setTimeout(() => {
       try { el.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" }); } catch {}
-    }, 180);
+    }, 220);
   };
 
   return (
@@ -62,7 +62,7 @@ export function Modal({ title, onClose, action, children }) {
         overflow: "hidden",
         background: "var(--overlay)",
         display: "flex",
-        alignItems: "flex-start",
+        alignItems: "flex-end",
         justifyContent: "center",
         zIndex: 50,
         boxSizing: "border-box",
@@ -74,38 +74,39 @@ export function Modal({ title, onClose, action, children }) {
         borderRadius: "18px 18px 0 0",
         width: "100%",
         maxWidth: 480,
-        height: `calc(${viewport.height}px - max(10px, env(safe-area-inset-top)))`,
+        height: `min(92dvh, ${Math.max(320, viewport.height - 10)}px)`,
         maxHeight: `calc(${viewport.height}px - max(10px, env(safe-area-inset-top)))`,
-        overflowY: "auto",
-        overflowX: "hidden",
+        overflow: "hidden",
         boxSizing: "border-box",
-        overscrollBehavior: "contain",
-        touchAction: "pan-y",
-        WebkitOverflowScrolling: "touch",
-        scrollPaddingTop: 74,
-        scrollPaddingBottom: 150,
-        padding: "0 22px calc(22px + env(safe-area-inset-bottom))"
+        display: "flex",
+        flexDirection: "column"
       }}>
-        <div style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 3,
+        <div className="app-modal-header" style={{
+          flex: "0 0 auto",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           minHeight: 62,
-          paddingTop: 6,
+          padding: "6px 22px 0",
           background: "var(--bg)",
-          borderBottom: "1px solid var(--divider-2)",
-          marginBottom: 14
+          borderBottom: "1px solid var(--divider-2)"
         }}>
           <div style={{ fontSize: 18, fontWeight: 600 }}>{title}</div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {action}
-            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 8 }}><X size={20} /></button>
+            <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", padding: 8 }}><X size={20} /></button>
           </div>
         </div>
-        {children}
+        <div className="app-modal-body" style={{
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflowX: "hidden",
+          overflowY: "auto",
+          boxSizing: "border-box",
+          padding: "14px 22px calc(22px + env(safe-area-inset-bottom))"
+        }}>
+          {children}
+        </div>
       </div>
     </div>
   );
