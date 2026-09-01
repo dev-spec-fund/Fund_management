@@ -18,7 +18,7 @@ const app = new Hono<AppEnv>();
 app.use("/api/*", cors({
   origin: ["https://fund-management.pages.dev", "http://localhost:5173", "http://127.0.0.1:5173"],
   allowHeaders: ["Content-Type", "X-Telegram-Init-Data"],
-  allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   maxAge: 86400,
 }));
 
