@@ -274,9 +274,17 @@ export function Activity({ isAdmin, canFinance = false }) {
   };
   if (rows === null) return <Center>Loading…</Center>;
 
-  const filtered = rows.filter((r) => filter === "all" || r.kind === filter);
-  const income = filtered.filter((r) => r.kind === "contribution" || r.kind === "donation").reduce((n, r) => n + Number(r.amount || 0), 0);
-  const expenses = filtered.filter((r) => r.kind === "expense").reduce((n, r) => n + Number(r.amount || 0), 0);
+  const normalizeKind = (value) => {
+    const kind = String(value || "").trim().toLowerCase();
+    if (kind === "contributions") return "contribution";
+    if (kind === "donations") return "donation";
+    if (kind === "expenses") return "expense";
+    return kind;
+  };
+  const normalizedRows = rows.map((row) => ({ ...row, _kind: normalizeKind(row.kind) }));
+  const filtered = normalizedRows.filter((r) => filter === "all" || r._kind === filter);
+  const income = filtered.filter((r) => r._kind === "contribution" || r._kind === "donation").reduce((n, r) => n + Number(r.amount || 0), 0);
+  const expenses = filtered.filter((r) => r._kind === "expense").reduce((n, r) => n + Number(r.amount || 0), 0);
   const groups = [];
   filtered.forEach((row) => {
     const label = activityDayLabel(row);
@@ -284,6 +292,12 @@ export function Activity({ isAdmin, canFinance = false }) {
     if (last && last.label === label) last.rows.push(row);
     else groups.push({ label, rows: [row] });
   });
+
+  const counts = normalizedRows.reduce((acc, row) => {
+    acc.all += 1;
+    if (row._kind in acc) acc[row._kind] += 1;
+    return acc;
+  }, { all: 0, contribution: 0, donation: 0, expense: 0 });
 
   const filters = [
     ["all", "All"], ["contribution", "Contributions"], ["donation", "Donations"], ["expense", "Expenses"]
@@ -297,9 +311,9 @@ export function Activity({ isAdmin, canFinance = false }) {
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
         {filters.map(([value, label]) => (
-          <button key={value} onClick={() => setFilter(value)} className="sans"
-            style={{ flex: "0 0 auto", background: filter === value ? "var(--primary)" : "var(--card)", color: filter === value ? "var(--on-primary)" : "var(--muted)", border: "1px solid " + (filter === value ? "var(--primary)" : "var(--border)"), borderRadius: 20, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-            {label}
+          <button key={value} type="button" onClick={() => setFilter(value)} aria-pressed={filter === value} className="sans"
+            style={{ flex: "0 0 auto", background: filter === value ? "var(--primary)" : "var(--card)", color: filter === value ? "var(--on-primary)" : "var(--muted)", border: "1px solid " + (filter === value ? "var(--primary)" : "var(--border)"), borderRadius: 20, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer", touchAction: "manipulation" }}>
+            {label} <span style={{ opacity: filter === value ? .82 : .68, marginLeft: 3 }}>{counts[value]}</span>
           </button>
         ))}
       </div>
