@@ -310,14 +310,27 @@ input:focus, textarea:focus, select:focus {
   overflow: visible;
 }
 
-/* Modal is the only additional vertical scroller in the application. */
+/* v24: modal scrolling. The overlay must not use touch-action:none because
+   iOS/Telegram intersects touch-action across ancestors and can then block the
+   modal body itself. The page behind is already locked by Modal. */
 .app-modal-overlay {
   overscroll-behavior: contain;
-  touch-action: none;
+  touch-action: pan-y;
 }
 
 .app-modal-sheet {
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.app-modal-header {
+  position: relative;
+  z-index: 2;
+}
+
+.app-modal-body {
   overscroll-behavior-y: contain;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
 }
