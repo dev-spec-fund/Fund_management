@@ -125,7 +125,13 @@ async function upload(path, formData) {
 
 export const api = {
   me: () => request("/api/me"),
+  branding: () => request("/api/branding"),
+  myDashboard: () => request("/api/me/dashboard"),
   myContributions: () => request("/api/me/contributions"),
+  myMeetings: () => request("/api/me/meetings"),
+  myActions: () => request("/api/me/actions"),
+  rsvpMeeting: (id, response) => request(`/api/me/meetings/${id}/rsvp`, { method: "POST", body: JSON.stringify({ response }) }),
+  completeMyAction: (id) => request(`/api/me/actions/${id}/done`, { method: "POST" }),
 
   members: {
     list: () => request("/api/members"),

@@ -71,12 +71,9 @@ export default function App() {
     const later = adminView ? ["settings"] : [];
 
     const warm = (items) => {
+      // Preload JavaScript only. Do not mount hidden pages: hidden components can
+      // trigger API work/runtime errors and should not be able to crash the active view.
       items.filter((name) => tabs.includes(name)).forEach((name) => loaderForTab(name)?.());
-      setMountedTabs((current) => {
-        const next = new Set(current);
-        items.filter((name) => tabs.includes(name)).forEach((name) => next.add(name));
-        return next;
-      });
     };
 
     const timers = [
@@ -160,14 +157,39 @@ export default function App() {
             style={{ display: tab === page ? "block" : "none" }}
             aria-hidden={tab !== page}
           >
-            <Suspense fallback={tab === page ? <PageSkeleton /> : null}>
-              {renderPage(page)}
-            </Suspense>
+            <PageErrorBoundary page={page}>
+              <Suspense fallback={tab === page ? <PageSkeleton /> : null}>
+                {renderPage(page)}
+              </Suspense>
+            </PageErrorBoundary>
           </div>
         ))}
       </main>
     </Shell>
   );
+}
+
+
+class PageErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error(`Page ${this.props.page} crashed`, error, info); }
+  componentDidUpdate(prevProps) {
+    if (prevProps.page !== this.props.page && this.state.error) this.setState({ error: null });
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="sans" role="alert" style={{background:"var(--danger-bg)",border:"1px solid var(--danger-border)",borderRadius:12,padding:16,color:"var(--danger)"}}>
+        <div style={{fontSize:14,fontWeight:700,marginBottom:5}}>This page couldn’t be displayed.</div>
+        <div style={{fontSize:11,lineHeight:1.45,marginBottom:10}}>The rest of the Mini App is still available.</div>
+        <button type="button" onClick={() => this.setState({error:null})} style={{background:"var(--card)",color:"var(--text)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 11px",fontSize:12,cursor:"pointer"}}>Try again</button>
+      </div>
+    );
+  }
 }
 
 
