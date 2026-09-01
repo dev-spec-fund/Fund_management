@@ -359,7 +359,8 @@ input:focus, textarea:focus, select:focus {
 }
 .activity-filter-sticky,
 .reports-filter-sticky,
-.settings-subnav-sticky {
+.settings-subnav-sticky,
+.expenses-sticky-controls {
   position: sticky;
   /* .app-page-content has 20px top padding. Pull the sticky surface through
      that padding so scrolling rows can never appear in the gap above it. */
@@ -493,7 +494,10 @@ input:focus, textarea:focus, select:focus {
 }
 
 /* Expenses module */
-.expenses-sticky-controls { margin-bottom: 12px; }
+.expenses-sticky-controls {
+  z-index: 21;
+}
+
 .expense-filter-row { display:flex; gap:6px; overflow-x:auto; padding-bottom:7px; scrollbar-width:none; }
 .expense-filter-row::-webkit-scrollbar { display:none; }
 .expense-filter-chip { flex:0 0 auto; border:1px solid var(--border); background:var(--card); color:var(--muted); border-radius:999px; padding:6px 9px; font-size:10px; font-weight:600; cursor:pointer; }
