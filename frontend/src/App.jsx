@@ -62,35 +62,38 @@ export default function App() {
   useEffect(() => {
     if (!me) return undefined;
 
-    // Stage background mounting so Overview becomes interactive first. Hidden mounted
-    // pages run their normal data loaders and keep their state, making later tab taps instant.
+    // Preload code and API data without mounting hidden React pages. This keeps
+    // navigation fast while preserving the v40 crash isolation. Admin requests
+    // are staged so they do not compete with the Overview bootstrap request.
     const likelyNext = adminView
       ? (canFinance ? ["pending", "members", "activity"] : ["members", "activity"])
       : ["history", "fund", "activity", "meetings", "actions", "profile"];
     const secondary = adminView ? (canFinance ? ["expenses", "reports", "meetings"] : ["reports", "meetings"]) : [];
     const later = adminView ? ["settings"] : [];
 
-    const warm = (items) => {
-      // Preload JavaScript only. Do not mount hidden pages: hidden components can
-      // trigger API work/runtime errors and should not be able to crash the active view.
+    const warmCode = (items) => {
       items.filter((name) => tabs.includes(name)).forEach((name) => loaderForTab(name)?.());
     };
 
-    const warmMemberData = () => {
-      if (!isMember || !me?.member?.id) return;
-      // Warm the API cache without mounting hidden React pages. This keeps the
-      // v40 crash protection while making first visits to Member tabs instant.
-      api.prefetchMemberData(me.member.id).catch(() => {});
-    };
-
     const timers = [
-      setTimeout(() => warm(likelyNext), 180),
-      setTimeout(() => warmMemberData(), adminView ? 650 : 260),
-      setTimeout(() => warm(secondary), 900),
-      setTimeout(() => warm(later), 1500),
+      setTimeout(() => warmCode(likelyNext), 180),
+      setTimeout(() => {
+        if (adminView) api.prefetchAdminData("primary", canFinance).catch(() => {});
+        else if (isMember && me?.member?.id) api.prefetchMemberData(me.member.id).catch(() => {});
+      }, 260),
+      setTimeout(() => warmCode(secondary), 700),
+      setTimeout(() => { if (adminView) api.prefetchAdminData("operations", canFinance).catch(() => {}); }, 780),
+      setTimeout(() => { if (adminView) api.prefetchAdminData("reports", canFinance).catch(() => {}); }, 1150),
+      setTimeout(() => warmCode(later), 1350),
+      setTimeout(() => { if (adminView) api.prefetchAdminData("settings", canFinance).catch(() => {}); }, 1550),
+      // Dual-role users get Member data quietly after Admin has settled so
+      // switching to My Account is also fast without slowing Admin startup.
+      setTimeout(() => {
+        if (adminView && isMember && me?.member?.id) api.prefetchMemberData(me.member.id).catch(() => {});
+      }, 2200),
     ];
     return () => timers.forEach(clearTimeout);
-  }, [me, adminView, canFinance, tabs]);
+  }, [me, adminView, canFinance, isMember, tabs]);
 
   // All normal screens share one scroll root. Reset it when the user intentionally
   // changes the active tab/mode so every screen opens from a predictable position.
