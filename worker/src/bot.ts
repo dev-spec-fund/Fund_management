@@ -20,9 +20,8 @@ import {
   getSetting,
   createMemberRegistrationRequest,
   ensureMemberRegistrationTable,
-  findUnlinkedMemberMatches,
 } from "./db";
-import { adminCan, consumeRateLimit, contributionDuplicateKey, duplicateSlip, normalizeName, normalizePhone, requireOpenMonth, safeLogError } from "./ops";
+import { adminCan, consumeRateLimit, contributionDuplicateKey, duplicateSlip, findDuplicateMembers, normalizeName, normalizePhone, requireOpenMonth, safeLogError } from "./ops";
 
 const DEFAULT_MINI_APP_URL = "https://fund-management.pages.dev";
 let cachedMiniAppUrl: { value: string; expiresAt: number } | null = null;
@@ -94,6 +93,30 @@ function registrationButtons(requestId: number, matches: any[]) {
   return { inline_keyboard: rows };
 }
 
+function sharePhoneKeyboard() {
+  return {
+    keyboard: [[{ text: "📱 Share phone number", request_contact: true }]],
+    resize_keyboard: true,
+    one_time_keyboard: true,
+    input_field_placeholder: "Tap Share phone number to continue",
+  };
+}
+
+async function notifyRegistrationRequest(env: Env, request: any) {
+  const matches = (await findDuplicateMembers(env, request.name, request.phone, request.telegram_id))
+    .filter((m: any) => !m.telegram_id);
+  const usernameLine = request.username ? `\nUsername: @${esc(request.username)}` : "";
+  const phoneLine = request.phone ? `\nPhone: <b>${esc(request.phone)}</b>` : "";
+  const matchLine = matches.length
+    ? `\n\n<b>Possible existing member${matches.length > 1 ? "s" : ""} found:</b>\n${matches.map((m: any) => `${esc(m.member_code)} — ${esc(m.name)}${m.phone ? ` (${esc(m.phone)})` : ""}`).join("\n")}`
+    : "\n\nNo matching unlinked member was found.";
+  await notifyAdmins(
+    env,
+    `👤 <b>New member registration request</b>\n\nName: <b>${esc(request.name)}</b>${usernameLine}${phoneLine}\nTelegram ID: <code>${esc(request.telegram_id)}</code>${matchLine}\n\nChoose whether to link an existing member, create a new member, or reject.`,
+    { reply_markup: registrationButtons(request.id, matches) }
+  );
+}
+
 export async function handleUpdate(env: Env, update: any) {
   try {
     if (update.message) return handleMessage(env, update.message);
@@ -108,6 +131,47 @@ async function handleMessage(env: Env, message: any) {
   const chatId = message.chat.id;
   const telegramId = String(message.from.id);
   const displayName = [message.from.first_name, message.from.last_name].filter(Boolean).join(" ");
+
+  if (message.contact) {
+    if (!(await consumeRateLimit(env, "bot_registration_phone", telegramId, 5, 60))) {
+      return sendMessage(env, chatId, "Too many requests. Please try again in a minute.");
+    }
+    const contact = message.contact;
+    if (String(contact.user_id || "") !== telegramId) {
+      return sendMessage(env, chatId, "Please use the Share phone number button so I receive your own Telegram phone number.");
+    }
+    const phone = normalizePhone(contact.phone_number);
+    if (!phone) return sendMessage(env, chatId, "I could not read that phone number. Please try sharing it again.");
+
+    await ensureMemberRegistrationTable(env);
+    const username = message.from.username ? String(message.from.username) : null;
+    let request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE telegram_id = ?")
+      .bind(telegramId).first<any>();
+    if (!request || request.status === "rejected") {
+      await createMemberRegistrationRequest(env, telegramId, displayName || "Telegram User", username);
+      request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE telegram_id = ?")
+        .bind(telegramId).first<any>();
+    }
+    if (request?.status === "approved") {
+      return sendMessage(env, chatId, "✅ Your membership is already approved.", { reply_markup: { remove_keyboard: true } });
+    }
+
+    await env.DB.prepare(`
+      UPDATE member_registration_requests
+      SET name = ?, username = ?, phone = ?, status = 'pending'
+      WHERE telegram_id = ? AND status != 'approved'
+    `).bind(displayName || request?.name || "Telegram User", username, phone, telegramId).run();
+    request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE telegram_id = ?")
+      .bind(telegramId).first<any>();
+
+    await notifyRegistrationRequest(env, request);
+    return sendMessage(
+      env,
+      chatId,
+      `✅ Phone number received: <b>${esc(phone)}</b>\n\nYour registration request has been sent to the fund admin. You will be notified after it is reviewed.`,
+      { reply_markup: { remove_keyboard: true } }
+    );
+  }
 
   if (message.photo) return handleSlipPhoto(env, message, chatId, telegramId);
 
@@ -154,26 +218,22 @@ async function handleMessage(env: Env, message: any) {
       }
     }
 
-    if (request.created) {
-      const matches = await findUnlinkedMemberMatches(env, displayName || "Telegram User");
-      const usernameLine = username ? `\nUsername: @${esc(username)}` : "";
-      const matchLine = matches.length
-        ? `\n\n<b>Possible existing member${matches.length > 1 ? "s" : ""} found:</b>\n${matches.map((m: any) => `${esc(m.member_code)} — ${esc(m.name)}`).join("\n")}`
-        : "\n\nNo exact unlinked member match was found.";
-      await notifyAdmins(
+    if (!request.phone) {
+      return sendMessage(
         env,
-        `👤 <b>New member registration request</b>\n\nName: <b>${esc(displayName || "Telegram User")}</b>${usernameLine}\nTelegram ID: <code>${esc(telegramId)}</code>${matchLine}\n\nChoose whether to link an existing member, create a new member, or reject.`,
-        { reply_markup: registrationButtons(request.id, matches) }
+        chatId,
+        "👋 To request fund membership, please share the phone number connected to your Telegram account.\n\nTap <b>📱 Share phone number</b> below. Your request will be sent to the admins after you share it.",
+        { reply_markup: sharePhoneKeyboard() }
       );
     }
 
-    return sendMessage(
-      env,
-      chatId,
-      request.created
-        ? "👋 Your registration request has been sent to the fund admin. You will be notified after it is reviewed."
-        : "⏳ Your membership registration request is still waiting for admin approval."
-    );
+    if (request.status === "awaiting_phone") {
+      await env.DB.prepare("UPDATE member_registration_requests SET status='pending' WHERE id=?").bind(request.id).run();
+      const ready = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE id=?").bind(request.id).first<any>();
+      await notifyRegistrationRequest(env, ready);
+    }
+
+    return sendMessage(env, chatId, "⏳ Your membership registration request is waiting for admin approval.", { reply_markup: { remove_keyboard: true } });
   }
 
   if (text === "/mybalance") {
@@ -458,8 +518,8 @@ async function handleCallback(env: Env, callback: any) {
       const target = await env.DB.prepare("SELECT * FROM members WHERE id = ? AND telegram_id IS NULL").bind(memberId).first<any>();
       if (!target) return answerCallback(env, callback.id, "That member is already linked or no longer available.");
       const linked = await env.DB.prepare(
-        "UPDATE members SET telegram_id = ? WHERE id = ? AND telegram_id IS NULL"
-      ).bind(request.telegram_id, memberId).run();
+        "UPDATE members SET telegram_id = ?, phone = COALESCE(NULLIF(?,''), phone), normalized_phone = CASE WHEN NULLIF(?,'') IS NOT NULL THEN ? ELSE normalized_phone END WHERE id = ? AND telegram_id IS NULL"
+      ).bind(request.telegram_id, request.phone || null, request.phone || null, normalizePhone(request.phone) || null, memberId).run();
       if (!linked.meta.changes) return answerCallback(env, callback.id, "Could not link that member.");
       member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(memberId).first<any>();
     }
@@ -468,8 +528,8 @@ async function handleCallback(env: Env, callback: any) {
       const memberCode = await generateMemberCode(env);
       const defaultMonthly = Number(await getSetting(env, "default_monthly_amount")) || 250;
       const insert = await env.DB.prepare(
-        "INSERT INTO members (member_code, telegram_id, name, monthly_amount, normalized_name, normalized_phone) VALUES (?, ?, ?, ?, ?, NULL)"
-      ).bind(memberCode, request.telegram_id, request.name, defaultMonthly, normalizeName(request.name)).run();
+        "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount, normalized_name, normalized_phone) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).bind(memberCode, request.telegram_id, request.name, request.phone || null, defaultMonthly, normalizeName(request.name), normalizePhone(request.phone) || null).run();
       member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(insert.meta.last_row_id).first<any>();
     }
 
@@ -482,7 +542,7 @@ async function handleCallback(env: Env, callback: any) {
     await sendMessage(
       env,
       request.telegram_id,
-      `✅ Your membership has been approved!\n\nMember ID: <b>${esc(member.member_code)}</b>\nName: ${esc(member.name)}\n\nYou can now submit contribution slips and use the Fund App.`,
+      `✅ Your membership has been approved!\n\nMember ID: <b>${esc(member.member_code)}</b>\nName: ${esc(member.name)}${member.phone ? `\nPhone: ${esc(member.phone)}` : ""}\n\nYou can now submit contribution slips and use the Fund App.`,
       { reply_markup: { inline_keyboard: [[{ text: "Open Fund App", web_app: { url: await miniAppUrl(env) } }]] } }
     );
     await finishRegistrationMessage(env, callback, `${callback.message.caption || callback.message.text}\n\n✅ Approved by ${esc(admin.name)}\nMember ID: ${esc(member.member_code)}`);

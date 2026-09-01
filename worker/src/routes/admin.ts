@@ -24,7 +24,7 @@ adminRoute.get('/pending', requireFinance, async c => {
   const registrations = await c.env.DB.prepare(`SELECT * FROM member_registration_requests WHERE status='pending' ORDER BY requested_at ASC`).all<any>();
   const enrichedRegs=await Promise.all(registrations.results.map(async (r:any) => ({
     ...r,
-    possible_matches:(await findDuplicateMembers(c.env,r.name,null,r.telegram_id)).filter((m:any)=>!m.telegram_id)
+    possible_matches:(await findDuplicateMembers(c.env,r.name,r.phone,r.telegram_id)).filter((m:any)=>!m.telegram_id)
   })));
   const contributions = await c.env.DB.prepare(`SELECT c.*,m.name member_name,m.member_code FROM contributions c JOIN members m ON m.id=c.member_id WHERE c.status='pending' ORDER BY c.submitted_at ASC`).all<any>();
   const contributionRows=await Promise.all(contributions.results.map(async (row:any)=>{
@@ -43,18 +43,21 @@ adminRoute.post('/pending/registrations/:id/approve', requireFinance, async c =>
   if(body.member_id){
     member=await c.env.DB.prepare("SELECT * FROM members WHERE id=? AND telegram_id IS NULL").bind(Number(body.member_id)).first<any>();
     if(!member)return c.json({error:'Selected member is already linked or unavailable'},409);
-    await c.env.DB.prepare("UPDATE members SET telegram_id=? WHERE id=? AND telegram_id IS NULL").bind(req.telegram_id,member.id).run();
+    await c.env.DB.prepare("UPDATE members SET telegram_id=?, phone=COALESCE(NULLIF(?,''),phone), normalized_phone=CASE WHEN NULLIF(?,'') IS NOT NULL THEN ? ELSE normalized_phone END WHERE id=? AND telegram_id IS NULL")
+      .bind(req.telegram_id,req.phone||null,req.phone||null,normalizePhone(req.phone)||null,member.id).run();
+    member=await c.env.DB.prepare("SELECT * FROM members WHERE id=?").bind(member.id).first<any>();
   } else {
-    const dup=await findDuplicateMembers(c.env,req.name,null,req.telegram_id);
+    const dup=await findDuplicateMembers(c.env,req.name,req.phone,req.telegram_id);
     const unlinked=dup.filter((x:any)=>!x.telegram_id);
     if(unlinked.length) return c.json({error:'Possible existing member found. Choose Link Existing Member instead.',duplicates:unlinked},409);
     const code=await generateMemberCode(c.env); const amount=Number(await getSetting(c.env,'default_monthly_amount'))||250;
-    const r=await c.env.DB.prepare("INSERT INTO members(member_code,telegram_id,name,monthly_amount,normalized_name,normalized_phone) VALUES(?,?,?,?,?,NULL)").bind(code,req.telegram_id,req.name,amount,normalizeName(req.name)).run();
+    const r=await c.env.DB.prepare("INSERT INTO members(member_code,telegram_id,name,phone,monthly_amount,normalized_name,normalized_phone) VALUES(?,?,?,?,?,?,?)")
+      .bind(code,req.telegram_id,req.name,req.phone||null,amount,normalizeName(req.name),normalizePhone(req.phone)||null).run();
     member=await c.env.DB.prepare("SELECT * FROM members WHERE id=?").bind(r.meta.last_row_id).first<any>();
   }
   const changed=await c.env.DB.prepare("UPDATE member_registration_requests SET status='approved',reviewed_by=?,reviewed_at=datetime('now') WHERE id=? AND status='pending'").bind(admin.id,id).run();
   if(!changed.meta.changes)return c.json({error:'Already reviewed'},409);
-  await auditEntity(c.env,admin.id,body.member_id?'member_linked':'member_registration_approved','member',member.id,null,{member_code:member.member_code,telegram_id:req.telegram_id});
+  await auditEntity(c.env,admin.id,body.member_id?'member_linked':'member_registration_approved','member',member.id,null,{member_code:member.member_code,telegram_id:req.telegram_id,phone:req.phone||null});
   await sendMessage(c.env, req.telegram_id, `✅ Your membership has been approved. Member ID: <b>${member.member_code}</b>. You can now submit contribution slips.`);
   return c.json({ok:true,member});
 });

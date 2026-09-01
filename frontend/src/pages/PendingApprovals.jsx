@@ -126,11 +126,12 @@ export default function PendingApprovals() {
             <div className="sans" style={{fontSize:11,color:"var(--soft)",marginTop:3}}>
               {r.username ? `@${r.username}` : "Telegram user"} · {r.telegram_id}
             </div>
-            {r.created_at && <div className="sans" style={{fontSize:10,color:"var(--soft-4)",marginTop:4}}>Submitted {formatLocalDateTime(r.created_at)}</div>}
+            {r.phone && <div className="sans" style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Phone: <b style={{color:"var(--text)"}}>{r.phone}</b></div>}
+            {(r.requested_at || r.created_at) && <div className="sans" style={{fontSize:10,color:"var(--soft-4)",marginTop:4}}>Submitted {formatLocalDateTime(r.requested_at || r.created_at)}</div>}
             {(r.possible_matches || []).map((m) => <div key={m.id} className="sans"
               style={{fontSize:11,background:"var(--warning-bg)",padding:8,borderRadius:8,marginTop:8}}>
-              Possible existing member: <b>{m.member_code}</b> — {m.name}
-              <button onClick={() => act(() => api.admin.approveRegistration(r.id, m.id))} style={{...compactBtn,marginLeft:7}}>Link</button>
+              Possible existing member: <b>{m.member_code}</b> — {m.name}{m.phone ? ` · ${m.phone}` : ""}
+              <button onClick={() => act(() => api.admin.approveRegistration(r.id, m.id))} style={{...compactBtn,marginLeft:7}}>Link & update phone</button>
             </div>)}
             <div style={{display:"flex",gap:7,marginTop:10}}>
               <button onClick={() => act(() => api.admin.approveRegistration(r.id))} style={{...approveBtn,flex:1}}>Create & approve</button>

@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS member_registration_requests (
   telegram_id TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   username TEXT,
+  phone TEXT,
   status TEXT NOT NULL DEFAULT 'pending',
   requested_at TEXT NOT NULL DEFAULT (datetime('now')),
   reviewed_by INTEGER REFERENCES admins(id),
@@ -249,7 +250,7 @@ CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(meeting_date, meeting_t
 CREATE INDEX IF NOT EXISTS idx_meeting_rsvps_meeting ON meeting_rsvps(meeting_id);
 
 
--- Schema migration ledger. Fresh databases created from schema.sql are current through v10.
+-- Schema migration ledger. Fresh databases created from schema.sql are current through v12.
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -265,6 +266,7 @@ INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (8,'expense_categor
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (9,'hardening_and_schema_versioning');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (10,'performance_and_normalized_members');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (11,'integrity_privacy_and_error_resolution');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (12,'registration_phone_capture');
 
 CREATE INDEX IF NOT EXISTS idx_members_normalized_name ON members(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_members_normalized_phone ON members(normalized_phone);

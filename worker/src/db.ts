@@ -111,6 +111,7 @@ export async function ensureMemberRegistrationTable(env: Env) {
       telegram_id TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       username TEXT,
+      phone TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       requested_at TEXT NOT NULL DEFAULT (datetime('now')),
       reviewed_by INTEGER REFERENCES admins(id),
@@ -125,33 +126,33 @@ export async function createMemberRegistrationRequest(
   telegramId: string,
   displayName: string,
   username?: string | null
-): Promise<{ id: number; status: string; created: boolean }> {
+): Promise<{ id: number; status: string; created: boolean; phone: string | null }> {
   await ensureMemberRegistrationTable(env);
 
   const existing = await env.DB.prepare(
-    "SELECT id, status FROM member_registration_requests WHERE telegram_id = ?"
-  ).bind(telegramId).first<{ id: number; status: string }>();
+    "SELECT id, status, phone FROM member_registration_requests WHERE telegram_id = ?"
+  ).bind(telegramId).first<{ id: number; status: string; phone: string | null }>();
 
   if (existing) {
     if (existing.status === "rejected") {
       await env.DB.prepare(`
         UPDATE member_registration_requests
-        SET name = ?, username = ?, status = 'pending', requested_at = datetime('now'),
+        SET name = ?, username = ?, phone = NULL, status = 'awaiting_phone', requested_at = datetime('now'),
             reviewed_by = NULL, reviewed_at = NULL
         WHERE id = ?
       `).bind(displayName, username || null, existing.id).run();
-      return { id: existing.id, status: "pending", created: true };
+      return { id: existing.id, status: "awaiting_phone", created: true, phone: null };
     }
 
     await env.DB.prepare(
       "UPDATE member_registration_requests SET name = ?, username = ? WHERE id = ?"
     ).bind(displayName, username || null, existing.id).run();
-    return { id: existing.id, status: existing.status, created: false };
+    return { id: existing.id, status: existing.status, created: false, phone: existing.phone || null };
   }
 
   const res = await env.DB.prepare(
-    "INSERT INTO member_registration_requests (telegram_id, name, username) VALUES (?, ?, ?)"
+    "INSERT INTO member_registration_requests (telegram_id, name, username, status) VALUES (?, ?, ?, 'awaiting_phone')"
   ).bind(telegramId, displayName, username || null).run();
 
-  return { id: Number(res.meta.last_row_id), status: "pending", created: true };
+  return { id: Number(res.meta.last_row_id), status: "awaiting_phone", created: true, phone: null };
 }

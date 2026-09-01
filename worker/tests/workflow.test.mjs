@@ -31,7 +31,7 @@ test("allocation planner prefetches future state", () => {
 
 test("schema version is current", () => {
   const ops=read("src/ops.ts");
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 11/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 12/);
 });
 
 test("demotion preserves member record and removes admin access only", () => {
@@ -63,4 +63,14 @@ test("bulk Telegram sender has bounded concurrency", () => {
   const telegram=read("src/telegram.ts");
   assert.match(telegram,/sendInBatches/);
   assert.match(telegram,/Math\.min\(10, concurrency\)/);
+});
+
+
+test("Telegram registration captures the requesting user phone before approval", () => {
+  const bot=read("src/bot.ts");
+  const schema=read("migrations/0012_registration_phone_capture.sql");
+  assert.match(bot,/request_contact:\s*true/);
+  assert.match(bot,/message\.contact/);
+  assert.match(bot,/contact\.user_id/);
+  assert.match(schema,/ADD COLUMN phone TEXT/);
 });

@@ -22,7 +22,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 11;
+const REQUIRED_SCHEMA_VERSION = 12;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -34,6 +34,7 @@ export async function ensureOperationalSchema(env: Env) {
     const checks:[string,string[]][] = [
       ["admins", ["active","deactivated_at","deactivated_by"]],
       ["members", ["normalized_name","normalized_phone"]],
+      ["member_registration_requests", ["phone"]],
       ["contributions", ["bank_date","corrected_by","corrected_at","voided_by","voided_at","void_reason","duplicate_key"]],
       ["donations", ["member_id","transaction_month","status","voided_by","voided_at","void_reason"]],
       ["expenses", ["transaction_month","status","approval_required","approved_by","approved_at","voided_by","voided_at","void_reason"]],
