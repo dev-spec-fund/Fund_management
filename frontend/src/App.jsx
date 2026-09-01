@@ -26,8 +26,12 @@ const MemberMeetings = lazy(() => pageLoaders.memberViews().then((m) => ({ defau
 const MyActions = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyActions })));
 const MyProfile = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyProfile })));
 
-const loaderForTab = (tab) => {
-  if (["history", "fund", "activity", "meetings", "actions", "profile"].includes(tab)) return pageLoaders.memberViews;
+const loaderForTab = (tab, adminView = false) => {
+  // Activity is shared from MemberViews, but Meetings has separate Admin and
+  // Member implementations. Keep the preload target aligned with the screen
+  // that will actually render so the first Admin Meetings visit is warm too.
+  if (["history", "fund", "activity", "actions", "profile"].includes(tab)) return pageLoaders.memberViews;
+  if (tab === "meetings") return adminView ? pageLoaders.meetings : pageLoaders.memberViews;
   return pageLoaders[tab] || null;
 };
 
@@ -81,7 +85,7 @@ export default function App() {
     const later = adminView ? ["settings"] : [];
 
     const warmCode = (items) => {
-      items.filter((name) => tabs.includes(name)).forEach((name) => loaderForTab(name)?.());
+      items.filter((name) => tabs.includes(name)).forEach((name) => loaderForTab(name, adminView)?.());
     };
 
     const timers = adminView ? [
@@ -123,7 +127,7 @@ export default function App() {
   if (error) return <Shell><Center>Couldn't connect: {error}</Center></Shell>;
 
   const warmTab = (nextTab) => {
-    loaderForTab(nextTab)?.();
+    loaderForTab(nextTab, adminView)?.();
     api.prefetchTabData({
       tab: nextTab,
       adminView,

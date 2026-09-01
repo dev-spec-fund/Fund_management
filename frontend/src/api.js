@@ -132,9 +132,11 @@ async function prefetchMemberData(memberId, stage = "primary") {
   if (!memberId) return [];
   const { month } = currentMaldivesPeriod();
   const paths = stage === "secondary"
-    ? ["/api/me/actions"]
-    : [
+    ? [
+        "/api/me/actions",
         "/api/me/dashboard",
+      ]
+    : [
         `/api/members/${memberId}/statement`,
         `/api/reports/public-summary?month=${month}`,
         "/api/reports/activity",
