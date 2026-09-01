@@ -129,24 +129,62 @@ governanceRoute.get('/meetings/:id/minutes', requireAdmin, async c=>{
 });
 
 governanceRoute.put('/meetings/:id/minutes', requireFinance, async c=>{
-  const admin=c.get('admin')!; const id=Number(c.req.param('id')); const body=await c.req.json().catch(()=>({})) as any;
-  const meeting=await c.env.DB.prepare("SELECT id FROM meetings WHERE id=?").bind(id).first<any>(); if(!meeting)return c.json({error:'Meeting not found'},404);
-  const minutes=String(body.minutes||'').trim().slice(0,12000), decisions=String(body.decisions||'').trim().slice(0,8000);
-  await c.env.DB.prepare("INSERT INTO meeting_minutes(meeting_id,minutes,decisions,recorded_by,updated_at) VALUES(?,?,?,?,datetime('now')) ON CONFLICT(meeting_id) DO UPDATE SET minutes=excluded.minutes,decisions=excluded.decisions,recorded_by=excluded.recorded_by,updated_at=datetime('now')").bind(id,minutes||null,decisions||null,admin.id).run();
-  await auditEntity(c.env,admin.id,'meeting_minutes_saved','meeting',id,null,{minutes_length:minutes.length,decisions_length:decisions.length}); return c.json({ok:true});
+  const admin=c.get('admin')!;
+  const id=Number(c.req.param('id'));
+  if(!Number.isInteger(id)||id<=0) return c.json({error:'Invalid meeting'},400);
+  const body=await c.req.json().catch(()=>({})) as any;
+  const meeting=await c.env.DB.prepare("SELECT id FROM meetings WHERE id=?").bind(id).first<any>();
+  if(!meeting) return c.json({error:'Meeting not found'},404);
+  const minutes=String(body.minutes||'').trim().slice(0,12000);
+  const decisions=String(body.decisions||'').trim().slice(0,8000);
+
+  await c.env.DB.prepare(`INSERT INTO meeting_minutes(meeting_id,minutes,decisions,recorded_by,updated_at)
+    VALUES(?,?,?,?,datetime('now'))
+    ON CONFLICT(meeting_id) DO UPDATE SET
+      minutes=excluded.minutes,
+      decisions=excluded.decisions,
+      recorded_by=excluded.recorded_by,
+      updated_at=datetime('now')`
+  ).bind(id,minutes||null,decisions||null,admin.id).run();
+
+  // Read the row back before reporting success. This catches deployment/schema/write
+  // problems instead of showing a false "saved" message in the Mini App.
+  const saved=await c.env.DB.prepare(`SELECT mm.*,a.name recorded_by_name
+    FROM meeting_minutes mm LEFT JOIN admins a ON a.id=mm.recorded_by
+    WHERE mm.meeting_id=?`).bind(id).first<any>();
+  if(!saved) return c.json({error:'Minutes could not be persisted. Please try again.'},500);
+
+  await auditEntity(c.env,admin.id,'meeting_minutes_saved','meeting',id,null,{minutes_length:minutes.length,decisions_length:decisions.length});
+  return c.json({ok:true,minutes:saved});
 });
 
 governanceRoute.post('/meetings/:id/actions', requireFinance, async c=>{
-  const admin=c.get('admin')!; const id=Number(c.req.param('id')); const b=await c.req.json().catch(()=>({})) as any; const description=String(b.description||'').trim().slice(0,1000);
+  const admin=c.get('admin')!;
+  const id=Number(c.req.param('id'));
+  if(!Number.isInteger(id)||id<=0) return c.json({error:'Invalid meeting'},400);
+  const meeting=await c.env.DB.prepare("SELECT id,title FROM meetings WHERE id=?").bind(id).first<any>();
+  if(!meeting) return c.json({error:'Meeting not found'},404);
+  const b=await c.req.json().catch(()=>({})) as any;
+  const description=String(b.description||'').trim().slice(0,1000);
   if(!description) return c.json({error:'Action item is required'},400);
-  const due=String(b.due_date||'').trim()||null; const memberId=b.assigned_member_id?Number(b.assigned_member_id):null; const adminId=b.assigned_admin_id?Number(b.assigned_admin_id):null;
+  const due=String(b.due_date||'').trim()||null;
+  const memberId=b.assigned_member_id?Number(b.assigned_member_id):null;
+  const adminId=b.assigned_admin_id?Number(b.assigned_admin_id):null;
   const r=await c.env.DB.prepare("INSERT INTO meeting_action_items(meeting_id,description,assigned_member_id,assigned_admin_id,due_date,created_by) VALUES(?,?,?,?,?,?)").bind(id,description,memberId,adminId,due,admin.id).run();
+  const actionId=Number(r.meta.last_row_id);
+  const saved=await c.env.DB.prepare(`SELECT ai.*,m.name member_name,m.member_code,a.name admin_name
+    FROM meeting_action_items ai
+    LEFT JOIN members m ON m.id=ai.assigned_member_id
+    LEFT JOIN admins a ON a.id=ai.assigned_admin_id
+    WHERE ai.id=?`).bind(actionId).first<any>();
+  if(!saved) return c.json({error:'Action item could not be persisted. Please try again.'},500);
+
   if(memberId){
     const assigned=await c.env.DB.prepare("SELECT name,telegram_id FROM members WHERE id=?").bind(memberId).first<any>();
-    const meeting=await c.env.DB.prepare("SELECT title FROM meetings WHERE id=?").bind(id).first<any>();
-    if(assigned?.telegram_id){try{await sendMessage(c.env,assigned.telegram_id,`📌 <b>Meeting action item</b>\n\n${String(meeting?.title||'Meeting')}\n${description}${due?`\nDue: <b>${due}</b>`:''}`)}catch{}}
+    if(assigned?.telegram_id){try{await sendMessage(c.env,assigned.telegram_id,`📌 <b>Meeting action item</b>\n\n${String(meeting.title||'Meeting')}\n${description}${due?`\nDue: <b>${due}</b>`:''}`)}catch{}}
   }
-  await auditEntity(c.env,admin.id,'meeting_action_created','meeting_action',Number(r.meta.last_row_id),null,{meeting_id:id,description,due_date:due,assigned_member_id:memberId}); return c.json({ok:true,id:r.meta.last_row_id});
+  await auditEntity(c.env,admin.id,'meeting_action_created','meeting_action',actionId,null,{meeting_id:id,description,due_date:due,assigned_member_id:memberId});
+  return c.json({ok:true,action:saved});
 });
 
 governanceRoute.patch('/meeting-actions/:id', requireFinance, async c=>{
