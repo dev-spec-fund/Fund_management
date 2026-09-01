@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 export function Modal({ title, onClose, action, children }) {
@@ -12,14 +13,12 @@ export function Modal({ title, onClose, action, children }) {
     const vv = window.visualViewport;
     const appRoot = document.querySelector(".app-page-content");
     const previousOverflowY = appRoot?.style.overflowY || "";
-    const previousTouchAction = appRoot?.style.touchAction || "";
     const previousScrollTop = appRoot?.scrollTop || 0;
 
     // Lock only the normal page scroller. The modal body remains the single active
     // vertical scroller, which avoids gesture transfer to the page behind it.
     if (appRoot) {
       appRoot.style.overflowY = "hidden";
-      appRoot.style.touchAction = "none";
     }
 
     const update = () => setViewport(readViewport());
@@ -33,7 +32,6 @@ export function Modal({ title, onClose, action, children }) {
       window.removeEventListener("resize", update);
       if (appRoot) {
         appRoot.style.overflowY = previousOverflowY;
-        appRoot.style.touchAction = previousTouchAction;
         appRoot.scrollTop = previousScrollTop;
       }
     };
@@ -47,7 +45,7 @@ export function Modal({ title, onClose, action, children }) {
     }, 220);
   };
 
-  return (
+  const modal = (
     <div
       className="app-modal-overlay"
       onFocusCapture={keepFocusedFieldVisible}
@@ -110,6 +108,11 @@ export function Modal({ title, onClose, action, children }) {
       </div>
     </div>
   );
+
+  // Render outside .app-page-content. This is important on iOS/Telegram:
+  // a fixed descendant of the locked page scroller can inherit gesture/overflow
+  // restrictions and make long forms (such as Meeting create/edit) unscrollable.
+  return createPortal(modal, document.body);
 }
 
 export function Field({ label, value, onChange, type = "text", prefix = null, placeholder = "" }) {
