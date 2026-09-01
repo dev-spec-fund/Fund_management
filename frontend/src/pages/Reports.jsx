@@ -78,25 +78,27 @@ export default function Reports({ setTab }) {
 
   return (
     <>
-      <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>REPORTS</div>
-        <div style={{ display: "flex", gap: 6, position: "relative" }}>
-          <button onClick={async()=>{try{const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month,monthLabel,summary})}catch(e){alert(e.message)}}} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
-          <button onClick={exportCsv} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>
-          <button onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Add</button>
-          {showAdd && (
-            <div style={{ position: "absolute", right: 0, top: 38, zIndex: 5, width: 160, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 5, boxShadow: "0 8px 24px var(--shadow)" }}>
-              <button onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "var(--success)", cursor: "pointer" }}>+ Log donation</button>
-              <button onClick={() => { setShowExpense(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "var(--danger)", cursor: "pointer" }}>+ Log expense</button>
-            </div>
-          )}
+      <div className="reports-filter-sticky">
+        <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>REPORTS</div>
+          <div style={{ display: "flex", gap: 6, position: "relative" }}>
+            <button type="button" onClick={async()=>{try{const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month,monthLabel,summary})}catch(e){alert(e.message)}}} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
+            <button type="button" onClick={exportCsv} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>
+            <button type="button" onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Add</button>
+            {showAdd && (
+              <div style={{ position: "absolute", right: 0, top: 38, zIndex: 8, width: 160, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 5, boxShadow: "0 8px 24px var(--shadow)" }}>
+                <button type="button" onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "var(--success)", cursor: "pointer" }}>+ Log donation</button>
+                <button type="button" onClick={() => { setShowExpense(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "var(--danger)", cursor: "pointer" }}>+ Log expense</button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "38px 1fr 38px", alignItems: "center", gap: 8, marginBottom: 14 }}>
-        <button onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
-        <div className="sans" style={{ textAlign: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 10px", fontSize: 14, fontWeight: 600 }}>{monthLabel}</div>
-        <button onClick={() => shiftMonth(1)} aria-label="Next month" style={monthNavBtn()}><ChevronRight size={18} /></button>
+        <div className="reports-month-selector">
+          <button type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
+          <div className="sans" style={{ textAlign: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 10px", fontSize: 14, fontWeight: 600 }}>{monthLabel}</div>
+          <button type="button" onClick={() => shiftMonth(1)} aria-label="Next month" style={monthNavBtn()}><ChevronRight size={18} /></button>
+        </div>
       </div>
 
       <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>MONTHLY SUMMARY</div>

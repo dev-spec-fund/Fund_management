@@ -451,3 +451,21 @@ input:focus, textarea:focus, select:focus {
     width: 100%;
   }
 }
+
+
+/* v34: Reports controls remain visible; report content scrolls underneath. */
+.reports-filter-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bg);
+  padding: 2px 0 10px;
+  margin: -2px 0 12px;
+  border-bottom: 1px solid var(--divider);
+}
+.reports-month-selector {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 8px;
+}
