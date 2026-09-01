@@ -361,18 +361,21 @@ input:focus, textarea:focus, select:focus {
 .reports-filter-sticky,
 .settings-subnav-sticky {
   position: sticky;
-  top: 0;
-  z-index: 6;
+  /* .app-page-content has 20px top padding. Pull the sticky surface through
+     that padding so scrolling rows can never appear in the gap above it. */
+  top: -20px;
+  z-index: 20;
   isolation: isolate;
   background: var(--bg);
-  padding: 4px 0 9px;
-  margin: -4px 0 10px;
+  padding: 24px 0 9px;
+  margin: -20px 0 10px;
   border-bottom: 1px solid var(--divider);
+  box-shadow: 0 6px 10px -10px var(--shadow);
 }
 
 /* Keep each sticky control area visually aligned while its page body scrolls below it. */
 .activity-filter-sticky {
-  z-index: 7;
+  z-index: 21;
 }
 .activity-date-select {
   width: 100%;
