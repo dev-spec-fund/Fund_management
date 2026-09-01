@@ -211,12 +211,12 @@ input:focus, textarea:focus, select:focus {
 
 /* Perceived-speed polish: keep first load visually stable and make tab changes feel native. */
 .page-panel--active {
-  animation: page-enter 130ms ease-out both;
+  animation: page-enter 110ms ease-out both;
 }
 
 @keyframes page-enter {
-  from { opacity: 0.72; transform: translateY(2px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0.82; }
+  to { opacity: 1; }
 }
 
 .page-skeleton {
@@ -333,4 +333,20 @@ input:focus, textarea:focus, select:focus {
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
+}
+
+/* v28: iOS/Telegram activity repaint safety. Avoid transformed compositing layers
+   around the main scroller and force a clean paint boundary for filter results. */
+.activity-results {
+  position: relative;
+  contain: layout paint;
+  transform: none !important;
+  will-change: auto;
+}
+
+.app-page-content,
+.page-panel,
+.page-panel--active {
+  transform: none !important;
+  will-change: auto;
 }

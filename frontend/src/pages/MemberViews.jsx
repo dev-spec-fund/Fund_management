@@ -317,15 +317,17 @@ export function Activity({ isAdmin, canFinance = false }) {
           </button>
         ))}
       </div>
-      {groups.map((group) => (
-        <div key={group.label}>
-          <div className="sans" style={{ display: "flex", alignItems: "center", gap: 8, margin: "13px 2px 7px", fontSize: 10, fontWeight: 700, letterSpacing: 1.1, textTransform: "uppercase", color: "var(--soft)" }}>
-            <span>{group.label}</span><span style={{ height: 1, flex: 1, background: "var(--border)" }} />
+      <div key={`activity-results-${filter}`} className="activity-results">
+        {groups.map((group) => (
+          <div key={`${filter}-${group.label}`}>
+            <div className="sans" style={{ display: "flex", alignItems: "center", gap: 8, margin: "13px 2px 7px", fontSize: 10, fontWeight: 700, letterSpacing: 1.1, textTransform: "uppercase", color: "var(--soft)" }}>
+              <span>{group.label}</span><span style={{ height: 1, flex: 1, background: "var(--border)" }} />
+            </div>
+            {group.rows.map((a) => <ActivityRow key={`${filter}-${a._kind}-${a.id}`} a={a} isAdmin={isAdmin} canFinance={canFinance} onExpenseClick={openExpense} />)}
           </div>
-          {group.rows.map((a) => <ActivityRow key={`${a.kind}-${a.id}`} a={a} isAdmin={isAdmin} canFinance={canFinance} onExpenseClick={openExpense} />)}
-        </div>
-      ))}
-      {filtered.length === 0 && <div className="sans" style={{ fontSize: 13, color: "var(--soft)" }}>Nothing here yet.</div>}
+        ))}
+        {filtered.length === 0 && <div className="sans" style={{ fontSize: 13, color: "var(--soft)" }}>Nothing here yet.</div>}
+      </div>
 
       {editingExpense && <Modal title="Edit expense" onClose={() => !expenseBusy && setEditingExpense(null)}>
         <div className="sans" style={{fontSize:11,color:"var(--muted)",background:"var(--success-bg)",padding:"9px 10px",borderRadius:9,marginBottom:12,lineHeight:1.45}}>
