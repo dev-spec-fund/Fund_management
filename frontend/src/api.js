@@ -17,9 +17,42 @@ function initData() {
 const GET_CACHE_TTL_MS = 20_000;
 const responseCache = new Map();
 const inFlightGets = new Map();
+let cacheGeneration = 0;
 
 function clearGetCache() {
+  cacheGeneration += 1;
   responseCache.clear();
+  // Existing GET promises cannot be cancelled, but removing them here ensures a
+  // post-mutation refresh does not reuse a request that started before the write.
+  inFlightGets.clear();
+}
+
+const DATA_CHANGED_EVENT = "fund:data-changed";
+
+function shouldBroadcastDataChange(path, method) {
+  if (method === "GET") return false;
+  const liveDataPrefixes = [
+    "/api/members",
+    "/api/expenses",
+    "/api/donations",
+    "/api/governance/reverse",
+    "/api/governance/month-close",
+    "/api/admin/pending/registrations",
+    "/api/admin/pending/contributions",
+  ];
+  return liveDataPrefixes.some((prefix) => path.startsWith(prefix));
+}
+
+function broadcastDataChange(path, method) {
+  if (typeof window === "undefined" || !shouldBroadcastDataChange(path, method)) return;
+  window.dispatchEvent(new CustomEvent(DATA_CHANGED_EVENT, { detail: { path, method, at: Date.now() } }));
+}
+
+export function onDataChange(listener) {
+  if (typeof window === "undefined") return () => {};
+  const handler = (event) => listener(event.detail || {});
+  window.addEventListener(DATA_CHANGED_EVENT, handler);
+  return () => window.removeEventListener(DATA_CHANGED_EVENT, handler);
 }
 
 function cacheKey(path) {
@@ -39,6 +72,7 @@ async function request(path, options = {}) {
     if (pending) return pending;
   }
 
+  const requestGeneration = cacheGeneration;
   const run = async () => {
     const res = await fetch(apiUrl(path), {
       ...options,
@@ -53,13 +87,22 @@ async function request(path, options = {}) {
       throw new Error(body.error || `Request failed: ${res.status}`);
     }
     const data = await res.json();
-    if (isGet) responseCache.set(key, { data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
-    else clearGetCache();
+    if (isGet) {
+      if (requestGeneration === cacheGeneration) {
+        responseCache.set(key, { data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
+      }
+    } else {
+      clearGetCache();
+      broadcastDataChange(path, method);
+    }
     return data;
   };
 
   if (!isGet) return run();
-  const promise = run().finally(() => inFlightGets.delete(key));
+  let promise;
+  promise = run().finally(() => {
+    if (inFlightGets.get(key) === promise) inFlightGets.delete(key);
+  });
   inFlightGets.set(key, promise);
   return promise;
 }
@@ -76,18 +119,13 @@ async function upload(path, formData) {
   }
   const data = await res.json();
   clearGetCache();
+  broadcastDataChange(path, "POST");
   return data;
 }
 
 export const api = {
   me: () => request("/api/me"),
-  branding: () => request("/api/branding"),
   myContributions: () => request("/api/me/contributions"),
-  myDashboard: () => request("/api/me/dashboard"),
-  myMeetings: () => request("/api/me/meetings"),
-  myActions: () => request("/api/me/actions"),
-  myMeetingRsvp: (id, response) => request(`/api/me/meetings/${id}/rsvp`, { method: "POST", body: JSON.stringify({ response }) }),
-  completeMyAction: (id) => request(`/api/me/actions/${id}/done`, { method: "POST" }),
 
   members: {
     list: () => request("/api/members"),
@@ -98,19 +136,10 @@ export const api = {
       request(`/api/members/${id}/exempt`, { method: "POST", body: JSON.stringify({ month, reason }) }),
     statement: (id) => request(`/api/members/${id}/statement`),
     monthlyStatus: (id, month) => request(`/api/members/${id}/monthly-status${month ? `?month=${month}` : ""}`),
-    contributionRates: (id) => request(`/api/members/${id}/contribution-rates`),
-    setContributionRate: (id, data) => request(`/api/members/${id}/contribution-rates`, { method: "POST", body: JSON.stringify(data) }),
   },
 
   expenses: {
-    list: (filters = {}) => {
-      const params = new URLSearchParams();
-      if (filters.month) params.set("month", filters.month);
-      if (filters.status) params.set("status", filters.status);
-      if (filters.q) params.set("q", filters.q);
-      const qs = params.toString();
-      return request(`/api/expenses${qs ? `?${qs}` : ""}`);
-    },
+    list: () => request("/api/expenses"),
     create: (data) => request("/api/expenses", { method: "POST", body: JSON.stringify(data) }),
     update: (id, data) => request(`/api/expenses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     remove: (id, reason) => request(`/api/expenses/${id}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
@@ -196,6 +225,7 @@ export const api = {
     resolveError: (id) => request(`/api/admin/errors/${id}/resolve`, { method: "POST" }),
     resolveAllErrors: () => request("/api/admin/errors/resolve-all", { method: "POST" }),
     monthClosures: () => request("/api/admin/month-close"),
+    closeMonth: (month, note) => request(`/api/admin/month-close/${month}`, { method: "POST", body: JSON.stringify({ note }) }),
     reopenMonth: (month) => request(`/api/admin/month-close/${month}`, { method: "DELETE" }),
     backup: () => request("/api/admin/backup"),
   },
