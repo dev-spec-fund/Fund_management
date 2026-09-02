@@ -200,10 +200,12 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) as total FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month = ?").bind(month).first<{total:number}>(),
     c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month = ?").bind(month).first<{total:number}>(),
     c.env.DB.prepare(`
-      SELECT cat.id as category_id,cat.name as category,COALESCE(SUM(e.amount),0) spent
-      FROM expense_categories cat
-      LEFT JOIN expenses e ON e.category_id=cat.id AND COALESCE(e.status,'approved')='approved' AND e.transaction_month=?
-      GROUP BY cat.id
+      SELECT e.category_id,COALESCE(cat.name,'Uncategorised') as category,COALESCE(SUM(e.amount),0) spent
+      FROM expenses e
+      LEFT JOIN expense_categories cat ON cat.id=e.category_id
+      WHERE COALESCE(e.status,'approved')='approved' AND e.transaction_month=?
+      GROUP BY e.category_id,COALESCE(cat.name,'Uncategorised')
+      ORDER BY spent DESC,category ASC
     `).bind(month).all(),
     c.env.DB.prepare(`
       SELECT
@@ -315,7 +317,14 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
     advanceAllocatedForMonth(c.env,month),
     c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month=?").bind(month).first<{total:number}>(),
     c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month=?").bind(month).first<{total:number}>(),
-    c.env.DB.prepare(`SELECT cat.name category,COALESCE(SUM(e.amount),0) spent FROM expense_categories cat LEFT JOIN expenses e ON e.category_id=cat.id AND COALESCE(e.status,'approved')='approved' AND e.transaction_month=? GROUP BY cat.id`).bind(month).all(),
+    c.env.DB.prepare(`
+      SELECT COALESCE(cat.name,'Uncategorised') category,COALESCE(SUM(e.amount),0) spent
+      FROM expenses e
+      LEFT JOIN expense_categories cat ON cat.id=e.category_id
+      WHERE COALESCE(e.status,'approved')='approved' AND e.transaction_month=?
+      GROUP BY e.category_id,COALESCE(cat.name,'Uncategorised')
+      ORDER BY spent DESC,category ASC
+    `).bind(month).all(),
     c.env.DB.prepare(`
       SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.approved_at,
              COALESCE(cat.name,'Uncategorised') category,COALESCE(a.name,'-') logged_by_name
