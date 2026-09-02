@@ -135,7 +135,7 @@ export default function Expenses({ admin }) {
               <span style={{ fontSize: 9, padding: "3px 6px", borderRadius: 999, background: tone.bg, color: tone.color, border: `1px solid ${tone.border}` }}>{statusLabel(row)}</span>
             </div>
             <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 4 }}>
-              {row.expense_date || row.transaction_month} · {row.category_name || "Uncategorized"}{row.project_name ? ` · ${row.project_name}` : ""} · {row.txn_id || `#${row.id}`}
+              {row.expense_date || row.transaction_month} · {row.category_name || (row.project_name ? "Project expense / Uncategorised" : "Uncategorised")}{row.project_name ? ` · ${row.project_name}` : ""} · {row.txn_id || `#${row.id}`}
             </div>
           </div>
           <div className="sans" style={{ color: "var(--danger)", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>MVR {fmt(row.amount)}</div>
@@ -164,6 +164,7 @@ function ExpenseForm({ admin, onClose, onSaved, row = null }) {
 
   const save = async () => {
     if (!form.description.trim() || !form.expense_date || Number(form.amount) <= 0) return setError("Description, amount and expense date are required.");
+    if (!form.project_id && !form.category_id) return setError("Category is required for a normal expense. Select a project to make category optional.");
     setBusy(true); setError("");
     try {
       const payload = { description: form.description.trim(), category_id: form.category_id || null, project_id: form.project_id || null, amount: Number(form.amount), expense_date: form.expense_date };
@@ -175,9 +176,9 @@ function ExpenseForm({ admin, onClose, onSaved, row = null }) {
   return <Modal onClose={onClose} title={row ? "Edit expense" : "Add expense"}>
     <MessageBanner tone="error">{error}</MessageBanner>
     <Field label="Description" value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
-    <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Category</div>
+    <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{form.project_id ? "Category (optional)" : "Category"}</div>
     <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className="sans" style={{ width: "100%", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, background: "var(--card)" }}>
-      <option value="">Select category</option>
+      <option value="">{form.project_id ? "No category / Project expense" : "Select category"}</option>
       {categories.filter((c) => Number(c.active) !== 0 || Number(c.id) === Number(form.category_id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
     </select>
     <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Project (optional)</div>
@@ -215,7 +216,7 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
       <Detail label="Description" value={row.description} />
       <Detail label="Amount" value={`MVR ${fmt(row.amount)}`} />
       <Detail label="Expense date" value={row.expense_date || row.transaction_month || "—"} />
-      <Detail label="Category" value={row.category_name || "Uncategorized"} />
+      <Detail label="Category" value={row.category_name || (row.project_name ? "Project expense / Uncategorised" : "Uncategorised")} />
       <Detail label="Project" value={row.project_name ? `${row.project_code || ""} ${row.project_name}`.trim() : "None / General"} />
       <Detail label="Status" value={statusLabel(row)} />
       <Detail label="Logged by" value={row.logged_by_name || `Admin #${row.logged_by}`} />

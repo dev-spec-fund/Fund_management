@@ -84,6 +84,7 @@ expensesRoute.post("/", requireFinance, async (c) => {
   if(body.category_id && !category) return c.json({error:"Expense category is inactive or does not exist"},409);
   const project=await validProject(c,body.project_id);
   if(body.project_id && !project) return c.json({error:"Project does not exist"},409);
+  if(!project && !category?.id) return c.json({error:"Expense category is required when no project is selected"},400);
   try{await requireOpenMonth(c.env,month);}catch(e:any){return c.json({error:e.message},409);}
   const budgetProblem=await validateProjectBudget(c,admin,project,amount,body); if(budgetProblem)return budgetProblem;
   const available=await availableFundBalance(c.env);
@@ -178,6 +179,7 @@ expensesRoute.patch("/:id", requireFinance, async (c) => {
   const requestedProject=body.project_id===undefined?before.project_id:(body.project_id?Number(body.project_id):null);
   const project=await validProject(c,requestedProject);
   if(requestedProject && !project) return c.json({error:"Project does not exist"},409);
+  if(!project && !requestedCategory) return c.json({error:"Expense category is required when no project is selected"},400);
 
   if(!description || amount===null) return c.json({error:"Description and valid positive amount are required"},400);
   const replaceApproved=before.status==='approved'?Number(before.amount||0):0;
