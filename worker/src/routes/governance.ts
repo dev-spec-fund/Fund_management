@@ -216,7 +216,7 @@ async function yearData(env:any, year:string){
     };
     return {...await monthMetrics(env,m),source:'live'};
   }));
-  const [categories,expenseDetails,expenseAdjustments,reversals,meetings]=await Promise.all([
+  const [categories,expenseDetails,expenseAdjustments,donationDetails,donationAdjustments,memberRows,reversals,meetings]=await Promise.all([
     env.DB.prepare(`SELECT COALESCE(cat.name,'Uncategorised') category,COALESCE(SUM(e.amount),0) total FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id WHERE e.status='approved' AND e.transaction_month LIKE ? GROUP BY COALESCE(cat.name,'Uncategorised') ORDER BY total DESC`).bind(`${year}-%`).all<any>(),
     env.DB.prepare(`
       SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.approved_at,
@@ -235,10 +235,58 @@ async function yearData(env:any, year:string){
       WHERE e.status IN ('reversed','voided') AND e.transaction_month LIKE ?
       ORDER BY e.transaction_month ASC,COALESCE(e.voided_at,e.expense_date,e.created_at) ASC,e.id ASC
     `).bind(`${year}-%`).all<any>(),
+    env.DB.prepare(`
+      SELECT d.id,d.txn_id,d.donor_name,d.member_id,d.amount,d.note,d.transaction_month,d.status,d.created_at,
+             m.member_code,m.name member_name,COALESCE(a.name,'-') logged_by_name
+      FROM donations d
+      LEFT JOIN members m ON m.id=d.member_id
+      LEFT JOIN admins a ON a.id=d.logged_by
+      WHERE COALESCE(d.status,'active')='active' AND d.transaction_month LIKE ?
+      ORDER BY d.transaction_month ASC,d.created_at ASC,d.id ASC
+    `).bind(`${year}-%`).all<any>(),
+    env.DB.prepare(`
+      SELECT d.id,d.txn_id,d.donor_name,d.member_id,d.amount,d.note,d.transaction_month,d.status,d.created_at,d.voided_at,d.void_reason,
+             m.member_code,m.name member_name
+      FROM donations d
+      LEFT JOIN members m ON m.id=d.member_id
+      WHERE d.status IN ('reversed','voided') AND d.transaction_month LIKE ?
+      ORDER BY d.transaction_month ASC,COALESCE(d.voided_at,d.created_at) ASC,d.id ASC
+    `).bind(`${year}-%`).all<any>(),
+    env.DB.prepare(`
+      SELECT m.id,m.member_code,m.name,m.monthly_amount,m.joined_at,m.created_at,
+        COALESCE((SELECT SUM(ca.amount) FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id WHERE ca.member_id=m.id AND ca.month LIKE ? AND c.status='approved'),0)+
+        COALESCE((SELECT SUM(c.amount) FROM contributions c WHERE c.member_id=m.id AND c.month LIKE ? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations ca WHERE ca.contribution_id=c.id)),0) collected
+      FROM members m
+      WHERE m.active=1
+      ORDER BY m.member_code,m.name
+    `).bind(`${year}-%`,`${year}-%`).all<any>(),
     env.DB.prepare("SELECT COUNT(*) count,COALESCE(SUM(amount),0) total FROM financial_reversals WHERE month LIKE ?").bind(`${year}-%`).first<any>(),
     env.DB.prepare("SELECT COUNT(*) count FROM meetings WHERE meeting_date LIKE ?").bind(`${year}-%`).first<any>()
   ]);
-  return {year,months:metrics,expense_categories:categories.results,expenses:expenseDetails.results,expense_adjustments:expenseAdjustments.results,reversals:{count:n(reversals?.count),total:n(reversals?.total)},meetings:n(meetings?.count)};
+
+  const memberContributions=await Promise.all(memberRows.results.map(async(r:any)=>{
+    const [rates,exemptions]=await Promise.all([
+      env.DB.prepare("SELECT amount,effective_from,effective_to FROM member_contribution_rates WHERE member_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) ORDER BY effective_from").bind(r.id,`${year}-12`,`${year}-01`).all<any>(),
+      env.DB.prepare("SELECT month FROM exemptions WHERE member_id=? AND month LIKE ?").bind(r.id,`${year}-%`).all<any>()
+    ]);
+    const exempt=new Set(exemptions.results.map((x:any)=>String(x.month)));
+    const joined=String(r.joined_at||r.created_at||`${year}-01`).slice(0,7);
+    let annualTarget=0;
+    for(let monthNo=1;monthNo<=count;monthNo++){
+      const month=`${year}-${String(monthNo).padStart(2,'0')}`;
+      if(month<joined||exempt.has(month)) continue;
+      annualTarget+=rateForMonthFromRows(rates.results as any[],month,n(r.monthly_amount));
+    }
+    const collected=n(r.collected);
+    const outstanding=Math.max(0,annualTarget-collected);
+    return {id:r.id,member_code:r.member_code,name:r.name,annual_target:annualTarget,collected,outstanding,rate:annualTarget>0?Math.min(100,collected/annualTarget*100):100};
+  }));
+
+  return {
+    year,months:metrics,expense_categories:categories.results,expenses:expenseDetails.results,expense_adjustments:expenseAdjustments.results,
+    donations:donationDetails.results,donation_adjustments:donationAdjustments.results,member_contributions:memberContributions,
+    reversals:{count:n(reversals?.count),total:n(reversals?.total)},meetings:n(meetings?.count)
+  };
 }
 
 governanceRoute.get('/annual/:year', requireAdmin, async c=>{

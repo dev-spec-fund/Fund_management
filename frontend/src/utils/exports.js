@@ -530,6 +530,62 @@ export async function exportAnnualAgmPdf(data) {
     { fontSize: 6.9 }
   );
 
+  if ((data?.member_contributions || []).length) {
+    sectionTitle(ctx, "Member contribution summary", "Annual contribution target and collection position for active members. Exempt months are excluded from the annual target.");
+    table(ctx,
+      [
+        { key: "member_code", label: "Member ID", width: 24, bold: true },
+        { key: "name", label: "Member", width: 52 },
+        { key: "annual_target", label: "Annual due", width: 30, align: "right", format: v => money(v) },
+        { key: "collected", label: "Collected", width: 30, align: "right", bold: true, color: C.green2, format: v => money(v) },
+        { key: "outstanding", label: "Outstanding", width: 30, align: "right", bold: true, color: r => Number(r.outstanding || 0) > 0 ? C.red : C.green2, format: v => money(v) },
+        { key: "rate", label: "Rate", width: 16, align: "right", format: v => `${Number(v || 0).toFixed(0)}%` },
+      ],
+      data.member_contributions,
+      { fontSize: 6.5 }
+    );
+    const memberTotals=data.member_contributions.reduce((a,row)=>({due:a.due+Number(row.annual_target||0),collected:a.collected+Number(row.collected||0),outstanding:a.outstanding+Number(row.outstanding||0)}),{due:0,collected:0,outstanding:0});
+    infoPanel(ctx, [
+      ["Annual member obligations", money(memberTotals.due)],
+      ["Member contributions collected", money(memberTotals.collected)],
+      ["Outstanding member obligations", money(memberTotals.outstanding)],
+    ]);
+  }
+
+  if ((data?.donations || []).length) {
+    sectionTitle(ctx, "Donation details", "Active donations included in the annual donation total.");
+    table(ctx,
+      [
+        { key: "transaction_month", label: "Month", width: 22, bold: true },
+        { key: "created_at", label: "Date", width: 24, format: v => String(v || "").slice(0,10) },
+        { key: "txn_id", label: "Donation ID", width: 26, bold: true },
+        { key: "donor_name", label: "Donor", width: 42, format: (v,r) => r.member_code ? `${v || r.member_name || "-"} (${r.member_code})` : (v || "-") },
+        { key: "note", label: "Note", width: 35, format: v => v || "-" },
+        { key: "amount", label: "Amount", width: 33, align: "right", bold: true, color: C.green2, format: v => money(v) },
+      ],
+      data.donations,
+      { fontSize: 6.5 }
+    );
+    const donationTotal=data.donations.reduce((sum,row)=>sum+Number(row.amount||0),0);
+    infoPanel(ctx, [["Detailed annual donation total", money(donationTotal)]]);
+  }
+
+  if ((data?.donation_adjustments || []).length) {
+    sectionTitle(ctx, "Donation adjustments", "Reversed or voided donations remain visible for audit history and are excluded from active donation totals.");
+    table(ctx,
+      [
+        { key: "transaction_month", label: "Month", width: 22, bold: true },
+        { key: "txn_id", label: "Donation ID", width: 28, bold: true },
+        { key: "donor_name", label: "Donor", width: 45 },
+        { key: "amount", label: "Amount", width: 30, align: "right", bold: true, format: v => money(v) },
+        { key: "status", label: "Status", width: 25, bold: true, color: r => statusColor(r.status), format: v => String(v || "").toUpperCase() },
+        { key: "void_reason", label: "Reason", width: 32, format: v => v || "Financial reversal" },
+      ],
+      data.donation_adjustments,
+      { fontSize: 6.4 }
+    );
+  }
+
   if ((data?.expense_categories || []).length) {
     sectionTitle(ctx, "Expense categories");
     table(ctx,
