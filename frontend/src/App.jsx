@@ -44,6 +44,7 @@ const Meetings = lazy(pageLoaders.meetings);
 const Settings = lazy(pageLoaders.settings);
 const MyHistory = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyHistory })));
 const FundView = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.FundView })));
+const MemberProjects = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MemberProjects })));
 const Activity = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.Activity })));
 const MemberMeetings = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MemberMeetings })));
 const MyActions = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyActions })));
@@ -53,7 +54,7 @@ const loaderForTab = (tab, adminView = false) => {
   // Activity is shared from MemberViews, but Meetings has separate Admin and
   // Member implementations. Keep the preload target aligned with the screen
   // that will actually render so the first Admin Meetings visit is warm too.
-  if (["history", "fund", "activity", "actions", "profile"].includes(tab)) return pageLoaders.memberViews;
+  if (["history", "fund", "projects", "activity", "actions", "profile"].includes(tab)) return pageLoaders.memberViews;
   if (tab === "meetings") return adminView ? pageLoaders.meetings : pageLoaders.memberViews;
   return pageLoaders[tab] || null;
 };
@@ -76,7 +77,7 @@ export default function App() {
   const canFinance = adminView && ["owner", "super_admin", "treasurer"].includes(me?.admin?.role);
   const tabs = useMemo(() => adminView
     ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "projects", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
-    : ["overview", "history", "fund", "activity", "meetings", "actions", "profile"], [adminView, canFinance]);
+    : ["overview", "history", "fund", ...(me?.member_features?.projects === false ? [] : ["projects"]), "activity", "meetings", "actions", "profile"], [adminView, canFinance, me?.member_features?.projects]);
 
   useEffect(() => {
     const telegram = window.Telegram?.WebApp;
@@ -117,7 +118,7 @@ export default function App() {
     // are staged so they do not compete with the Overview bootstrap request.
     const likelyNext = adminView
       ? (canFinance ? ["pending", "members", "activity"] : ["members", "activity"])
-      : ["history", "fund", "activity", "meetings"];
+      : ["history", "fund", ...(me?.member_features?.projects === false ? [] : ["projects"]), "activity", "meetings"];
     const secondary = adminView
       ? (canFinance ? ["expenses", "projects", "reports", "meetings"] : ["reports", "meetings"])
       : ["actions", "profile"];
@@ -198,6 +199,7 @@ export default function App() {
     if (page === "members" && adminView) return <Members isAdmin admin={me.admin} />;
     if (page === "history" && memberView) return <MyHistory member={me.member} />;
     if (page === "fund" && memberView) return <FundView />;
+    if (page === "projects" && memberView) return <MemberProjects />;
     if (page === "activity") return <Activity isAdmin={adminView} canFinance={canFinance} />;
     if (page === "meetings" && memberView) return <MemberMeetings />;
     if (page === "actions" && memberView) return <MyActions />;

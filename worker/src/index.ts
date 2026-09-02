@@ -13,7 +13,7 @@ import { adminRoute } from "./routes/admin";
 import { governanceRoute } from "./routes/governance";
 import { projectsRoute } from "./routes/projects";
 import { consumeRateLimit, safeLogError } from "./ops";
-import { currentMonth, getBranding } from "./db";
+import { currentMonth, getBranding, getSetting } from "./db";
 import { paidForMonth } from "./allocations";
 import { contributionRateForMonth } from "./contributionRates";
 
@@ -70,8 +70,9 @@ app.get("/api/me", async (c) => {
     "SELECT id, member_code, telegram_id, name, phone, monthly_amount, active, joined_at, created_at FROM members WHERE telegram_id = ? LIMIT 1"
   ).bind(String(user.id)).first<any>();
   if(member){ const month=currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives"); member.monthly_amount=await contributionRateForMonth(c.env,Number(member.id),month,Number(member.monthly_amount||0)); }
-  const branding = await getBranding(c.env);
-  return c.json({ user, admin: c.get("admin"), member: member || null, branding });
+  const [branding, showProjectsSetting] = await Promise.all([getBranding(c.env), getSetting(c.env, "show_projects_to_members")]);
+  const member_features = { projects: showProjectsSetting !== "0" };
+  return c.json({ user, admin: c.get("admin"), member: member || null, branding, member_features });
 });
 
 app.post("/api/me/meetings/:id/rsvp", async (c) => {
@@ -110,6 +111,35 @@ app.get("/api/me/dashboard", async (c) => {
   const due=exemption?0:Math.max(0,Number(rate)-Number(paid));
   const status=exemption?'exempt':Number(paid)<=0?'unpaid':Number(paid)+0.005<Number(rate)?'partial':'paid';
   return c.json({member,month,contribution:{status,paid:Number(paid),due,monthly_amount:Number(rate),exemption_reason:exemption?.reason||null},pending_payments:pending.results,next_meeting:nextMeeting||null,open_actions:openActions.results});
+});
+
+
+app.get("/api/me/projects", async (c) => {
+  const user=c.get("telegramUser");
+  const member=await c.env.DB.prepare("SELECT id FROM members WHERE telegram_id=? AND active=1 LIMIT 1").bind(String(user.id)).first<any>();
+  if(!member) return c.json({error:"Member account not linked"},404);
+  const showProjects=await getSetting(c.env,"show_projects_to_members");
+  if(showProjects==="0") return c.json({enabled:false,projects:[]});
+  const projects=await c.env.DB.prepare(`SELECT p.id,p.project_code,p.name,p.description,p.budget,p.start_date,p.target_end_date,p.status,
+      m.name responsible_member_name,m.member_code responsible_member_code,
+      COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount ELSE 0 END),0) spent,
+      COUNT(CASE WHEN e.status='approved' THEN 1 END) expense_count
+    FROM projects p
+    LEFT JOIN members m ON m.id=p.responsible_member_id
+    LEFT JOIN expenses e ON e.project_id=p.id
+    WHERE p.status IN ('active','completed')
+    GROUP BY p.id
+    ORDER BY CASE p.status WHEN 'active' THEN 0 ELSE 1 END,p.start_date DESC,p.id DESC`).all<any>();
+  const result=[] as any[];
+  for(const project of projects.results){
+    const expenses=await c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,COALESCE(cat.name,'Project expense / Uncategorised') category
+      FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id
+      WHERE e.project_id=? AND e.status='approved'
+      ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC LIMIT 100`).bind(project.id).all<any>();
+    const spent=Number(project.spent||0); const budget=project.budget==null?null:Number(project.budget);
+    result.push({...project,spent,remaining_budget:budget==null?null:budget-spent,budget_used_pct:budget==null?null:(spent/Math.max(budget,0.01))*100,expenses:expenses.results});
+  }
+  return c.json({enabled:true,projects:result});
 });
 
 app.get("/api/me/meetings", async (c) => {

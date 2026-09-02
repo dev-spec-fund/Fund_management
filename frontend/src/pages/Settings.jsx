@@ -210,6 +210,21 @@ export default function Settings({ admin }) {
         <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:6}}>Used automatically for new members. Existing member amounts are not changed.</div>
       </div>
 
+      <SectionTitle>MEMBER PROJECT TRANSPARENCY</SectionTitle>
+      <div style={cardStyle}>
+        <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:"var(--primary-text)"}}>Show Community Projects to members</div>
+            <div style={{fontSize:10,color:"var(--soft)",marginTop:3}}>Members can see active/completed projects, approved spending and budget progress. Pending expenses, override reasons, internal notes and audit history stay private.</div>
+          </div>
+          <button disabled={!superAdmin} onClick={()=>superAdmin&&saveSetting("show_projects_to_members",settings.show_projects_to_members==="0"?"1":"0")}
+            aria-label="Toggle member project transparency"
+            style={{width:42,height:24,border:0,borderRadius:999,padding:3,background:settings.show_projects_to_members==="0"?"var(--toggle-off)":"var(--success)",cursor:superAdmin?"pointer":"default",flexShrink:0}}>
+            <span style={{display:"block",width:18,height:18,borderRadius:999,background:"var(--card)",transform:settings.show_projects_to_members==="0"?"translateX(0)":"translateX(18px)",transition:"transform .15s"}}/>
+          </button>
+        </div>
+      </div>
+
       <SectionTitle>EXPENSE CATEGORIES</SectionTitle>
       <div style={cardStyle}>
         {categories.map(cat=><div key={cat.id} className="sans" style={{display:"flex",alignItems:"center",gap:7,padding:"8px 0",borderBottom:"1px solid var(--divider)",opacity:Number(cat.active)===0?.55:1}}>

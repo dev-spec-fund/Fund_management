@@ -137,3 +137,14 @@ test("project lifecycle keeps read-only controls and distinct audit actions", ()
   assert.match(projects,/Only Super Admin can edit or reopen a completed\/cancelled project/);
   assert.match(projects,/audit_history/);
 });
+
+test('member community-project view exposes approved spending only and is admin-toggleable', () => {
+  const index = fs.readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+  const settings = fs.readFileSync(new URL('../src/routes/settings.ts', import.meta.url), 'utf8');
+  assert.match(index, /\/api\/me\/projects/);
+  assert.match(index, /show_projects_to_members/);
+  assert.match(index, /e\.status='approved'/);
+  assert.match(index, /p\.status IN \('active','completed'\)/);
+  assert.doesNotMatch(index, /fund_override_reason/);
+  assert.match(settings, /show_projects_to_members/);
+});
