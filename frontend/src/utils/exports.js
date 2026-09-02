@@ -107,24 +107,29 @@ function addFooters(ctx) {
   }
 }
 
-function sectionTitle(ctx, title, subtitle = "") {
-  ctx.ensure(subtitle ? 18 : 13);
+function sectionTitle(ctx, title, subtitle = "", reserveAfter = 0) {
   const { doc, margin, pageW } = ctx;
+  const subtitleLines = subtitle
+    ? doc.splitTextToSize(String(subtitle), pageW - margin * 2)
+    : [];
+  // Reserve enough room for the heading plus the first meaningful content
+  // (typically a table header + first row). This prevents orphan headings.
+  const titleHeight = 8 + (subtitleLines.length ? subtitleLines.length * 4 + 3 : 0);
+  ctx.ensure(titleHeight + Math.max(0, reserveAfter));
   rgb(doc, "setTextColor", C.green);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
+  doc.setFontSize(PDF_TYPE.section);
   doc.text(String(title).toUpperCase(), margin, ctx.y);
   rgb(doc, "setDrawColor", C.border);
   doc.setLineWidth(0.35);
   doc.line(margin, ctx.y + 3, pageW - margin, ctx.y + 3);
   ctx.y += 8;
-  if (subtitle) {
+  if (subtitleLines.length) {
     rgb(doc, "setTextColor", C.muted);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(PDF_TYPE.helper);
-    const lines = doc.splitTextToSize(String(subtitle), pageW - margin * 2);
-    doc.text(lines, margin, ctx.y);
-    ctx.y += lines.length * 4 + 3;
+    doc.text(subtitleLines, margin, ctx.y);
+    ctx.y += subtitleLines.length * 4 + 3;
   }
 }
 
@@ -438,7 +443,7 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
 
   const categories = (summary.byCategory || []).filter(x => Number(x.spent || 0) > 0);
   if (categories.length) {
-    sectionTitle(ctx, "Expense categories");
+    sectionTitle(ctx, "Expense categories", "", 16);
     table(ctx,
       [
         { key: "category", label: "Category", width: 115, bold: true, format: v => v || "Uncategorised" },
@@ -525,7 +530,7 @@ export async function exportAnnualAgmPdf(data) {
 
   collectionChart(ctx, data?.months || []);
 
-  sectionTitle(ctx, "Monthly performance");
+  sectionTitle(ctx, "Monthly performance", "", 16);
   table(ctx,
     [
       { key: "month", label: "Month", width: 25, bold: true },
@@ -540,7 +545,7 @@ export async function exportAnnualAgmPdf(data) {
   );
 
   if ((data?.member_contributions || []).length) {
-    sectionTitle(ctx, "Member contribution summary", "Amounts applied to obligations are separated from advance/future contributions. Exempt months are excluded from the reporting-period target.");
+    sectionTitle(ctx, "Member contribution summary", "Amounts applied to obligations are separated from advance/future contributions. Exempt months are excluded from the reporting-period target.", 16);
     table(ctx,
       [
         { key: "member_code", label: "Member ID", width: 22, bold: true },
@@ -565,7 +570,7 @@ export async function exportAnnualAgmPdf(data) {
   }
 
   if ((data?.donations || []).length) {
-    sectionTitle(ctx, "Donation details", "Active donations included in the annual donation total.");
+    sectionTitle(ctx, "Donation details", "Active donations included in the annual donation total.", 16);
     table(ctx,
       [
         { key: "transaction_month", label: "Month", width: 22, bold: true },
@@ -583,7 +588,7 @@ export async function exportAnnualAgmPdf(data) {
   }
 
   if ((data?.donation_adjustments || []).length) {
-    sectionTitle(ctx, "Donation adjustments", "Reversed or voided donations remain visible for audit history and are excluded from active donation totals.");
+    sectionTitle(ctx, "Donation adjustments", "Reversed or voided donations remain visible for audit history and are excluded from active donation totals.", 16);
     table(ctx,
       [
         { key: "transaction_month", label: "Month", width: 22, bold: true },
@@ -599,7 +604,7 @@ export async function exportAnnualAgmPdf(data) {
   }
 
   if ((data?.meeting_summary || []).length) {
-    sectionTitle(ctx, "Meeting summary / RSVP", "RSVP responses are shown because the current system does not yet store confirmed post-meeting attendance.");
+    sectionTitle(ctx, "Meeting summary / RSVP", "RSVP responses are shown because the current system does not yet store confirmed post-meeting attendance.", 16);
     table(ctx,
       [
         { key: "meeting_date", label: "Date", width: 24, bold: true, format: v => String(v || "").slice(0,10) },
@@ -616,7 +621,7 @@ export async function exportAnnualAgmPdf(data) {
   }
 
   if ((data?.meeting_actions || []).length) {
-    sectionTitle(ctx, "Meeting action items", "Action items created from meetings during the reporting year.");
+    sectionTitle(ctx, "Meeting action items", "Action items created from meetings during the reporting year.", 16);
     table(ctx,
       [
         { key: "meeting_date", label: "Date", width: 22, bold: true, format: v => String(v || "").slice(0,10) },
@@ -632,7 +637,7 @@ export async function exportAnnualAgmPdf(data) {
   }
 
   if ((data?.expense_categories || []).length) {
-    sectionTitle(ctx, "Expense categories");
+    sectionTitle(ctx, "Expense categories", "", 16);
     table(ctx,
       [
         { key: "category", label: "Category", width: 115, bold: true, format: v => v || "Uncategorised" },
@@ -643,7 +648,7 @@ export async function exportAnnualAgmPdf(data) {
   }
 
   if ((data?.expenses || []).length) {
-    sectionTitle(ctx, "Detailed expenses", "Approved expense transactions included in the annual expense total.");
+    sectionTitle(ctx, "Detailed expenses", "Approved expense transactions included in the annual expense total.", 16);
     table(ctx,
       [
         { key: "transaction_month", label: "Month", width: 22, bold: true },
@@ -661,7 +666,7 @@ export async function exportAnnualAgmPdf(data) {
   }
 
   if ((data?.expense_adjustments || []).length) {
-    sectionTitle(ctx, "Expense adjustments", "Reversed or voided expenses are retained for audit history but excluded from active annual expense totals.");
+    sectionTitle(ctx, "Expense adjustments", "Reversed or voided expenses are retained for audit history but excluded from active annual expense totals.", 18);
     table(ctx,
       [
         { key: "transaction_month", label: "Month", width: 22, bold: true },
@@ -676,8 +681,7 @@ export async function exportAnnualAgmPdf(data) {
     );
   }
 
-  ctx.ensure(28);
-  sectionTitle(ctx, "Report certification");
+  sectionTitle(ctx, "Report certification", "", 28);
   rgb(doc, "setFillColor", C.cream);
   rgb(doc, "setDrawColor", C.border);
   doc.roundedRect(ctx.margin, ctx.y, ctx.pageW - ctx.margin * 2, 20, 3, 3, "FD");
