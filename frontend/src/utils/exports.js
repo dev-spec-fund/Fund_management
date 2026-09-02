@@ -275,11 +275,14 @@ function collectionChart(ctx, months = []) {
   rgb(doc, "setDrawColor", C.border);
   doc.line(margin, baseY, pageW - margin, baseY);
   months.forEach((m, i) => {
-    const rate = Math.max(0, Math.min(100, Number(m.collection_rate || 0)));
-    const h = Math.max(1, chartH * rate / 100);
+    const hasDue = Number(m.total_due || 0) > 0;
+    const rate = hasDue ? Math.max(0, Math.min(100, Number(m.collection_rate || 0))) : 0;
+    const h = hasDue ? Math.max(1, chartH * rate / 100) : 0;
     const x = margin + i * (barW + gap);
-    rgb(doc, "setFillColor", C.green2);
-    doc.roundedRect(x, baseY - h, barW, h, 1, 1, "F");
+    if (hasDue) {
+      rgb(doc, "setFillColor", C.green2);
+      doc.roundedRect(x, baseY - h, barW, h, 1, 1, "F");
+    }
     rgb(doc, "setTextColor", C.muted);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6.2);
@@ -523,7 +526,7 @@ export async function exportAnnualAgmPdf(data) {
   infoPanel(ctx, [
     ["Donations received", money(t.donations)],
     ["Net cash change", `${Number(t.net || 0) >= 0 ? "+" : "-"} ${money(Math.abs(Number(t.net || 0)))}`],
-    ["Annual collection rate", `${Number(t.collection_rate || 0).toFixed(1)}%`],
+    ["Annual collection rate", Number(t.due || 0) > 0 ? `${Number(t.collection_rate || 0).toFixed(1)}%` : "N/A"],
     ["Meetings held", String(data?.meetings || 0)],
     ["Financial reversals", String(data?.reversals?.count || 0)],
   ]);
@@ -538,7 +541,7 @@ export async function exportAnnualAgmPdf(data) {
       { key: "total_collected", label: "Collected", width: 36, align: "right", bold: true, format: v => money(v) },
       { key: "expenses", label: "Expenses", width: 31, align: "right", color: C.red, format: v => money(v) },
       { key: "closing_balance", label: "Closing", width: 34, align: "right", bold: true, format: v => money(v) },
-      { key: "collection_rate", label: "Rate", width: 25, align: "right", color: C.green2, format: v => `${Number(v || 0).toFixed(0)}%` },
+      { key: "collection_rate", label: "Rate", width: 25, align: "right", color: C.green2, format: (v, row) => Number(row?.total_due || 0) > 0 ? `${Number(v || 0).toFixed(0)}%` : "N/A" },
     ],
     data?.months || [],
     { fontSize: PDF_TYPE.table }

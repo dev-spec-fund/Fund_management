@@ -68,14 +68,13 @@ export default function Reports({ setTab }) {
   const exportCsv = async () => {
     const rows = [
       ["Fund report", monthLabel],
-      ["Opening balance", summary.openingBalance ?? 0],
       ["Contribution cash received", summary.memberIncome],
       ["Allocated to contribution month", allocatedContributions],
       ["Paid in advance", advanceAllocated],
       ["Donations", summary.donationIncome],
       ["Expenses", summary.expenses],
       ["Net change", summary.net],
-      ["Closing balance", summary.closingBalance ?? summary.fundBalance],
+      ["Closing balance", summary.fundBalance],
       ["Outstanding dues", summary.outstanding?.total || 0],
       ["Outstanding members", members.length],
       [],
@@ -117,7 +116,6 @@ export default function Reports({ setTab }) {
 
       <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>MONTHLY SUMMARY</div>
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 14 }}>
-        <Row label="Opening balance" value={`MVR ${fmt(summary.openingBalance ?? 0)}`} />
         <Row label="Contribution cash received" value={`+ MVR ${fmt(summary.memberIncome)}`} color="var(--success)" />
         <Row label="Donations" value={`+ MVR ${fmt(summary.donationIncome)}`} color="var(--success)" />
         <Row label="Expenses" value={`− MVR ${fmt(summary.expenses)}`} color="var(--danger)" />
@@ -127,7 +125,7 @@ export default function Reports({ setTab }) {
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 9 }}>
           <span className="sans" style={{ color: "var(--muted)" }}>Closing balance</span>
-          <span style={{ fontWeight: 700 }}>MVR {fmt(summary.closingBalance ?? summary.fundBalance)}</span>
+          <span style={{ fontWeight: 700 }}>MVR {fmt(summary.fundBalance)}</span>
         </div>
       </div>
 
@@ -209,14 +207,14 @@ export default function Reports({ setTab }) {
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
             {[['Contributions',annual.totals?.contributions,'var(--success)'],['Donations',annual.totals?.donations,'var(--success)'],['Expenses',annual.totals?.expenses,'var(--danger)'],['Closing balance',annual.totals?.closing_balance,'var(--text)']].map(([l,v,c])=><div key={l} style={{background:"var(--bg)",borderRadius:9,padding:10}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>{l}</div><b style={{fontSize:13,color:c}}>MVR {fmt(v)}</b></div>)}
           </div>
-          <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid var(--divider)",display:"flex",justifyContent:"space-between",fontSize:12}}><span>Annual collection rate</span><b style={{color:"var(--success)"}}>{Number(annual.totals?.collection_rate||0).toFixed(1)}%</b></div>
+          <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid var(--divider)",display:"flex",justifyContent:"space-between",fontSize:12}}><span>Annual collection rate</span><b style={{color:"var(--success)"}}>{Number(annual.totals?.due||0)>0?`${Number(annual.totals?.collection_rate||0).toFixed(1)}%`:"N/A"}</b></div>
         </>}
         {analytics&&<>
           <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:16,marginBottom:7}}>12-MONTH COLLECTION PERFORMANCE</div>
-          <div style={{display:"flex",alignItems:"flex-end",gap:4,height:90}}>{(annual.months||[]).map(m=><div key={m.month} title={`${m.month} · ${Number(m.collection_rate||0).toFixed(0)}%`} style={{flex:1,height:`${Math.max(3,Math.min(100,Number(m.collection_rate||0)))}%`,background:"var(--success)",borderRadius:"3px 3px 0 0",opacity:.85}}/>)}</div>
+          <div style={{display:"flex",alignItems:"flex-end",gap:4,height:90}}>{(annual.months||[]).map(m=>{const hasDue=Number(m.total_due||0)>0;const rate=hasDue?Math.max(0,Math.min(100,Number(m.collection_rate||0))):0;return <div key={m.month} title={`${m.month} · ${hasDue?`${rate.toFixed(0)}%`:"N/A"}`} style={{flex:1,height:hasDue?`${Math.max(3,rate)}%`:"0%",background:"var(--success)",borderRadius:"3px 3px 0 0",opacity:.85}}/>})}</div>
           <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"var(--soft)",marginTop:4}}><span>Jan</span><span>Dec</span></div>
           <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:14,marginBottom:6}}>TOP MEMBER COLLECTION</div>
-          {(analytics.member_performance||[]).slice(0,5).map(m=><div key={m.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"6px 0",borderTop:"1px solid var(--divider)"}}><span>{m.member_code} · {m.name}</span><b>{Number(m.rate||0).toFixed(0)}% · MVR {fmt(m.collected)}</b></div>)}
+          {(analytics.member_performance||[]).slice(0,5).map(m=><div key={m.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"6px 0",borderTop:"1px solid var(--divider)"}}><span>{m.member_code} · {m.name}</span><b>{Number(m.annual_target||0)>0?`${Number(m.rate||0).toFixed(0)}%`:"N/A"} · MVR {fmt(m.collected)}</b></div>)}
           <div style={{fontSize:10,color:"var(--soft)",marginTop:10}}>Reversals this year: {analytics.reversals?.count||0} · Meetings: {analytics.meetings||0}</div>
         </>}
       </div>

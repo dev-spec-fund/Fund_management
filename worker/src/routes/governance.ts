@@ -336,7 +336,8 @@ governanceRoute.get('/annual/:year', requireAdmin, async c=>{
   const year=c.req.param('year'); if(!yearRx.test(year))return c.json({error:'Use YYYY'},400); const data=await yearData(c.env,year);
   const totals=data.months.reduce((a:any,m:any)=>({contributions:a.contributions+m.contribution_cash,donations:a.donations+m.donation_cash,expenses:a.expenses+m.expenses,collected:a.collected+m.total_collected,due:a.due+m.total_due}),{contributions:0,donations:0,expenses:0,collected:0,due:0});
   const branding=await getBranding(c.env);
-  return c.json({...data,organization:branding,totals:{...totals,net:totals.contributions+totals.donations-totals.expenses,collection_rate:totals.due>0?totals.collected/totals.due*100:100,opening_balance:data.months[0]?.opening_balance||0,closing_balance:data.months[data.months.length-1]?.closing_balance||0}});
+  const months=data.months.map((m:any)=>({...m,collection_rate:n(m.total_due)>0?n(m.collection_rate):null}));
+  return c.json({...data,months,organization:branding,totals:{...totals,net:totals.contributions+totals.donations-totals.expenses,collection_rate:totals.due>0?totals.collected/totals.due*100:null,opening_balance:data.months[0]?.opening_balance||0,closing_balance:data.months[data.months.length-1]?.closing_balance||0}});
 });
 
 governanceRoute.get('/analytics/:year', requireAdmin, async c=>{
@@ -369,7 +370,7 @@ governanceRoute.get('/analytics/:year', requireAdmin, async c=>{
     const ex=new Set(exemptions.results.map((x:any)=>String(x.month))); const joined=String(member?.joined_at||member?.created_at||`${year}-01`).slice(0,7);
     let target=0; for(let m=1;m<=lastMonth;m++){const month=`${year}-${String(m).padStart(2,'0')}`;if(month<joined||ex.has(month))continue;target+=rateForMonthFromRows(rates.results as any[],month,n(r.monthly_amount));}
     const appliedRaw=n(r.applied_raw); const applied=Math.min(target,appliedRaw); const advance=Math.max(0,appliedRaw-target)+n(r.future_allocated);
-    return {...r,collected:applied,applied,advance,annual_target:target,outstanding:Math.max(0,target-applied),rate:target>0?Math.min(100,applied/target*100):100};
+    return {...r,collected:applied,applied,advance,annual_target:target,outstanding:Math.max(0,target-applied),rate:target>0?Math.min(100,applied/target*100):null};
   }));
   return c.json({year,reversals:{count:n(reversals?.count),total:n(reversals?.total)},meetings:n(meetings?.count),member_performance:performance});
 });
