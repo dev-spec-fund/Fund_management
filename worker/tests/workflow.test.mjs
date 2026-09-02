@@ -128,3 +128,12 @@ test("community projects and fund-protection migration exists", () => {
   assert.match(migration,/ADD COLUMN fund_override/);
   assert.match(migration,/VALUES\(17,'community_projects_and_fund_protection'\)/);
 });
+
+test("project lifecycle keeps read-only controls and distinct audit actions", () => {
+  const projects = read('src/routes/projects.ts');
+  assert.match(projects,/project_completed/);
+  assert.match(projects,/project_cancelled/);
+  assert.match(projects,/project_reopened/);
+  assert.match(projects,/Only Super Admin can edit or reopen a completed\/cancelled project/);
+  assert.match(projects,/audit_history/);
+});

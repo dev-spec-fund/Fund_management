@@ -29,6 +29,14 @@ async function projectRow(c:any,id:number){
     WHERE p.id=? GROUP BY p.id`).bind(id).first<any>();
 }
 
+function withProjectMetrics(project:any){
+  return {
+    ...project,
+    remaining_budget: project.budget==null ? null : Number(project.budget)-Number(project.spent||0),
+    budget_used_pct: project.budget==null ? null : (Number(project.spent||0)/Number(project.budget||1))*100,
+  };
+}
+
 projectsRoute.get('/', requireAdmin, async c=>{
   await ensureOperationalSchema(c.env);
   const status=String(c.req.query('status')||'').trim();
@@ -45,19 +53,32 @@ projectsRoute.get('/', requireAdmin, async c=>{
     LEFT JOIN expenses e ON e.project_id=p.id
     ${where.length?`WHERE ${where.join(' AND ')}`:''}
     GROUP BY p.id ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'planned' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,p.start_date DESC,p.id DESC`).bind(...vals).all<any>();
-  return c.json(rows.results.map((r:any)=>({...r,remaining_budget:r.budget==null?null:Number(r.budget)-Number(r.spent||0),budget_used_pct:r.budget==null?null:(Number(r.spent||0)/Number(r.budget||1))*100})));
+  return c.json(rows.results.map(withProjectMetrics));
 });
 
 projectsRoute.get('/:id', requireAdmin, async c=>{
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param('id')); const project=await projectRow(c,id);
   if(!project)return c.json({error:'Project not found'},404);
-  const expenses=await c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.void_reason,
+  const [expenses,audit] = await Promise.all([
+    c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.void_reason,e.created_at,e.approved_at,e.voided_at,
       COALESCE(cat.name,'Uncategorised') category,COALESCE(a.name,'-') logged_by_name,
       e.fund_override,e.fund_override_reason,e.budget_override_reason
     FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id LEFT JOIN admins a ON a.id=e.logged_by
-    WHERE e.project_id=? ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC`).bind(id).all<any>();
-  return c.json({...project,remaining_budget:project.budget==null?null:Number(project.budget)-Number(project.spent||0),budget_used_pct:project.budget==null?null:(Number(project.spent||0)/Number(project.budget||1))*100,expenses:expenses.results});
+    WHERE e.project_id=? ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC`).bind(id).all<any>(),
+    c.env.DB.prepare(`SELECT al.id,al.action,al.created_at,al.detail,COALESCE(a.name,'System') admin_name
+      FROM audit_log al LEFT JOIN admins a ON a.id=al.admin_id
+      WHERE al.action LIKE 'project_%' AND json_valid(al.detail)=1
+        AND json_extract(al.detail,'$.entity')='project'
+        AND CAST(json_extract(al.detail,'$.entity_id') AS TEXT)=?
+      ORDER BY al.created_at DESC,al.id DESC LIMIT 30`).bind(String(id)).all<any>(),
+  ]);
+  const auditHistory=audit.results.map((row:any)=>{
+    let detail:any=null; try{detail=JSON.parse(String(row.detail||''));}catch{}
+    const before=detail?.before||null, after=detail?.after||null;
+    return {id:row.id,action:row.action,created_at:row.created_at,admin_name:row.admin_name,before_status:before?.status||null,after_status:after?.status||null};
+  });
+  return c.json({...withProjectMetrics(project),expenses:expenses.results,audit_history:auditHistory});
 });
 
 projectsRoute.post('/', requireFinance, async c=>{
@@ -78,14 +99,15 @@ projectsRoute.post('/', requireFinance, async c=>{
     VALUES(?,?,?,?,?,?,?,?,?)`).bind(code,name,description,budget,startDate,targetEnd,status,responsible,admin.id).run();
   const id=Number(res.meta.last_row_id); const after=await projectRow(c,id);
   await auditEntity(c.env,admin.id,'project_created','project',id,null,after);
-  return c.json(after,201);
+  return c.json(withProjectMetrics(after),201);
 });
 
 projectsRoute.patch('/:id', requireFinance, async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const b=await c.req.json<any>();
   const before=await projectRow(c,id); if(!before)return c.json({error:'Project not found'},404);
-  const reopening=['completed','cancelled'].includes(String(before.status)) && ['planned','active'].includes(String(b.status||before.status));
+  const requestedStatus=b.status===undefined?String(before.status):String(b.status);
+  const reopening=['completed','cancelled'].includes(String(before.status)) && ['planned','active'].includes(requestedStatus);
   if((['completed','cancelled'].includes(String(before.status)) || reopening) && !adminCan(admin,'manage_admins')) return c.json({error:'Only Super Admin can edit or reopen a completed/cancelled project'},403);
   const name=b.name===undefined?before.name:boundedText(b.name,160,true); if(!name)return c.json({error:'Project name is required'},400);
   const description=b.description===undefined?before.description:(boundedText(b.description,1500)||null);
@@ -93,7 +115,7 @@ projectsRoute.patch('/:id', requireFinance, async c=>{
   const startDate=b.start_date===undefined?before.start_date:(String(b.start_date||'').trim()||null);
   const targetEnd=b.target_end_date===undefined?before.target_end_date:(String(b.target_end_date||'').trim()||null);
   if(startDate&&!validDate(startDate))return c.json({error:'Start date must use YYYY-MM-DD'},400); if(targetEnd&&!validDate(targetEnd))return c.json({error:'Target end date must use YYYY-MM-DD'},400); if(startDate&&targetEnd&&targetEnd<startDate)return c.json({error:'Target end date cannot be before the start date'},400);
-  const status=b.status===undefined?before.status:String(b.status); if(!['planned','active','completed','cancelled'].includes(status))return c.json({error:'Invalid project status'},400);
+  const status=requestedStatus; if(!['planned','active','completed','cancelled'].includes(status))return c.json({error:'Invalid project status'},400);
   const responsible=b.responsible_member_id===undefined?before.responsible_member_id:(b.responsible_member_id?Number(b.responsible_member_id):null);
   if(responsible){const member=await c.env.DB.prepare('SELECT id FROM members WHERE id=? AND active=1').bind(responsible).first();if(!member)return c.json({error:'Responsible member not found or inactive'},409);}
   const completing=status==='completed'&&before.status!=='completed'; const cancelling=status==='cancelled'&&before.status!=='cancelled';
@@ -104,5 +126,8 @@ projectsRoute.patch('/:id', requireFinance, async c=>{
     cancelled_by=CASE WHEN ? THEN ? WHEN ?!='cancelled' THEN NULL ELSE cancelled_by END,
     cancel_reason=CASE WHEN ?='cancelled' THEN ? ELSE NULL END WHERE id=?`)
     .bind(name,description,budget,startDate,targetEnd,status,responsible,completing?1:0,status,completing?1:0,admin.id,status,cancelling?1:0,status,cancelling?1:0,admin.id,status,status,boundedText(b.cancel_reason,500)||null,id).run();
-  const after=await projectRow(c,id); await auditEntity(c.env,admin.id,'project_updated','project',id,before,after); return c.json(after);
+  const after=await projectRow(c,id);
+  const action = completing ? 'project_completed' : cancelling ? 'project_cancelled' : reopening ? 'project_reopened' : 'project_updated';
+  await auditEntity(c.env,admin.id,action,'project',id,before,after);
+  return c.json(withProjectMetrics(after));
 });
