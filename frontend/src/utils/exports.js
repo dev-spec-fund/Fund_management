@@ -56,13 +56,14 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
   doc.setFontSize(16); doc.text("Fund Report",14,y); y+=9;
   doc.setFontSize(11); doc.text(monthLabel,14,y); y+=10;
   doc.setFontSize(10);
+  line("Opening balance", `MVR ${fmt(summary.openingBalance ?? 0)}`);
   line("Contribution cash received", `MVR ${fmt(summary.memberIncome)}`);
   line("Allocated contributions", `MVR ${fmt(summary.allocatedContributions ?? summary.memberIncome)}`);
   line("Paid in advance", `MVR ${fmt(summary.advanceAllocated)}`);
   line("Donations", `MVR ${fmt(summary.donationIncome)}`);
   line("Expenses", `MVR ${fmt(summary.expenses)}`);
   line("Net change", `MVR ${fmt(summary.net)}`);
-  line("Closing balance", `MVR ${fmt(summary.fundBalance)}`);
+  line("Closing balance", `MVR ${fmt(summary.closingBalance ?? summary.fundBalance)}`);
   line("Outstanding dues", `MVR ${fmt(summary.outstanding?.total)}`);
   y+=5; doc.setFontSize(11); doc.text("Expense categories",14,y); y+=7; doc.setFontSize(9);
   for(const c of (summary.byCategory||[]).filter(x=>Number(x.spent||0)>0)){ if(y>280){doc.addPage();y=18;} doc.text(String(c.category||"Uncategorised"),14,y); doc.text(`MVR ${fmt(c.spent)}`,120,y); y+=6; }
