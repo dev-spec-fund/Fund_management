@@ -254,12 +254,18 @@ async function yearData(env:any, year:string){
     `).bind(`${year}-%`).all<any>(),
     env.DB.prepare(`
       SELECT m.id,m.member_code,m.name,m.monthly_amount,m.joined_at,m.created_at,
-        COALESCE((SELECT SUM(ca.amount) FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id WHERE ca.member_id=m.id AND ca.month LIKE ? AND c.status='approved'),0)+
-        COALESCE((SELECT SUM(c.amount) FROM contributions c WHERE c.member_id=m.id AND c.month LIKE ? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations ca WHERE ca.contribution_id=c.id)),0) collected
+        COALESCE((SELECT SUM(ca.amount) FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id
+          WHERE ca.member_id=m.id AND ca.month>=? AND ca.month<=? AND c.status='approved'),0)+
+        COALESCE((SELECT SUM(c.amount) FROM contributions c WHERE c.member_id=m.id AND c.month>=? AND c.month<=? AND c.status='approved'
+          AND NOT EXISTS(SELECT 1 FROM contribution_allocations ca WHERE ca.contribution_id=c.id)),0) applied_raw,
+        COALESCE((SELECT SUM(ca.amount) FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id
+          WHERE ca.member_id=m.id AND ca.month>? AND c.status='approved'),0)+
+        COALESCE((SELECT SUM(c.amount) FROM contributions c WHERE c.member_id=m.id AND c.month>? AND c.status='approved'
+          AND NOT EXISTS(SELECT 1 FROM contribution_allocations ca WHERE ca.contribution_id=c.id)),0) future_allocated
       FROM members m
       WHERE m.active=1
       ORDER BY m.member_code,m.name
-    `).bind(`${year}-%`,`${year}-%`).all<any>(),
+    `).bind(`${year}-01`,`${year}-${String(count).padStart(2,'0')}`,`${year}-01`,`${year}-${String(count).padStart(2,'0')}`,`${year}-${String(count).padStart(2,'0')}`,`${year}-${String(count).padStart(2,'0')}`).all<any>(),
     env.DB.prepare("SELECT COUNT(*) count,COALESCE(SUM(amount),0) total FROM financial_reversals WHERE month LIKE ?").bind(`${year}-%`).first<any>(),
     env.DB.prepare("SELECT COUNT(*) count FROM meetings WHERE meeting_date LIKE ?").bind(`${year}-%`).first<any>()
   ]);
@@ -277,9 +283,11 @@ async function yearData(env:any, year:string){
       if(month<joined||exempt.has(month)) continue;
       annualTarget+=rateForMonthFromRows(rates.results as any[],month,n(r.monthly_amount));
     }
-    const collected=n(r.collected);
-    const outstanding=Math.max(0,annualTarget-collected);
-    return {id:r.id,member_code:r.member_code,name:r.name,annual_target:annualTarget,collected,outstanding,rate:annualTarget>0?Math.min(100,collected/annualTarget*100):100};
+    const appliedRaw=n(r.applied_raw);
+    const applied=Math.min(annualTarget,appliedRaw);
+    const advance=Math.max(0,appliedRaw-annualTarget)+n(r.future_allocated);
+    const outstanding=Math.max(0,annualTarget-applied);
+    return {id:r.id,member_code:r.member_code,name:r.name,annual_target:annualTarget,applied,collected:applied,advance,outstanding,rate:annualTarget>0?Math.min(100,applied/annualTarget*100):100};
   }));
 
   return {
@@ -298,18 +306,25 @@ governanceRoute.get('/annual/:year', requireAdmin, async c=>{
 
 governanceRoute.get('/analytics/:year', requireAdmin, async c=>{
   const year=c.req.param('year'); if(!yearRx.test(year))return c.json({error:'Use YYYY'},400);
+  const now=currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
+  const lastMonth=year<now.slice(0,4)?12:year===now.slice(0,4)?Number(now.slice(5,7)):0;
+  const periodEnd=`${year}-${String(lastMonth).padStart(2,'0')}`;
   const [memberPerformance,reversals,meetings]=await Promise.all([
     c.env.DB.prepare(`
       SELECT m.id,m.member_code,m.name,m.monthly_amount,
-        COALESCE((SELECT SUM(ca.amount) FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id WHERE ca.member_id=m.id AND ca.month LIKE ? AND c.status='approved'),0)+
-        COALESCE((SELECT SUM(c.amount) FROM contributions c WHERE c.member_id=m.id AND c.month LIKE ? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations ca WHERE ca.contribution_id=c.id)),0) collected
-      FROM members m WHERE m.active=1 ORDER BY collected DESC,m.name LIMIT 100
-    `).bind(`${year}-%`,`${year}-%`).all<any>(),
+        COALESCE((SELECT SUM(ca.amount) FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id
+          WHERE ca.member_id=m.id AND ca.month>=? AND ca.month<=? AND c.status='approved'),0)+
+        COALESCE((SELECT SUM(c.amount) FROM contributions c WHERE c.member_id=m.id AND c.month>=? AND c.month<=? AND c.status='approved'
+          AND NOT EXISTS(SELECT 1 FROM contribution_allocations ca WHERE ca.contribution_id=c.id)),0) applied_raw,
+        COALESCE((SELECT SUM(ca.amount) FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id
+          WHERE ca.member_id=m.id AND ca.month>? AND c.status='approved'),0)+
+        COALESCE((SELECT SUM(c.amount) FROM contributions c WHERE c.member_id=m.id AND c.month>? AND c.status='approved'
+          AND NOT EXISTS(SELECT 1 FROM contribution_allocations ca WHERE ca.contribution_id=c.id)),0) future_allocated
+      FROM members m WHERE m.active=1 ORDER BY m.name LIMIT 100
+    `).bind(`${year}-01`,periodEnd,`${year}-01`,periodEnd,periodEnd,periodEnd).all<any>(),
     c.env.DB.prepare("SELECT COUNT(*) count,COALESCE(SUM(amount),0) total FROM financial_reversals WHERE month LIKE ?").bind(`${year}-%`).first<any>(),
     c.env.DB.prepare("SELECT COUNT(*) count FROM meetings WHERE meeting_date LIKE ?").bind(`${year}-%`).first<any>()
   ]);
-  const now=currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
-  const lastMonth=year<now.slice(0,4)?12:year===now.slice(0,4)?Number(now.slice(5,7)):0;
   const performance=await Promise.all(memberPerformance.results.map(async(r:any)=>{
     const [rates,exemptions,member]=await Promise.all([
       c.env.DB.prepare("SELECT amount,effective_from,effective_to FROM member_contribution_rates WHERE member_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) ORDER BY effective_from").bind(r.id,`${year}-12`,`${year}-01`).all<any>(),
@@ -318,7 +333,8 @@ governanceRoute.get('/analytics/:year', requireAdmin, async c=>{
     ]);
     const ex=new Set(exemptions.results.map((x:any)=>String(x.month))); const joined=String(member?.joined_at||member?.created_at||`${year}-01`).slice(0,7);
     let target=0; for(let m=1;m<=lastMonth;m++){const month=`${year}-${String(m).padStart(2,'0')}`;if(month<joined||ex.has(month))continue;target+=rateForMonthFromRows(rates.results as any[],month,n(r.monthly_amount));}
-    const collected=n(r.collected); return {...r,collected,annual_target:target,rate:target>0?Math.min(100,collected/target*100):100};
+    const appliedRaw=n(r.applied_raw); const applied=Math.min(target,appliedRaw); const advance=Math.max(0,appliedRaw-target)+n(r.future_allocated);
+    return {...r,collected:applied,applied,advance,annual_target:target,outstanding:Math.max(0,target-applied),rate:target>0?Math.min(100,applied/target*100):100};
   }));
   return c.json({year,reversals:{count:n(reversals?.count),total:n(reversals?.total)},meetings:n(meetings?.count),member_performance:performance});
 });

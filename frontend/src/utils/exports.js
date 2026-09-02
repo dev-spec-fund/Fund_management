@@ -531,24 +531,27 @@ export async function exportAnnualAgmPdf(data) {
   );
 
   if ((data?.member_contributions || []).length) {
-    sectionTitle(ctx, "Member contribution summary", "Annual contribution target and collection position for active members. Exempt months are excluded from the annual target.");
+    sectionTitle(ctx, "Member contribution summary", "Amounts applied to obligations are separated from advance/future contributions. Exempt months are excluded from the reporting-period target.");
     table(ctx,
       [
-        { key: "member_code", label: "Member ID", width: 24, bold: true },
-        { key: "name", label: "Member", width: 52 },
-        { key: "annual_target", label: "Annual due", width: 30, align: "right", format: v => money(v) },
-        { key: "collected", label: "Collected", width: 30, align: "right", bold: true, color: C.green2, format: v => money(v) },
-        { key: "outstanding", label: "Outstanding", width: 30, align: "right", bold: true, color: r => Number(r.outstanding || 0) > 0 ? C.red : C.green2, format: v => money(v) },
+        { key: "member_code", label: "Member ID", width: 22, bold: true },
+        { key: "name", label: "Member", width: 42 },
+        { key: "annual_target", label: "Due", width: 27, align: "right", format: v => money(v) },
+        { key: "applied", label: "Applied", width: 27, align: "right", bold: true, color: C.green2, format: v => money(v) },
+        { key: "advance", label: "Advance", width: 27, align: "right", bold: true, color: C.green2, format: v => money(v) },
+        { key: "outstanding", label: "Outstanding", width: 28, align: "right", bold: true, color: r => Number(r.outstanding || 0) > 0 ? C.red : C.green2, format: v => money(v) },
         { key: "rate", label: "Rate", width: 16, align: "right", format: v => `${Number(v || 0).toFixed(0)}%` },
       ],
       data.member_contributions,
-      { fontSize: 6.5 }
+      { fontSize: 6.25 }
     );
-    const memberTotals=data.member_contributions.reduce((a,row)=>({due:a.due+Number(row.annual_target||0),collected:a.collected+Number(row.collected||0),outstanding:a.outstanding+Number(row.outstanding||0)}),{due:0,collected:0,outstanding:0});
+    const memberTotals=data.member_contributions.reduce((a,row)=>({due:a.due+Number(row.annual_target||0),applied:a.applied+Number((row.applied ?? row.collected) || 0),advance:a.advance+Number(row.advance||0),outstanding:a.outstanding+Number(row.outstanding||0)}),{due:0,applied:0,advance:0,outstanding:0});
     infoPanel(ctx, [
-      ["Annual member obligations", money(memberTotals.due)],
-      ["Member contributions collected", money(memberTotals.collected)],
+      ["Reporting-period member obligations", money(memberTotals.due)],
+      ["Applied to member obligations", money(memberTotals.applied)],
+      ["Advance / future contributions", money(memberTotals.advance)],
       ["Outstanding member obligations", money(memberTotals.outstanding)],
+      ["Total contribution cash received", money(t.contributions)],
     ]);
   }
 
