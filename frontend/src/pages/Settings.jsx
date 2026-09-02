@@ -64,6 +64,7 @@ export default function Settings({ admin }) {
   const [promoteRole,setPromoteRole]=useState("treasurer");
   const [closeCheck,setCloseCheck]=useState(null);
   const [closeBusy,setCloseBusy]=useState(false);
+  const [closeMonthValue,setCloseMonthValue]=useState(currentMonthValue());
 
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
   const superAdmin = role === "super_admin";
@@ -134,20 +135,21 @@ export default function Settings({ admin }) {
 
   const reviewMonthClose=async()=>{
     setCloseBusy(true); setCloseCheck(null);
-    try{ setCloseCheck(await api.governance.monthCloseCheck(currentMonth)); }
+    try{ setCloseCheck(await api.governance.monthCloseCheck(closeMonthValue)); }
     catch(e){ setMessage(e.message); }
     finally{ setCloseBusy(false); }
   };
 
   const closeMonth=async()=>{
-    const check=closeCheck || await api.governance.monthCloseCheck(currentMonth);
+    const check=closeCheck || await api.governance.monthCloseCheck(closeMonthValue);
     if((check.blockers||[]).length) return setMessage(`Cannot close month: ${check.blockers.join(", ")}`);
-    const label = new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${currentMonth}-01T00:00:00Z`));
-    const note=window.prompt(`Close ${label}?\n\nA permanent monthly balance snapshot will be created. Optional closing note:`,"Closed from Fund App");
+    const label = new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${closeMonthValue}-01T00:00:00Z`));
+    const pastNote = closeMonthValue < currentMonth ? "\n\nThis is a past open month. September/current-month transactions will not be changed." : "";
+    const note=window.prompt(`Close ${label}?${pastNote}\n\nA permanent monthly balance snapshot will be created. Optional closing note:`,"Closed from Fund App");
     if(note===null) return;
     setCloseBusy(true);
     try{
-      await api.governance.closeMonth(currentMonth,note);
+      await api.governance.closeMonth(closeMonthValue,note);
       setCloseCheck(null); await load(); setMessage(`${label} closed and snapshot saved`);
     }catch(e){setMessage(e.message)} finally{setCloseBusy(false)}
   };
@@ -162,7 +164,16 @@ export default function Settings({ admin }) {
     }catch(e){setMessage(e.message)}
   };
 
-  const monthClosed = closures.some(x=>x.month===currentMonth);
+  const monthClosed = closures.some(x=>x.month===closeMonthValue);
+  const monthLabel = (month) => new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${month}-01T00:00:00Z`));
+  const shiftCloseMonth = (delta) => {
+    const [y,m]=closeMonthValue.split("-").map(Number);
+    const d=new Date(Date.UTC(y,m-1+delta,1));
+    const next=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;
+    if(next>currentMonth) return;
+    setCloseMonthValue(next);
+    setCloseCheck(null);
+  };
   const tabs=[["general","General"],["admins","Admins"],["system","System"],...(financeAdmin?[["audit","Audit"]]:[])];
 
   return <>
@@ -262,20 +273,28 @@ export default function Settings({ admin }) {
 
       <SectionTitle>MONTH MANAGEMENT</SectionTitle>
       <div style={cardStyle}>
+        <div className="sans" style={{fontSize:11,color:"var(--muted)",marginBottom:7}}>Select the month to review or close</div>
+        <div style={{display:"grid",gridTemplateColumns:"40px 1fr 40px",gap:8,alignItems:"center",marginBottom:10}}>
+          <button type="button" disabled={closeBusy} onClick={()=>shiftCloseMonth(-1)} className="sans" aria-label="Previous month" style={{...compactBtn,height:40,fontSize:18,padding:0}}>‹</button>
+          <input type="month" max={currentMonth} value={closeMonthValue} onChange={e=>{ if(!e.target.value || e.target.value>currentMonth)return; setCloseMonthValue(e.target.value); setCloseCheck(null); }} className="sans" style={{width:"100%",boxSizing:"border-box",height:40,border:"1px solid var(--border-strong)",borderRadius:9,padding:"8px 10px",fontSize:13,background:"var(--bg)",color:"var(--text)"}}/>
+          <button type="button" disabled={closeBusy || closeMonthValue>=currentMonth} onClick={()=>shiftCloseMonth(1)} className="sans" aria-label="Next month" style={{...compactBtn,height:40,fontSize:18,padding:0}}>›</button>
+        </div>
         <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginBottom:10}}>
-          <span style={{color:"var(--muted)"}}>Current month</span>
-          <b>{new Intl.DateTimeFormat("en",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${currentMonth}-01T00:00:00Z`))}</b>
+          <span style={{color:"var(--muted)"}}>Selected month</span>
+          <b>{monthLabel(closeMonthValue)}</b>
         </div>
         <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12}}>
           <span style={{color:"var(--muted)"}}>Status</span>
           <span style={{fontWeight:700,color:monthClosed?"var(--danger)":"var(--success)"}}>{monthClosed?"Closed":"Open"}</span>
         </div>
+        {closeMonthValue<currentMonth && !monthClosed && <div className="sans" style={{fontSize:10,color:"var(--warning)",marginTop:9,lineHeight:1.4}}>⚠ {monthLabel(closeMonthValue)} is a past open month. You can review and close it now; the current month stays open.</div>}
         {superAdmin && !monthClosed && <button disabled={closeBusy} onClick={reviewMonthClose} style={{...rejectBtn,marginTop:12}}>{closeBusy?"Checking…":"Review month closing"}</button>}
-        {superAdmin && monthClosed && <button onClick={()=>api.admin.reopenMonth(currentMonth).then(()=>{setCloseCheck(null);return load()}).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen current month</button>}
+        {superAdmin && monthClosed && <button onClick={()=>api.admin.reopenMonth(closeMonthValue).then(()=>{setCloseCheck(null);return load()}).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen {monthLabel(closeMonthValue)}</button>}
       </div>
 
       {superAdmin && !monthClosed && closeCheck && <div style={{...cardStyle,marginTop:10,borderColor:(closeCheck.blockers||[]).length?"var(--danger-border)":"var(--success-border)"}}>
-        <div className="sans" style={{fontSize:13,fontWeight:700,marginBottom:8}}>Monthly Closing Assistant</div>
+        <div className="sans" style={{fontSize:13,fontWeight:700,marginBottom:3}}>Monthly Closing Assistant</div>
+        <div className="sans" style={{fontSize:10,color:"var(--muted)",marginBottom:8}}>{monthLabel(closeMonthValue)}</div>
         <div className="sans" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:11,marginBottom:10}}>
           <div><span style={{color:"var(--soft)"}}>Opening balance</span><br/><b>MVR {Number(closeCheck.opening_balance||0).toLocaleString()}</b></div>
           <div><span style={{color:"var(--soft)"}}>Closing balance</span><br/><b>MVR {Number(closeCheck.closing_balance||0).toLocaleString()}</b></div>

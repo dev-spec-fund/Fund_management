@@ -65,11 +65,15 @@ async function nextReversalId(env:any){
 governanceRoute.get('/month-close/:month/check', requireAdmin, async c=>{
   await ensureOperationalSchema(c.env); const month=c.req.param('month');
   if(!validMonth(month)) return c.json({error:'Use YYYY-MM'},400);
+  const nowMonth=currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
+  if(month>nowMonth) return c.json({error:'Future months cannot be closed'},400);
   const metrics=await monthMetrics(c.env,month);
   const already=await isMonthClosed(c.env,month);
+  const laterClosed=await c.env.DB.prepare("SELECT month FROM month_closures WHERE month>? ORDER BY month ASC LIMIT 1").bind(month).first<any>();
   return c.json({...metrics,closed:already,blockers:[
     ...(metrics.pending_contributions?[`${metrics.pending_contributions} pending contribution(s)`]:[]),
-    ...(metrics.pending_expenses?[`${metrics.pending_expenses} pending expense(s)`]:[])
+    ...(metrics.pending_expenses?[`${metrics.pending_expenses} pending expense(s)`]:[]),
+    ...(!already && laterClosed?.month?[`A later month (${laterClosed.month}) is already closed. Reopen it before closing ${month}.`]:[])
   ],warnings:[
     ...((metrics.unpaid_members+metrics.partial_members)>0?[`${metrics.unpaid_members+metrics.partial_members} member(s) still outstanding`]:[]),
     ...(metrics.open_errors?[`${metrics.open_errors} unresolved system error(s)`]:[]),
@@ -80,7 +84,11 @@ governanceRoute.get('/month-close/:month/check', requireAdmin, async c=>{
 governanceRoute.post('/month-close/:month', requireSuperAdmin, async c=>{
   await ensureOperationalSchema(c.env); const admin=c.get('admin')!; const month=c.req.param('month'); const body=await c.req.json().catch(()=>({})) as any;
   if(!validMonth(month)) return c.json({error:'Use YYYY-MM'},400);
+  const nowMonth=currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
+  if(month>nowMonth) return c.json({error:'Future months cannot be closed'},400);
   if(await isMonthClosed(c.env,month)) return c.json({error:'Month is already closed'},409);
+  const laterClosed=await c.env.DB.prepare("SELECT month FROM month_closures WHERE month>? ORDER BY month ASC LIMIT 1").bind(month).first<any>();
+  if(laterClosed?.month) return c.json({error:`A later month (${laterClosed.month}) is already closed. Reopen it before closing ${month}.`},409);
   const m=await monthMetrics(c.env,month);
   if((m.pending_contributions||0)>0 || (m.pending_expenses||0)>0) return c.json({error:'Resolve pending financial approvals before closing',check:m},409);
   await c.env.DB.batch([
