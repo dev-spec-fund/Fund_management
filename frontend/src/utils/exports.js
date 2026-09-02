@@ -439,6 +439,39 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
     );
   }
 
+  if ((summary.expenseDetails || []).length) {
+    sectionTitle(ctx, "Expense details", "Approved expenses included in the selected month's expense total.");
+    table(ctx,
+      [
+        { key: "expense_date", label: "Date", width: 24, format: (v,r) => String(v || r.created_at || "").slice(0,10) },
+        { key: "txn_id", label: "Expense ID", width: 24, bold: true },
+        { key: "description", label: "Description", width: 60 },
+        { key: "category", label: "Category", width: 38, format: v => v || "Uncategorised" },
+        { key: "amount", label: "Amount", width: 36, align: "right", bold: true, color: C.red, format: v => money(v) },
+      ],
+      summary.expenseDetails,
+      { fontSize: 7.1 }
+    );
+    const expenseTotal = summary.expenseDetails.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    infoPanel(ctx, [["Detailed expense total", money(expenseTotal)]]);
+  }
+
+  if ((summary.expenseAdjustments || []).length) {
+    sectionTitle(ctx, "Expense adjustments", "Reversed or voided expenses are shown for audit transparency and are excluded from the active expense total.");
+    table(ctx,
+      [
+        { key: "expense_date", label: "Date", width: 25, format: (v,r) => String(v || r.created_at || "").slice(0,10) },
+        { key: "txn_id", label: "Expense ID", width: 25, bold: true },
+        { key: "description", label: "Description", width: 44 },
+        { key: "category", label: "Category", width: 31, format: v => v || "Uncategorised" },
+        { key: "amount", label: "Amount", width: 29, align: "right", bold: true, format: v => money(v) },
+        { key: "status", label: "Status", width: 28, bold: true, color: r => statusColor(r.status), format: v => String(v || "").toUpperCase() },
+      ],
+      summary.expenseAdjustments,
+      { fontSize: 6.8 }
+    );
+  }
+
   if ((summary.outstanding?.members || []).length) {
     sectionTitle(ctx, "Outstanding members", "Members with an unpaid or partially paid obligation for the selected month.");
     table(ctx,
@@ -505,6 +538,40 @@ export async function exportAnnualAgmPdf(data) {
         { key: "total", label: "Annual spend", width: 67, align: "right", bold: true, color: C.red, format: v => money(v) },
       ],
       data.expense_categories
+    );
+  }
+
+  if ((data?.expenses || []).length) {
+    sectionTitle(ctx, "Detailed expenses", "Approved expense transactions included in the annual expense total.");
+    table(ctx,
+      [
+        { key: "transaction_month", label: "Month", width: 22, bold: true },
+        { key: "expense_date", label: "Date", width: 24, format: (v,r) => String(v || r.created_at || "").slice(0,10) },
+        { key: "txn_id", label: "Expense ID", width: 24, bold: true },
+        { key: "description", label: "Description", width: 50 },
+        { key: "category", label: "Category", width: 29, format: v => v || "Uncategorised" },
+        { key: "amount", label: "Amount", width: 33, align: "right", bold: true, color: C.red, format: v => money(v) },
+      ],
+      data.expenses,
+      { fontSize: 6.7 }
+    );
+    const annualExpenseTotal = data.expenses.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    infoPanel(ctx, [["Detailed annual expense total", money(annualExpenseTotal)]]);
+  }
+
+  if ((data?.expense_adjustments || []).length) {
+    sectionTitle(ctx, "Expense adjustments", "Reversed or voided expenses are retained for audit history but excluded from active annual expense totals.");
+    table(ctx,
+      [
+        { key: "transaction_month", label: "Month", width: 22, bold: true },
+        { key: "txn_id", label: "Expense ID", width: 24, bold: true },
+        { key: "description", label: "Description", width: 51 },
+        { key: "category", label: "Category", width: 31, format: v => v || "Uncategorised" },
+        { key: "amount", label: "Amount", width: 30, align: "right", bold: true, format: v => money(v) },
+        { key: "status", label: "Status", width: 24, bold: true, color: r => statusColor(r.status), format: v => String(v || "").toUpperCase() },
+      ],
+      data.expense_adjustments,
+      { fontSize: 6.6 }
     );
   }
 

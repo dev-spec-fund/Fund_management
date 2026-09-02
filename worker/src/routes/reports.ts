@@ -309,13 +309,30 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
 
-  const [income,allocatedContributions,advanceAllocated,donationTotal,expenseTotal,byCategory,outstanding,recentActivity] = await Promise.all([
+  const [income,allocatedContributions,advanceAllocated,donationTotal,expenseTotal,byCategory,expenseDetails,expenseAdjustments,outstanding,recentActivity] = await Promise.all([
     c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month=?").bind(month).first<{total:number}>(),
     allocatedTotalForMonth(c.env,month),
     advanceAllocatedForMonth(c.env,month),
     c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month=?").bind(month).first<{total:number}>(),
     c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month=?").bind(month).first<{total:number}>(),
     c.env.DB.prepare(`SELECT cat.name category,COALESCE(SUM(e.amount),0) spent FROM expense_categories cat LEFT JOIN expenses e ON e.category_id=cat.id AND COALESCE(e.status,'approved')='approved' AND e.transaction_month=? GROUP BY cat.id`).bind(month).all(),
+    c.env.DB.prepare(`
+      SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.approved_at,
+             COALESCE(cat.name,'Uncategorised') category,COALESCE(a.name,'-') logged_by_name
+      FROM expenses e
+      LEFT JOIN expense_categories cat ON cat.id=e.category_id
+      LEFT JOIN admins a ON a.id=e.logged_by
+      WHERE COALESCE(e.status,'approved')='approved' AND e.transaction_month=?
+      ORDER BY COALESCE(e.expense_date,date(e.created_at)) ASC,e.id ASC
+    `).bind(month).all<any>(),
+    c.env.DB.prepare(`
+      SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.voided_at,e.void_reason,
+             COALESCE(cat.name,'Uncategorised') category
+      FROM expenses e
+      LEFT JOIN expense_categories cat ON cat.id=e.category_id
+      WHERE e.status IN ('reversed','voided') AND e.transaction_month=?
+      ORDER BY COALESCE(e.voided_at,e.expense_date,e.created_at) ASC,e.id ASC
+    `).bind(month).all<any>(),
     c.env.DB.prepare(`
       WITH paid AS (
         SELECT member_id,SUM(amount) paid FROM (
@@ -362,6 +379,8 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
     expenses: expenseTotal?.total ?? 0,
     net: monthNet,
     byCategory: byCategory.results,
+    expenseDetails: expenseDetails.results,
+    expenseAdjustments: expenseAdjustments.results,
     outstanding: {
       total: outstanding.results.filter((m:any)=>m.payment_status==='unpaid'||m.payment_status==='partial').reduce((s:number,m:any)=>s+Math.max(0,Number(m.monthly_amount)-Number(m.paid||0)),0),
       members: outstanding.results.filter((m:any)=>m.payment_status==='unpaid'||m.payment_status==='partial'),
