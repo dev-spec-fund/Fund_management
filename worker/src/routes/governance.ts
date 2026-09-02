@@ -216,7 +216,7 @@ async function yearData(env:any, year:string){
     };
     return {...await monthMetrics(env,m),source:'live'};
   }));
-  const [categories,expenseDetails,expenseAdjustments,donationDetails,donationAdjustments,memberRows,reversals,meetings]=await Promise.all([
+  const [categories,expenseDetails,expenseAdjustments,donationDetails,donationAdjustments,memberRows,reversals,meetings,meetingRsvps,meetingActions]=await Promise.all([
     env.DB.prepare(`SELECT COALESCE(cat.name,'Uncategorised') category,COALESCE(SUM(e.amount),0) total FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id WHERE e.status='approved' AND e.transaction_month LIKE ? GROUP BY COALESCE(cat.name,'Uncategorised') ORDER BY total DESC`).bind(`${year}-%`).all<any>(),
     env.DB.prepare(`
       SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.approved_at,
@@ -267,7 +267,34 @@ async function yearData(env:any, year:string){
       ORDER BY m.member_code,m.name
     `).bind(`${year}-01`,`${year}-${String(count).padStart(2,'0')}`,`${year}-01`,`${year}-${String(count).padStart(2,'0')}`,`${year}-${String(count).padStart(2,'0')}`,`${year}-${String(count).padStart(2,'0')}`).all<any>(),
     env.DB.prepare("SELECT COUNT(*) count,COALESCE(SUM(amount),0) total FROM financial_reversals WHERE month LIKE ?").bind(`${year}-%`).first<any>(),
-    env.DB.prepare("SELECT COUNT(*) count FROM meetings WHERE meeting_date LIKE ?").bind(`${year}-%`).first<any>()
+    env.DB.prepare(`
+      SELECT mt.id,mt.title,mt.meeting_date,mt.meeting_time,mt.venue,mt.status,
+             CASE WHEN mm.meeting_id IS NULL THEN 0 ELSE 1 END minutes_recorded
+      FROM meetings mt
+      LEFT JOIN meeting_minutes mm ON mm.meeting_id=mt.id
+      WHERE mt.meeting_date LIKE ?
+      ORDER BY mt.meeting_date ASC,mt.meeting_time ASC,mt.id ASC
+    `).bind(`${year}-%`).all<any>(),
+    env.DB.prepare(`
+      SELECT meeting_id,
+             SUM(CASE WHEN response='yes' THEN 1 ELSE 0 END) yes_count,
+             SUM(CASE WHEN response='maybe' THEN 1 ELSE 0 END) maybe_count,
+             SUM(CASE WHEN response='no' THEN 1 ELSE 0 END) no_count,
+             COUNT(*) response_count
+      FROM meeting_rsvps
+      WHERE meeting_id IN (SELECT id FROM meetings WHERE meeting_date LIKE ?)
+      GROUP BY meeting_id
+    `).bind(`${year}-%`).all<any>(),
+    env.DB.prepare(`
+      SELECT ai.id,ai.meeting_id,ai.description,ai.due_date,ai.status,ai.completed_at,
+             m.member_code,m.name member_name,a.name admin_name,mt.title meeting_title,mt.meeting_date
+      FROM meeting_action_items ai
+      JOIN meetings mt ON mt.id=ai.meeting_id
+      LEFT JOIN members m ON m.id=ai.assigned_member_id
+      LEFT JOIN admins a ON a.id=ai.assigned_admin_id
+      WHERE mt.meeting_date LIKE ?
+      ORDER BY mt.meeting_date ASC,ai.id ASC
+    `).bind(`${year}-%`).all<any>()
   ]);
 
   const memberContributions=await Promise.all(memberRows.results.map(async(r:any)=>{
@@ -290,10 +317,18 @@ async function yearData(env:any, year:string){
     return {id:r.id,member_code:r.member_code,name:r.name,annual_target:annualTarget,applied,collected:applied,advance,outstanding,rate:annualTarget>0?Math.min(100,applied/annualTarget*100):100};
   }));
 
+  const rsvpByMeeting=new Map((meetingRsvps.results as any[]).map((r:any)=>[Number(r.meeting_id),r]));
+  const meetingSummary=(meetings.results as any[]).map((m:any)=>{
+    const r:any=rsvpByMeeting.get(Number(m.id))||{};
+    const actions=(meetingActions.results as any[]).filter((a:any)=>Number(a.meeting_id)===Number(m.id));
+    return {...m,rsvp_yes:n(r.yes_count),rsvp_maybe:n(r.maybe_count),rsvp_no:n(r.no_count),rsvp_responses:n(r.response_count),action_total:actions.length,action_open:actions.filter((a:any)=>a.status==='open').length,action_done:actions.filter((a:any)=>a.status==='done').length};
+  });
+
   return {
     year,months:metrics,expense_categories:categories.results,expenses:expenseDetails.results,expense_adjustments:expenseAdjustments.results,
     donations:donationDetails.results,donation_adjustments:donationAdjustments.results,member_contributions:memberContributions,
-    reversals:{count:n(reversals?.count),total:n(reversals?.total)},meetings:n(meetings?.count)
+    reversals:{count:n(reversals?.count),total:n(reversals?.total)},meetings:meetingSummary.length,
+    meeting_summary:meetingSummary,meeting_actions:meetingActions.results
   };
 }
 

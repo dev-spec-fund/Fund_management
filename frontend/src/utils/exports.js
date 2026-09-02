@@ -20,6 +20,15 @@ const C = {
   amber: [164, 121, 43],
 };
 
+const PDF_TYPE = {
+  section: 10.5,
+  body: 8.3,
+  helper: 8.1,
+  table: 6.8,
+  tableHeader: 6.8,
+  footer: 7.5,
+};
+
 const rgb = (doc, method, color) => doc[method](...color);
 const generatedAt = () => {
   try {
@@ -112,7 +121,7 @@ function sectionTitle(ctx, title, subtitle = "") {
   if (subtitle) {
     rgb(doc, "setTextColor", C.muted);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(PDF_TYPE.helper);
     const lines = doc.splitTextToSize(String(subtitle), pageW - margin * 2);
     doc.text(lines, margin, ctx.y);
     ctx.y += lines.length * 4 + 3;
@@ -131,7 +140,7 @@ function infoPanel(ctx, rows) {
   rows.forEach(([label, value], i) => {
     rgb(doc, "setTextColor", C.muted);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(PDF_TYPE.body);
     doc.text(String(label), margin + 5, y);
     rgb(doc, "setTextColor", C.ink);
     doc.setFont("helvetica", "bold");
@@ -180,7 +189,7 @@ function summaryCards(ctx, cards, columns = 2) {
   }
 }
 
-function table(ctx, columns, rows, { fontSize = 7.6, header = true, rowColor } = {}) {
+function table(ctx, columns, rows, { fontSize = PDF_TYPE.table, headerFontSize = PDF_TYPE.tableHeader, header = true, rowColor } = {}) {
   const { doc, margin } = ctx;
   const x0 = margin;
   const totalW = columns.reduce((sum, c) => sum + c.width, 0);
@@ -195,7 +204,7 @@ function table(ctx, columns, rows, { fontSize = 7.6, header = true, rowColor } =
     columns.forEach((c) => {
       rgb(doc, "setTextColor", C.green);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.1);
+      doc.setFontSize(headerFontSize);
       doc.text(String(c.label || "").toUpperCase(), c.align === "right" ? x + c.width - 3 : x + 3, ctx.y + 5.2, { align: c.align === "right" ? "right" : "left" });
       x += c.width;
     });
@@ -527,7 +536,7 @@ export async function exportAnnualAgmPdf(data) {
       { key: "collection_rate", label: "Rate", width: 25, align: "right", color: C.green2, format: v => `${Number(v || 0).toFixed(0)}%` },
     ],
     data?.months || [],
-    { fontSize: 6.9 }
+    { fontSize: PDF_TYPE.table }
   );
 
   if ((data?.member_contributions || []).length) {
@@ -543,7 +552,7 @@ export async function exportAnnualAgmPdf(data) {
         { key: "rate", label: "Rate", width: 16, align: "right", format: v => `${Number(v || 0).toFixed(0)}%` },
       ],
       data.member_contributions,
-      { fontSize: 6.25 }
+      { fontSize: PDF_TYPE.table }
     );
     const memberTotals=data.member_contributions.reduce((a,row)=>({due:a.due+Number(row.annual_target||0),applied:a.applied+Number((row.applied ?? row.collected) || 0),advance:a.advance+Number(row.advance||0),outstanding:a.outstanding+Number(row.outstanding||0)}),{due:0,applied:0,advance:0,outstanding:0});
     infoPanel(ctx, [
@@ -567,7 +576,7 @@ export async function exportAnnualAgmPdf(data) {
         { key: "amount", label: "Amount", width: 33, align: "right", bold: true, color: C.green2, format: v => money(v) },
       ],
       data.donations,
-      { fontSize: 6.5 }
+      { fontSize: PDF_TYPE.table }
     );
     const donationTotal=data.donations.reduce((sum,row)=>sum+Number(row.amount||0),0);
     infoPanel(ctx, [["Detailed annual donation total", money(donationTotal)]]);
@@ -585,7 +594,40 @@ export async function exportAnnualAgmPdf(data) {
         { key: "void_reason", label: "Reason", width: 32, format: v => v || "Financial reversal" },
       ],
       data.donation_adjustments,
-      { fontSize: 6.4 }
+      { fontSize: PDF_TYPE.table }
+    );
+  }
+
+  if ((data?.meeting_summary || []).length) {
+    sectionTitle(ctx, "Meeting summary / RSVP", "RSVP responses are shown because the current system does not yet store confirmed post-meeting attendance.");
+    table(ctx,
+      [
+        { key: "meeting_date", label: "Date", width: 24, bold: true, format: v => String(v || "").slice(0,10) },
+        { key: "title", label: "Meeting", width: 57 },
+        { key: "rsvp_yes", label: "Going", width: 20, align: "right", bold: true, color: C.green2 },
+        { key: "rsvp_maybe", label: "Maybe", width: 20, align: "right", color: C.amber },
+        { key: "rsvp_no", label: "No", width: 18, align: "right", color: C.red },
+        { key: "minutes_recorded", label: "Minutes", width: 21, align: "right", bold: true, format: v => Number(v) ? "YES" : "NO", color: r => Number(r.minutes_recorded) ? C.green2 : C.muted },
+        { key: "action_total", label: "Actions", width: 22, align: "right", bold: true },
+      ],
+      data.meeting_summary,
+      { fontSize: PDF_TYPE.table }
+    );
+  }
+
+  if ((data?.meeting_actions || []).length) {
+    sectionTitle(ctx, "Meeting action items", "Action items created from meetings during the reporting year.");
+    table(ctx,
+      [
+        { key: "meeting_date", label: "Date", width: 22, bold: true, format: v => String(v || "").slice(0,10) },
+        { key: "meeting_title", label: "Meeting", width: 34 },
+        { key: "description", label: "Action item", width: 54 },
+        { key: "member_name", label: "Assigned to", width: 30, format: (v,r) => r.member_code ? `${v || "-"} (${r.member_code})` : (v || r.admin_name || "-") },
+        { key: "due_date", label: "Due", width: 22, format: v => v || "-" },
+        { key: "status", label: "Status", width: 20, bold: true, color: r => statusColor(r.status), format: v => String(v || "").toUpperCase() },
+      ],
+      data.meeting_actions,
+      { fontSize: PDF_TYPE.table }
     );
   }
 
@@ -612,7 +654,7 @@ export async function exportAnnualAgmPdf(data) {
         { key: "amount", label: "Amount", width: 33, align: "right", bold: true, color: C.red, format: v => money(v) },
       ],
       data.expenses,
-      { fontSize: 6.7 }
+      { fontSize: PDF_TYPE.table }
     );
     const annualExpenseTotal = data.expenses.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     infoPanel(ctx, [["Detailed annual expense total", money(annualExpenseTotal)]]);
@@ -630,7 +672,7 @@ export async function exportAnnualAgmPdf(data) {
         { key: "status", label: "Status", width: 24, bold: true, color: r => statusColor(r.status), format: v => String(v || "").toUpperCase() },
       ],
       data.expense_adjustments,
-      { fontSize: 6.6 }
+      { fontSize: PDF_TYPE.table }
     );
   }
 
@@ -641,7 +683,7 @@ export async function exportAnnualAgmPdf(data) {
   doc.roundedRect(ctx.margin, ctx.y, ctx.pageW - ctx.margin * 2, 20, 3, 3, "FD");
   rgb(doc, "setTextColor", C.muted);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
+  doc.setFontSize(PDF_TYPE.body);
   doc.text("This report was generated electronically from the Fund Manager records.", ctx.margin + 5, ctx.y + 8);
   doc.text(`Reporting year: ${year}`, ctx.margin + 5, ctx.y + 14);
   ctx.y += 25;
