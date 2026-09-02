@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap');
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #F7F5EF;
   --card: #FFFFFF;
   --text: #1F2A22;
@@ -71,8 +71,8 @@
   --accent: #C98A4B;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+
+  :root[data-theme="dark"] {
     /* Neutral charcoal foundation: green is an accent, not the page tint. */
     --bg: #111310;
     --card: #1A1D19;
@@ -151,15 +151,19 @@
   }
 
   /* Native controls can otherwise retain a bright platform surface. */
-  input, textarea, select, option {
+  :root[data-theme="dark"] input,
+  :root[data-theme="dark"] textarea,
+  :root[data-theme="dark"] select,
+  :root[data-theme="dark"] option {
     color-scheme: dark;
   }
 
   /* Keep cards distinct from the page without adding a green glow. */
-  [style*="box-shadow"], [style*="boxShadow"] {
+  :root[data-theme="dark"] [style*="box-shadow"],
+  :root[data-theme="dark"] [style*="boxShadow"] {
     --theme-shadow: var(--shadow);
   }
-}
+
 
 html, body, #root {
   height: 100%;
@@ -258,24 +262,24 @@ input:focus, textarea:focus, select:focus {
 /* System dark-theme refinement */
 ::selection { background: color-mix(in srgb, var(--primary) 55%, transparent); color: var(--text-strong); }
 
-@media (prefers-color-scheme: dark) {
-  body { background: var(--bg); }
+
+  :root[data-theme="dark"] body { background: var(--bg); }
 
   /* Make the two main green brand surfaces feel deliberate rather than luminous. */
-  .theme-brand-surface {
+  :root[data-theme="dark"] .theme-brand-surface {
     background: linear-gradient(145deg, #274B35 0%, #213D2C 100%) !important;
     color: var(--on-primary) !important;
   }
 
   /* Safari autofill can otherwise flash a light field in Telegram WebView. */
-  input:-webkit-autofill,
-  input:-webkit-autofill:hover,
-  input:-webkit-autofill:focus {
+  :root[data-theme="dark"] input:-webkit-autofill,
+  :root[data-theme="dark"] input:-webkit-autofill:hover,
+  :root[data-theme="dark"] input:-webkit-autofill:focus {
     -webkit-text-fill-color: var(--text) !important;
     -webkit-box-shadow: 0 0 0 1000px var(--card) inset !important;
     transition: background-color 9999s ease-out 0s;
   }
-}
+
 
 /* v23: fixed app shell + one dedicated content scroller.
    Header, Ledger branding, mode switch and tabs stay visible; only page content moves. */

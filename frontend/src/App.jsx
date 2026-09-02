@@ -3,6 +3,27 @@ import { api } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
 
+
+const THEME_VALUES = new Set(["light", "dark"]);
+
+function resolveAppTheme() {
+  if (typeof window === "undefined") return "light";
+  const telegramTheme = window.Telegram?.WebApp?.colorScheme;
+  if (THEME_VALUES.has(telegramTheme)) return telegramTheme;
+  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
+}
+
+function applyAppTheme(theme = resolveAppTheme()) {
+  if (typeof document === "undefined") return;
+  const nextTheme = THEME_VALUES.has(theme) ? theme : "light";
+  document.documentElement.dataset.theme = nextTheme;
+  document.documentElement.style.colorScheme = nextTheme;
+}
+
+// Apply the correct palette before React paints. Telegram is the source of
+// truth inside the Mini App; the device/browser preference is fallback only.
+applyAppTheme();
+
 const pageLoaders = {
   members: () => import("./pages/Members"),
   reports: () => import("./pages/Reports"),
@@ -54,6 +75,22 @@ export default function App() {
   const tabs = useMemo(() => adminView
     ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
     : ["overview", "history", "fund", "activity", "meetings", "actions", "profile"], [adminView, canFinance]);
+
+  useEffect(() => {
+    const telegram = window.Telegram?.WebApp;
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    const syncTheme = () => applyAppTheme();
+
+    syncTheme();
+    if (THEME_VALUES.has(telegram?.colorScheme) && telegram?.onEvent) {
+      telegram.onEvent("themeChanged", syncTheme);
+      return () => telegram.offEvent?.("themeChanged", syncTheme);
+    }
+
+    // Outside Telegram, follow the normal operating-system preference.
+    media?.addEventListener?.("change", syncTheme);
+    return () => media?.removeEventListener?.("change", syncTheme);
+  }, []);
 
   useEffect(() => {
     // Start the safe overview request immediately so it overlaps the /me round-trip.
