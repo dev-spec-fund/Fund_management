@@ -235,6 +235,15 @@ async function upload(path, formData) {
   return data;
 }
 
+async function downloadBlob(path) {
+  const res = await fetch(apiUrl(path), { headers: { "X-Telegram-Init-Data": initData() } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed: ${res.status}`);
+  }
+  return res.blob();
+}
+
 export const api = {
   me: () => request("/api/me"),
   prefetchMemberData,
@@ -274,6 +283,15 @@ export const api = {
     remove: (id, reason) => request(`/api/expenses/${id}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
     approve: (id, data = {}) => request(`/api/expenses/${id}/approve`, { method: "POST", body: JSON.stringify(data) }),
     reject: (id) => request(`/api/expenses/${id}/reject`, { method: "POST" }),
+    documents: (id) => request(`/api/expenses/${id}/documents`),
+    uploadDocument: (id, file, documentType = "") => {
+      const form = new FormData();
+      form.append("file", file, file.name || "document");
+      if (documentType) form.append("document_type", documentType);
+      return upload(`/api/expenses/${id}/documents`, form);
+    },
+    downloadDocument: (expenseId, documentId) => downloadBlob(`/api/expenses/${expenseId}/documents/${documentId}/file`),
+    sendDocumentToTelegram: (expenseId, documentId) => request(`/api/expenses/${expenseId}/documents/${documentId}/send-to-telegram`, { method: "POST" }),
     categories: () => request("/api/expenses/categories"),
     addCategory: (name) => request("/api/expenses/categories", { method: "POST", body: JSON.stringify({ name }) }),
     updateCategory: (id, data) => request(`/api/expenses/categories/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

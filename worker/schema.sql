@@ -146,6 +146,21 @@ CREATE TABLE IF NOT EXISTS expenses (
   budget_override_by INTEGER REFERENCES admins(id)
 );
 
+CREATE TABLE IF NOT EXISTS expense_documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  expense_id INTEGER NOT NULL REFERENCES expenses(id),
+  telegram_file_id TEXT NOT NULL,
+  telegram_file_unique_id TEXT,
+  telegram_message_id INTEGER,
+  telegram_chat_id TEXT,
+  original_filename TEXT NOT NULL,
+  mime_type TEXT,
+  file_size INTEGER,
+  document_type TEXT,
+  uploaded_by INTEGER NOT NULL REFERENCES admins(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS exemptions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   member_id INTEGER NOT NULL REFERENCES members(id),
@@ -373,6 +388,7 @@ INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (14,'expense_dates_
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (15,'member_contribution_rate_history_and_member_app');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (16,'organization_branding_settings');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (17,'community_projects_and_fund_protection');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (18,'expense_documents_telegram');
 
 CREATE INDEX IF NOT EXISTS idx_members_normalized_name ON members(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_members_normalized_phone ON members(normalized_phone);
@@ -382,6 +398,8 @@ CREATE INDEX IF NOT EXISTS idx_exemptions_member_month ON exemptions(member_id,m
 CREATE INDEX IF NOT EXISTS idx_month_closures_month ON month_closures(month);
 CREATE INDEX IF NOT EXISTS idx_expenses_status_transaction_month_category ON expenses(status,transaction_month,category_id);
 CREATE INDEX IF NOT EXISTS idx_projects_status_start ON projects(status,start_date);
+CREATE INDEX IF NOT EXISTS idx_expense_documents_expense_created ON expense_documents(expense_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_expense_documents_telegram_file ON expense_documents(telegram_file_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_project_status ON expenses(project_id,status,transaction_month);
 CREATE INDEX IF NOT EXISTS idx_expenses_expense_date ON expenses(expense_date);
 CREATE INDEX IF NOT EXISTS idx_donations_status_transaction_month ON donations(status,transaction_month);

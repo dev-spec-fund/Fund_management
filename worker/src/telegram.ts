@@ -52,6 +52,10 @@ export async function sendDocument(
   return json;
 }
 
+export function sendStoredDocument(env: Env, chatId: string | number, fileId: string, caption = "") {
+  return tg(env, "sendDocument", { chat_id: chatId, document: fileId, caption: caption.slice(0, 1024) });
+}
+
 export function editMessageCaption(env: Env, chatId: string | number, messageId: number, caption: string, extra: Record<string, unknown> = {}) {
   return tg(env, "editMessageCaption", { chat_id: chatId, message_id: messageId, caption, parse_mode: "HTML", ...extra });
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Search, Pencil, RotateCcw, Check, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search, Pencil, RotateCcw, Check, X, Paperclip, FileText, Send, Eye } from "lucide-react";
 import { api } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, MessageBanner, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
@@ -133,6 +133,7 @@ export default function Expenses({ admin }) {
             <div className="sans" style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
               <strong style={{ fontSize: 13 }}>{row.description}</strong>
               <span style={{ fontSize: 9, padding: "3px 6px", borderRadius: 999, background: tone.bg, color: tone.color, border: `1px solid ${tone.border}` }}>{statusLabel(row)}</span>
+              {Number(row.document_count||0)>0 && <span title={`${row.document_count} supporting document${Number(row.document_count)===1?"":"s"}`} style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:9, color:"var(--muted)" }}><Paperclip size={10} />{row.document_count}</span>}
             </div>
             <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 4 }}>
               {row.expense_date || row.transaction_month} · {row.category_name || (row.project_name ? "Project expense / Uncategorised" : "Uncategorised")}{row.project_name ? ` · ${row.project_name}` : ""} · {row.txn_id || `#${row.id}`}
@@ -142,7 +143,7 @@ export default function Expenses({ admin }) {
         </button>;
       })}
 
-      {showAdd && <ExpenseForm admin={admin} onClose={() => setShowAdd(false)} onSaved={() => saved("Expense added")} />}
+      {showAdd && <ExpenseForm admin={admin} onClose={() => setShowAdd(false)} onSaved={saved} />}
       {selected && <ExpenseDetails admin={admin} row={selected} onClose={() => setSelected(null)} onSaved={saved} />}
     </>
   );
@@ -160,6 +161,7 @@ function ExpenseForm({ admin, onClose, onSaved, row = null }) {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [documents, setDocuments] = useState([]);
   useEffect(() => { api.expenses.categories().then(setCategories).catch(() => {}); api.projects.list({ status: "active" }).then(setProjects).catch(() => {}); }, []);
 
   const save = async () => {
@@ -168,8 +170,19 @@ function ExpenseForm({ admin, onClose, onSaved, row = null }) {
     setBusy(true); setError("");
     try {
       const payload = { description: form.description.trim(), category_id: form.category_id || null, project_id: form.project_id || null, amount: Number(form.amount), expense_date: form.expense_date };
-      if (row) await expenseMutationWithOverrides((data) => api.expenses.update(row.id, data), payload); else await expenseMutationWithOverrides((data) => api.expenses.create(data), payload);
-      await onSaved(row ? "Expense updated" : "Expense added");
+      const result = row
+        ? await expenseMutationWithOverrides((data) => api.expenses.update(row.id, data), payload)
+        : await expenseMutationWithOverrides((data) => api.expenses.create(data), payload);
+      const expenseId = row?.id || result?.id;
+      if (documents.length && expenseId) {
+        try {
+          for (const file of documents) await api.expenses.uploadDocument(expenseId, file);
+        } catch (uploadError) {
+          setError(`Expense saved, but a document could not be saved to Telegram: ${uploadError.message || "Upload failed"}. Open the expense and retry.`);
+          return;
+        }
+      }
+      await onSaved(row ? "Expense updated" : documents.length ? `Expense added · ${documents.length} document${documents.length===1?"":"s"} saved` : "Expense added");
     } catch (e) { setError(e.message || "Could not save expense"); } finally { setBusy(false); }
   };
 
@@ -189,6 +202,15 @@ function ExpenseForm({ admin, onClose, onSaved, row = null }) {
     </select>
     <Field label="Amount" type="number" prefix="MVR" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
     <Field label="Expense date" type="date" value={form.expense_date} onChange={(v) => setForm({ ...form, expense_date: v })} />
+    <div className="sans" style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 5 }}>Supporting documents (optional)</div>
+      <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, border: "1px dashed var(--border-strong)", borderRadius: 10, padding: "10px 12px", cursor: "pointer", background: "var(--card)", fontSize: 12 }}>
+        <Paperclip size={14} /> {documents.length ? `${documents.length} file${documents.length===1?"":"s"} selected` : "Attach receipt, invoice, slip or PDF"}
+        <input type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => setDocuments(Array.from(e.target.files || []).slice(0, 10))} />
+      </label>
+      <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 5 }}>Up to 10 files per save · maximum 20 MB each · stored in Telegram, with references kept in D1.</div>
+      {documents.length > 0 && <div style={{ marginTop: 6, fontSize: 10, color: "var(--muted)" }}>{documents.map((f) => f.name).join(" · ")}</div>}
+    </div>
     <PrimaryButton onClick={busy ? undefined : save}>{busy ? "Saving…" : row ? "Save changes" : "Save expense"}</PrimaryButton>
   </Modal>;
 }
@@ -197,6 +219,29 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [documents, setDocuments] = useState(null);
+  const [docBusy, setDocBusy] = useState(false);
+  const canViewDocuments = ["owner","super_admin","treasurer"].includes(String(admin?.role || ""));
+
+  const loadDocuments = async () => { if (!canViewDocuments) return setDocuments([]); try { setDocuments(await api.expenses.documents(row.id)); } catch (e) { setError(e.message || "Could not load documents"); setDocuments([]); } };
+  useEffect(() => { loadDocuments(); }, [row.id, canViewDocuments]);
+
+  const addDocuments = async (files) => {
+    const selected = Array.from(files || []).slice(0, 10); if (!selected.length) return;
+    setDocBusy(true); setError("");
+    try { for (const file of selected) await api.expenses.uploadDocument(row.id, file); await loadDocuments(); }
+    catch (e) { setError(e.message || "Could not save document to Telegram"); } finally { setDocBusy(false); }
+  };
+  const openDocument = async (doc) => {
+    setDocBusy(true); setError("");
+    try { const blob=await api.expenses.downloadDocument(row.id, doc.id); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.download=doc.original_filename || "document"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); }
+    catch (e) { setError(e.message || "Could not open document"); } finally { setDocBusy(false); }
+  };
+  const sendDocument = async (doc) => {
+    setDocBusy(true); setError("");
+    try { await api.expenses.sendDocumentToTelegram(row.id, doc.id); }
+    catch (e) { setError(e.message || "Could not send document to Telegram"); } finally { setDocBusy(false); }
+  };
 
   if (editing) return <ExpenseForm admin={admin} row={row} onClose={onClose} onSaved={onSaved} />;
 
@@ -225,6 +270,25 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
       {Number(row.fund_override||0)===1 && <Detail label="Fund override" value={row.fund_override_reason || "Super Admin override"} />}
       {row.budget_override_reason && <Detail label="Budget override" value={row.budget_override_reason} />}
     </div>
+    {canViewDocuments && <div className="sans" style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 12, marginBottom: 14, background: "var(--card)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><Paperclip size={14} /> Supporting documents</div>
+        <label style={{ ...smallBtn("var(--primary-text)"), cursor: docBusy ? "wait" : "pointer", padding: "6px 9px" }}>
+          <Plus size={12} /> Add
+          <input disabled={docBusy} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => { addDocuments(e.target.files); e.target.value=""; }} />
+        </label>
+      </div>
+      {documents === null ? <div style={{ fontSize: 11, color: "var(--soft)" }}>Loading documents…</div> : documents.length === 0 ? <div style={{ fontSize: 11, color: "var(--soft)" }}>No documents attached.</div> : documents.map((doc) => <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--divider)", padding: "8px 0" }}>
+        <FileText size={15} style={{ flex: "0 0 auto" }} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.original_filename}</div>
+          <div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{doc.uploaded_by_name || "Admin"} · {doc.created_at ? new Date(doc.created_at.replace(" ","T")+"Z").toLocaleString() : ""}{doc.file_size ? ` · ${(Number(doc.file_size)/1024/1024).toFixed(Number(doc.file_size)>1048576?1:2)} MB` : ""}</div>
+        </div>
+        <button type="button" disabled={docBusy} title="Open document" onClick={() => openDocument(doc)} style={{ ...smallBtn("var(--primary-text)"), padding: 6 }}><Eye size={13} /></button>
+        <button type="button" disabled={docBusy} title="Send to my Telegram" onClick={() => sendDocument(doc)} style={{ ...smallBtn("var(--primary-text)"), padding: 6 }}><Send size={13} /></button>
+      </div>)}
+    </div>}
+    {!canViewDocuments && <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginBottom: 12 }}>Supporting expense documents are restricted to finance admins.</div>}
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
       {row.status !== "reversed" && row.status !== "voided" && <button type="button" disabled={busy} onClick={() => setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13} /> Edit</button>}
       {row.status === "pending" && <button type="button" disabled={busy} onClick={approve} style={smallBtn("var(--success-strong)")}><Check size={13} /> Approve</button>}

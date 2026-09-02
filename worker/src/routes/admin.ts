@@ -478,7 +478,7 @@ adminRoute.post('/errors/resolve-all', requireSuperAdmin, async c => { const adm
 
 adminRoute.get('/backup', requireSuperAdmin, async c => {
   await ensureOperationalSchema(c.env);
-  const tables=['members','admins','member_registration_requests','contributions','contribution_allocations','donations','expense_categories','projects','expenses','exemptions','settings','id_sequences','audit_log','month_closures','meetings','meeting_rsvps','meeting_minutes','meeting_action_items','monthly_snapshots','financial_reversals','error_log','rate_limits','schema_migrations'];
+  const tables=['members','admins','member_registration_requests','contributions','contribution_allocations','donations','expense_categories','projects','expenses','expense_documents','exemptions','settings','id_sequences','audit_log','month_closures','meetings','meeting_rsvps','meeting_minutes','meeting_action_items','monthly_snapshots','financial_reversals','error_log','rate_limits','schema_migrations'];
   const version=await c.env.DB.prepare("SELECT MAX(version) version FROM schema_migrations").first<any>();
   const branding=await getBranding(c.env); const slug=branding.short_name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'fund';
   const data:any={exported_at:new Date().toISOString(),format:`${slug}-fund-json-v2`,organization:branding,schema_version:Number(version?.version||0),tables:{}};

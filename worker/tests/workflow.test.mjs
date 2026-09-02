@@ -19,6 +19,7 @@ test("member activity has privacy-safe branch", () => {
 test("backup contains contribution allocations and meetings", () => {
   const admin=read("src/routes/admin.ts");
   assert.match(admin,/contribution_allocations/);
+  assert.match(admin,/expense_documents/);
   assert.match(admin,/meeting_rsvps/);
   assert.match(admin,/schema_migrations/);
 });
@@ -31,7 +32,7 @@ test("allocation planner prefetches future state", () => {
 
 test("schema version is current", () => {
   const ops=read("src/ops.ts");
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 17/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 18/);
 });
 
 test("demotion preserves member record and removes admin access only", () => {
@@ -147,4 +148,15 @@ test('member community-project view exposes approved spending only and is admin-
   assert.match(index, /p\.status IN \('active','completed'\)/);
   assert.doesNotMatch(index, /fund_override_reason/);
   assert.match(settings, /show_projects_to_members/);
+});
+
+
+test("expense documents use Telegram file references", () => {
+  const migration = read("migrations/0018_expense_documents_telegram.sql");
+  const expenses = read("src/routes/expenses.ts");
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS expense_documents/);
+  assert.match(migration, /telegram_file_id TEXT NOT NULL/);
+  assert.match(expenses, /sendDocument\(c\.env,admin\.telegram_id/);
+  assert.match(expenses, /downloadTelegramFile/);
+  assert.match(expenses, /sendStoredDocument/);
 });

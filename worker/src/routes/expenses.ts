@@ -4,6 +4,7 @@ import { requireAdmin, requireFinance } from "../auth";
 import { currentDate, generateTxnId, getSetting } from "../db";
 import { adminCan, auditEntity, availableFundBalance, ensureOperationalSchema, requireOpenMonth } from "../ops";
 import { boundedText, money, validDate, validMonth } from "../validation";
+import { sendDocument, sendStoredDocument, downloadTelegramFile } from "../telegram";
 
 export const expensesRoute = new Hono<AppEnv>();
 
@@ -21,7 +22,8 @@ expensesRoute.get("/", requireAdmin, async (c) => {
   const rows = await c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.category_id,e.amount,e.receipt_file_id,e.logged_by,e.edited_by,e.expense_date,e.transaction_month,
       e.status,e.approval_required,e.approved_by,e.approved_at,e.voided_by,e.voided_at,e.void_reason,e.created_at,e.updated_at,
       e.project_id,e.fund_override,e.fund_override_reason,e.fund_override_by,e.fund_override_at,e.fund_balance_before,e.budget_override_reason,e.budget_override_by,
-      c.name category_name,p.name project_name,p.project_code,la.name logged_by_name,aa.name approved_by_name
+      c.name category_name,p.name project_name,p.project_code,la.name logged_by_name,aa.name approved_by_name,
+      (SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id=e.id) document_count
     FROM expenses e LEFT JOIN expense_categories c ON c.id=e.category_id
     LEFT JOIN projects p ON p.id=e.project_id
     LEFT JOIN admins la ON la.id=e.logged_by LEFT JOIN admins aa ON aa.id=e.approved_by
@@ -68,6 +70,81 @@ async function eligibleOtherFinanceAdmins(c:any, adminId:number) {
     .bind(adminId).first<{n:number}>();
   return Number(row?.n || 0);
 }
+
+
+const EXPENSE_DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
+const ALLOWED_EXPENSE_DOCUMENT_TYPES = new Set([
+  "application/pdf", "image/jpeg", "image/png", "image/webp",
+  "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain"
+]);
+
+function safeExpenseFilename(name: string) {
+  const clean = String(name || "document").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").trim().slice(0, 180);
+  return clean || "document";
+}
+
+expensesRoute.get("/:id/documents", requireFinance, async (c) => {
+  await ensureOperationalSchema(c.env);
+  const id=Number(c.req.param("id")); if(!Number.isInteger(id)||id<=0) return c.json({error:"Invalid expense"},400);
+  const exists=await c.env.DB.prepare("SELECT id FROM expenses WHERE id=?").bind(id).first(); if(!exists)return c.json({error:"Expense not found"},404);
+  const rows=await c.env.DB.prepare(`SELECT d.id,d.expense_id,d.original_filename,d.mime_type,d.file_size,d.document_type,d.created_at,
+      a.name uploaded_by_name
+    FROM expense_documents d LEFT JOIN admins a ON a.id=d.uploaded_by
+    WHERE d.expense_id=? ORDER BY d.created_at DESC,d.id DESC`).bind(id).all();
+  return c.json(rows.results);
+});
+
+expensesRoute.post("/:id/documents", requireFinance, async (c) => {
+  await ensureOperationalSchema(c.env);
+  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
+  const expense=await c.env.DB.prepare("SELECT id,txn_id,description,status FROM expenses WHERE id=?").bind(id).first<any>();
+  if(!expense)return c.json({error:"Expense not found"},404);
+  const form=await c.req.formData(); const value=form.get("file");
+  if(!(value instanceof File)) return c.json({error:"Choose a document to upload"},400);
+  if(value.size<=0) return c.json({error:"The selected document is empty"},400);
+  if(value.size>EXPENSE_DOCUMENT_MAX_BYTES) return c.json({error:"Document is too large. Maximum size is 20 MB"},413);
+  const mime=String(value.type||"application/octet-stream").toLowerCase();
+  if(value.type && !ALLOWED_EXPENSE_DOCUMENT_TYPES.has(mime)) return c.json({error:"Unsupported document type. Use PDF, image, Word, Excel or text files"},415);
+  const filename=safeExpenseFilename(value.name);
+  const documentType=boundedText(form.get("document_type"),60) || null;
+  const caption=`Expense document · ${expense.txn_id || `#${id}`}\n${String(expense.description||"").slice(0,180)}`;
+  const sent:any=await sendDocument(c.env,admin.telegram_id,filename,value,caption);
+  const tgDoc=sent?.result?.document;
+  const fileId=String(tgDoc?.file_id||"");
+  if(!fileId) return c.json({error:"Telegram did not return a document reference"},502);
+  const messageId=Number(sent?.result?.message_id||0)||null;
+  const chatId=String(sent?.result?.chat?.id ?? admin.telegram_id);
+  const result=await c.env.DB.prepare(`INSERT INTO expense_documents
+    (expense_id,telegram_file_id,telegram_file_unique_id,telegram_message_id,telegram_chat_id,original_filename,mime_type,file_size,document_type,uploaded_by)
+    VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(id,fileId,tgDoc?.file_unique_id||null,messageId,chatId,filename,mime,Number(tgDoc?.file_size||value.size||0),documentType,admin.id).run();
+  const docId=Number(result.meta.last_row_id);
+  await auditEntity(c.env,admin.id,"expense_document_added","expense_document",docId,null,{expense_id:id,txn_id:expense.txn_id,filename,mime_type:mime,file_size:Number(value.size||0),document_type:documentType});
+  return c.json({id:docId,expense_id:id,original_filename:filename,mime_type:mime,file_size:Number(tgDoc?.file_size||value.size||0),document_type:documentType,created_at:new Date().toISOString()},201);
+});
+
+expensesRoute.get("/:id/documents/:docId/file", requireFinance, async (c) => {
+  await ensureOperationalSchema(c.env);
+  const expenseId=Number(c.req.param("id")); const docId=Number(c.req.param("docId"));
+  const doc=await c.env.DB.prepare("SELECT * FROM expense_documents WHERE id=? AND expense_id=?").bind(docId,expenseId).first<any>();
+  if(!doc)return c.json({error:"Document not found"},404);
+  const file=await downloadTelegramFile(c.env,String(doc.telegram_file_id));
+  if(!file)return c.json({error:"Could not retrieve document from Telegram"},502);
+  const filename=safeExpenseFilename(doc.original_filename||"document");
+  return new Response(file.bytes,{headers:{"Content-Type":doc.mime_type||file.mime||"application/octet-stream","Content-Disposition":`inline; filename*=UTF-8''${encodeURIComponent(filename)}`,"Cache-Control":"private, no-store"}});
+});
+
+expensesRoute.post("/:id/documents/:docId/send-to-telegram", requireFinance, async (c) => {
+  await ensureOperationalSchema(c.env);
+  const admin=c.get("admin")!; const expenseId=Number(c.req.param("id")); const docId=Number(c.req.param("docId"));
+  const doc=await c.env.DB.prepare(`SELECT d.*,e.txn_id,e.description FROM expense_documents d JOIN expenses e ON e.id=d.expense_id WHERE d.id=? AND d.expense_id=?`).bind(docId,expenseId).first<any>();
+  if(!doc)return c.json({error:"Document not found"},404);
+  const sent=await sendStoredDocument(c.env,admin.telegram_id,String(doc.telegram_file_id),`Expense document · ${doc.txn_id || `#${expenseId}`}\n${String(doc.description||"").slice(0,180)}`);
+  if(!sent) return c.json({error:"Could not send document to Telegram"},502);
+  await auditEntity(c.env,admin.id,"expense_document_sent_to_telegram","expense_document",docId,null,{expense_id:expenseId,filename:doc.original_filename});
+  return c.json({ok:true});
+});
 
 expensesRoute.post("/", requireFinance, async (c) => {
   await ensureOperationalSchema(c.env);
