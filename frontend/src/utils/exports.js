@@ -456,6 +456,19 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
     );
   }
 
+  if ((summary.byProject || []).length) {
+    sectionTitle(ctx, "Project spending", "Approved expenses linked to community projects for the selected month.");
+    table(ctx,
+      [
+        { key: "project_code", label: "Project ID", width: 28, bold: true },
+        { key: "project_name", label: "Project", width: 82 },
+        { key: "budget", label: "Budget", width: 36, align: "right", format: v => v == null ? "Open cost" : money(v) },
+        { key: "spent", label: "Month spend", width: 36, align: "right", bold: true, color: C.red, format: v => money(v) },
+      ],
+      summary.byProject
+    );
+  }
+
   if ((summary.expenseDetails || []).length) {
     sectionTitle(ctx, "Expense details", "Approved expenses included in the selected month's expense total.");
     table(ctx,
@@ -637,6 +650,22 @@ export async function exportAnnualAgmPdf(data) {
       data.meeting_actions,
       { fontSize: PDF_TYPE.table }
     );
+  }
+
+  if ((data?.projects || []).length) {
+    const activeProjects = data.projects.filter((p) => Number(p.annual_spend || 0) > 0 || ["active","completed"].includes(String(p.status || "")));
+    if (activeProjects.length) {
+      sectionTitle(ctx, "Community projects", "Project spending remains part of normal fund expenses; this section provides project-level tracking.", 16);
+      table(ctx,
+        [
+          { key: "project_code", label: "Project ID", width: 22, bold: true },
+          { key: "name", label: "Project", width: 58 },
+          { key: "status", label: "Status", width: 24, bold: true, format: v => String(v || "").toUpperCase() },
+          { key: "budget", label: "Budget", width: 32, align: "right", format: v => v == null ? "Open cost" : money(v) },
+          { key: "annual_spend", label: "Year spend", width: 34, align: "right", bold: true, color: C.red, format: v => money(v) },
+        ], activeProjects, { fontSize: PDF_TYPE.table }
+      );
+    }
   }
 
   if ((data?.expense_categories || []).length) {

@@ -6,6 +6,30 @@ import { Center, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shar
 import { currentMonthValue, shiftMonthValue } from "../utils/date";
 import { fmt } from "../utils/format";
 
+async function expenseMutationWithOverrides(run, payload = {}) {
+  let next = { ...payload };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { return await run(next); } catch (e) {
+      if (e.code === "PROJECT_BUDGET_EXCEEDED" && e.override_allowed && !next.budget_override_reason) {
+        const reason = prompt(`${e.message}
+
+Reason for exceeding the project budget:`);
+        if (!reason || reason.trim().length < 3) throw e;
+        next = { ...next, budget_override_reason: reason.trim() }; continue;
+      }
+      if (e.code === "INSUFFICIENT_FUND" && e.override_allowed && !next.override_fund_limit) {
+        const reason = prompt(`${e.message}
+
+Super Admin override reason:`);
+        if (!reason || reason.trim().length < 3) throw e;
+        next = { ...next, override_fund_limit: true, override_reason: reason.trim() }; continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error("Could not save expense");
+}
+
 export default function Reports({ setTab }) {
   const nowMonth = currentMonthValue();
   const [month, setMonth] = useState(nowMonth);
@@ -196,6 +220,11 @@ export default function Reports({ setTab }) {
       ))}
       {activeCategories.length === 0 && <div className="sans" style={{ fontSize: 12, color: "var(--soft)", marginBottom: 8 }}>No expenses for this month.</div>}
 
+      {(summary.byProject || []).length > 0 && <>
+        <div className="sans" style={{ fontSize: 12, color: "var(--muted)", margin: "20px 0 7px", fontWeight: 700 }}>PROJECT SPENDING</div>
+        {(summary.byProject || []).map((p) => <div key={p.project_id} style={{ display: "flex", justifyContent: "space-between", gap: 10, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "11px 14px", marginBottom: 7 }}><div className="sans" style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600}}>{p.project_name}</div><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{p.project_code}{p.budget == null ? " · Open-cost project" : ` · Budget MVR ${fmt(p.budget)}`}</div></div><strong className="sans" style={{fontSize:13,whiteSpace:"nowrap",color:"var(--danger)"}}>MVR {fmt(p.spent)}</strong></div>)}
+      </>}
+
       <div className="sans" style={{fontSize:12,color:"var(--muted)",margin:"20px 0 7px",fontWeight:700}}>ANNUAL / AGM & ANALYTICS</div>
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:14}}>
         <div style={{display:"flex",gap:8}}>
@@ -236,18 +265,23 @@ function Row({ label, value, color }) {
 
 function ExpenseModal({ onClose, onSaved }) {
   const [categories, setCategories] = useState([]);
-  const [form, setForm] = useState({ description: "", category_id: "", amount: "" });
-  useEffect(() => { api.expenses.categories().then(setCategories).catch(() => {}); }, []);
+  const [projects, setProjects] = useState([]);
+  const [error,setError]=useState("");
+  const [form, setForm] = useState({ description: "", category_id: "", project_id: "", amount: "" });
+  useEffect(() => { api.expenses.categories().then(setCategories).catch(() => {}); api.projects.list({status:"active"}).then(setProjects).catch(()=>{}); }, []);
 
   const save = async () => {
     if (!form.description.trim()) return;
-    await api.expenses.create({ description: form.description, category_id: form.category_id || null, amount: Number(form.amount) || 0 });
-    onSaved();
-    onClose();
+    setError("");
+    try {
+      await expenseMutationWithOverrides((data)=>api.expenses.create(data), { description: form.description, category_id: form.category_id || null, project_id: form.project_id || null, amount: Number(form.amount) || 0 });
+      onSaved(); onClose();
+    } catch (e) { setError(e.message); }
   };
 
   return (
     <Modal onClose={onClose} title="Log expense">
+      {error&&<div className="sans" style={{fontSize:11,color:"var(--danger)",marginBottom:10}}>{error}</div>}
       <Field label="Description" value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
       <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Category</div>
       <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className="sans"
@@ -255,6 +289,8 @@ function ExpenseModal({ onClose, onSaved }) {
         <option value="">Select category</option>
         {categories.filter((c)=>Number(c.active)!==0).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
+      <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Project (optional)</div>
+      <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} className="sans" style={{ width: "100%", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, background: "var(--card)" }}><option value="">None / General expense</option>{projects.map(p=><option key={p.id} value={p.id}>{p.project_code} · {p.name}{p.budget==null?" · Open cost":` · MVR ${fmt(p.remaining_budget)} left`}</option>)}</select>
       <Field label="Amount" type="number" prefix="MVR" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
       <PrimaryButton onClick={save}>Save expense</PrimaryButton>
     </Modal>

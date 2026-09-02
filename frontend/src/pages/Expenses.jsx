@@ -30,7 +30,29 @@ function statusTone(status) {
   return { bg: "var(--danger-bg)", color: "var(--danger)", border: "var(--danger-border)" };
 }
 
-export default function Expenses() {
+async function expenseMutationWithOverrides(run, payload = {}) {
+  let next = { ...payload };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { return await run(next); } catch (e) {
+      if (e.code === "PROJECT_BUDGET_EXCEEDED" && e.override_allowed && !next.budget_override_reason) {
+        const reason = prompt(`${e.message}\n\nReason for exceeding the project budget:`);
+        if (!reason || reason.trim().length < 3) throw e;
+        next = { ...next, budget_override_reason: reason.trim() };
+        continue;
+      }
+      if (e.code === "INSUFFICIENT_FUND" && e.override_allowed && !next.override_fund_limit) {
+        const reason = prompt(`${e.message}\n\nSuper Admin override reason:`);
+        if (!reason || reason.trim().length < 3) throw e;
+        next = { ...next, override_fund_limit: true, override_reason: reason.trim() };
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error("Could not save expense");
+}
+
+export default function Expenses({ admin }) {
   const [month, setMonth] = useState(currentMonthValue());
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -113,37 +135,39 @@ export default function Expenses() {
               <span style={{ fontSize: 9, padding: "3px 6px", borderRadius: 999, background: tone.bg, color: tone.color, border: `1px solid ${tone.border}` }}>{statusLabel(row)}</span>
             </div>
             <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 4 }}>
-              {row.expense_date || row.transaction_month} · {row.category_name || "Uncategorized"} · {row.txn_id || `#${row.id}`}
+              {row.expense_date || row.transaction_month} · {row.category_name || "Uncategorized"}{row.project_name ? ` · ${row.project_name}` : ""} · {row.txn_id || `#${row.id}`}
             </div>
           </div>
           <div className="sans" style={{ color: "var(--danger)", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>MVR {fmt(row.amount)}</div>
         </button>;
       })}
 
-      {showAdd && <ExpenseForm onClose={() => setShowAdd(false)} onSaved={() => saved("Expense added")} />}
-      {selected && <ExpenseDetails row={selected} onClose={() => setSelected(null)} onSaved={saved} />}
+      {showAdd && <ExpenseForm admin={admin} onClose={() => setShowAdd(false)} onSaved={() => saved("Expense added")} />}
+      {selected && <ExpenseDetails admin={admin} row={selected} onClose={() => setSelected(null)} onSaved={saved} />}
     </>
   );
 }
 
-function ExpenseForm({ onClose, onSaved, row = null }) {
+function ExpenseForm({ admin, onClose, onSaved, row = null }) {
   const [categories, setCategories] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [form, setForm] = useState({
     description: row?.description || "",
     category_id: row?.category_id || "",
+    project_id: row?.project_id || "",
     amount: row?.amount ?? "",
     expense_date: row?.expense_date || (row?.transaction_month ? `${row.transaction_month}-01` : todayValue()),
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { api.expenses.categories().then(setCategories).catch(() => {}); }, []);
+  useEffect(() => { api.expenses.categories().then(setCategories).catch(() => {}); api.projects.list({ status: "active" }).then(setProjects).catch(() => {}); }, []);
 
   const save = async () => {
     if (!form.description.trim() || !form.expense_date || Number(form.amount) <= 0) return setError("Description, amount and expense date are required.");
     setBusy(true); setError("");
     try {
-      const payload = { description: form.description.trim(), category_id: form.category_id || null, amount: Number(form.amount), expense_date: form.expense_date };
-      if (row) await api.expenses.update(row.id, payload); else await api.expenses.create(payload);
+      const payload = { description: form.description.trim(), category_id: form.category_id || null, project_id: form.project_id || null, amount: Number(form.amount), expense_date: form.expense_date };
+      if (row) await expenseMutationWithOverrides((data) => api.expenses.update(row.id, data), payload); else await expenseMutationWithOverrides((data) => api.expenses.create(data), payload);
       await onSaved(row ? "Expense updated" : "Expense added");
     } catch (e) { setError(e.message || "Could not save expense"); } finally { setBusy(false); }
   };
@@ -156,20 +180,26 @@ function ExpenseForm({ onClose, onSaved, row = null }) {
       <option value="">Select category</option>
       {categories.filter((c) => Number(c.active) !== 0 || Number(c.id) === Number(form.category_id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
     </select>
+    <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Project (optional)</div>
+    <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} className="sans" style={{ width: "100%", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, background: "var(--card)" }}>
+      <option value="">None / General expense</option>
+      {projects.map((p) => <option key={p.id} value={p.id}>{p.project_code} · {p.name}{p.budget == null ? " · Open cost" : ` · MVR ${fmt(p.remaining_budget)} left`}</option>)}
+      {row?.project_id && !projects.some((p) => Number(p.id) === Number(row.project_id)) && <option value={row.project_id}>{row.project_code || "Project"} · {row.project_name || "Linked project"}</option>}
+    </select>
     <Field label="Amount" type="number" prefix="MVR" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
     <Field label="Expense date" type="date" value={form.expense_date} onChange={(v) => setForm({ ...form, expense_date: v })} />
     <PrimaryButton onClick={busy ? undefined : save}>{busy ? "Saving…" : row ? "Save changes" : "Save expense"}</PrimaryButton>
   </Modal>;
 }
 
-function ExpenseDetails({ row, onClose, onSaved }) {
+function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  if (editing) return <ExpenseForm row={row} onClose={onClose} onSaved={onSaved} />;
+  if (editing) return <ExpenseForm admin={admin} row={row} onClose={onClose} onSaved={onSaved} />;
 
-  const approve = async () => { setBusy(true); setError(""); try { await api.expenses.approve(row.id); await onSaved("Expense approved"); } catch (e) { setError(e.message); } finally { setBusy(false); } };
+  const approve = async () => { setBusy(true); setError(""); try { await expenseMutationWithOverrides((data) => api.expenses.approve(row.id, data), {}); await onSaved("Expense approved"); } catch (e) { setError(e.message); } finally { setBusy(false); } };
   const reject = async () => { if (!confirm("Reject this pending expense?")) return; setBusy(true); setError(""); try { await api.expenses.reject(row.id); await onSaved("Expense rejected"); } catch (e) { setError(e.message); } finally { setBusy(false); } };
   const reverse = async () => {
     const reason = prompt("Reason for reversing this approved expense:");
@@ -186,10 +216,13 @@ function ExpenseDetails({ row, onClose, onSaved }) {
       <Detail label="Amount" value={`MVR ${fmt(row.amount)}`} />
       <Detail label="Expense date" value={row.expense_date || row.transaction_month || "—"} />
       <Detail label="Category" value={row.category_name || "Uncategorized"} />
+      <Detail label="Project" value={row.project_name ? `${row.project_code || ""} ${row.project_name}`.trim() : "None / General"} />
       <Detail label="Status" value={statusLabel(row)} />
       <Detail label="Logged by" value={row.logged_by_name || `Admin #${row.logged_by}`} />
       {row.approved_by_name && <Detail label="Approved by" value={row.approved_by_name} />}
       {row.void_reason && <Detail label="Reason" value={row.void_reason} />}
+      {Number(row.fund_override||0)===1 && <Detail label="Fund override" value={row.fund_override_reason || "Super Admin override"} />}
+      {row.budget_override_reason && <Detail label="Budget override" value={row.budget_override_reason} />}
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
       {row.status !== "reversed" && row.status !== "voided" && <button type="button" disabled={busy} onClick={() => setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13} /> Edit</button>}

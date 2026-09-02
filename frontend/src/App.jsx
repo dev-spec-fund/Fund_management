@@ -28,6 +28,7 @@ const pageLoaders = {
   members: () => import("./pages/Members"),
   reports: () => import("./pages/Reports"),
   expenses: () => import("./pages/Expenses"),
+  projects: () => import("./pages/Projects"),
   pending: () => import("./pages/PendingApprovals"),
   meetings: () => import("./pages/Meetings"),
   settings: () => import("./pages/Settings"),
@@ -37,6 +38,7 @@ const pageLoaders = {
 const Members = lazy(pageLoaders.members);
 const Reports = lazy(pageLoaders.reports);
 const Expenses = lazy(pageLoaders.expenses);
+const Projects = lazy(pageLoaders.projects);
 const PendingApprovals = lazy(pageLoaders.pending);
 const Meetings = lazy(pageLoaders.meetings);
 const Settings = lazy(pageLoaders.settings);
@@ -73,7 +75,7 @@ export default function App() {
   const memberView = isMember && mode === "member";
   const canFinance = adminView && ["owner", "super_admin", "treasurer"].includes(me?.admin?.role);
   const tabs = useMemo(() => adminView
-    ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
+    ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "projects", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
     : ["overview", "history", "fund", "activity", "meetings", "actions", "profile"], [adminView, canFinance]);
 
   useEffect(() => {
@@ -117,7 +119,7 @@ export default function App() {
       ? (canFinance ? ["pending", "members", "activity"] : ["members", "activity"])
       : ["history", "fund", "activity", "meetings"];
     const secondary = adminView
-      ? (canFinance ? ["expenses", "reports", "meetings"] : ["reports", "meetings"])
+      ? (canFinance ? ["expenses", "projects", "reports", "meetings"] : ["reports", "meetings"])
       : ["actions", "profile"];
     const later = adminView ? ["settings"] : [];
 
@@ -200,7 +202,8 @@ export default function App() {
     if (page === "meetings" && memberView) return <MemberMeetings />;
     if (page === "actions" && memberView) return <MyActions />;
     if (page === "profile" && memberView) return <MyProfile member={me.member} />;
-    if (page === "expenses" && canFinance) return <Expenses />;
+    if (page === "expenses" && canFinance) return <Expenses admin={me.admin} />;
+    if (page === "projects" && canFinance) return <Projects admin={me.admin} />;
     if (page === "reports" && adminView) return <Reports setTab={openTab} />;
     if (page === "meetings" && adminView) return <Meetings admin={me.admin} />;
     if (page === "settings" && adminView) return <Settings admin={me.admin} />;

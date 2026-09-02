@@ -216,22 +216,24 @@ async function yearData(env:any, year:string){
     };
     return {...await monthMetrics(env,m),source:'live'};
   }));
-  const [categories,expenseDetails,expenseAdjustments,donationDetails,donationAdjustments,memberRows,reversals,meetings,meetingRsvps,meetingActions]=await Promise.all([
+  const [categories,expenseDetails,expenseAdjustments,donationDetails,donationAdjustments,memberRows,reversals,meetings,meetingRsvps,meetingActions,projectSummary]=await Promise.all([
     env.DB.prepare(`SELECT COALESCE(cat.name,'Uncategorised') category,COALESCE(SUM(e.amount),0) total FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id WHERE e.status='approved' AND e.transaction_month LIKE ? GROUP BY COALESCE(cat.name,'Uncategorised') ORDER BY total DESC`).bind(`${year}-%`).all<any>(),
     env.DB.prepare(`
       SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.approved_at,
-             COALESCE(cat.name,'Uncategorised') category,COALESCE(a.name,'-') logged_by_name
+             COALESCE(cat.name,'Uncategorised') category,p.project_code,p.name project_name,COALESCE(a.name,'-') logged_by_name
       FROM expenses e
       LEFT JOIN expense_categories cat ON cat.id=e.category_id
+      LEFT JOIN projects p ON p.id=e.project_id
       LEFT JOIN admins a ON a.id=e.logged_by
       WHERE e.status='approved' AND e.transaction_month LIKE ?
       ORDER BY e.transaction_month ASC,COALESCE(e.expense_date,date(e.created_at)) ASC,e.id ASC
     `).bind(`${year}-%`).all<any>(),
     env.DB.prepare(`
       SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.voided_at,e.void_reason,
-             COALESCE(cat.name,'Uncategorised') category
+             COALESCE(cat.name,'Uncategorised') category,p.project_code,p.name project_name
       FROM expenses e
       LEFT JOIN expense_categories cat ON cat.id=e.category_id
+      LEFT JOIN projects p ON p.id=e.project_id
       WHERE e.status IN ('reversed','voided') AND e.transaction_month LIKE ?
       ORDER BY e.transaction_month ASC,COALESCE(e.voided_at,e.expense_date,e.created_at) ASC,e.id ASC
     `).bind(`${year}-%`).all<any>(),
@@ -294,7 +296,15 @@ async function yearData(env:any, year:string){
       LEFT JOIN admins a ON a.id=ai.assigned_admin_id
       WHERE mt.meeting_date LIKE ?
       ORDER BY mt.meeting_date ASC,ai.id ASC
-    `).bind(`${year}-%`).all<any>()
+    `).bind(`${year}-%`).all<any>(),
+    env.DB.prepare(`
+      SELECT p.id,p.project_code,p.name,p.description,p.budget,p.start_date,p.target_end_date,p.status,
+             COALESCE(SUM(CASE WHEN e.status='approved' AND e.transaction_month LIKE ? THEN e.amount ELSE 0 END),0) annual_spend,
+             COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount ELSE 0 END),0) lifetime_spend
+      FROM projects p LEFT JOIN expenses e ON e.project_id=p.id
+      WHERE p.start_date IS NULL OR substr(p.start_date,1,4)<=?
+      GROUP BY p.id ORDER BY annual_spend DESC,p.name
+    `).bind(`${year}-%`,year).all<any>()
   ]);
 
   const memberContributions=await Promise.all(memberRows.results.map(async(r:any)=>{
@@ -328,7 +338,7 @@ async function yearData(env:any, year:string){
     year,months:metrics,expense_categories:categories.results,expenses:expenseDetails.results,expense_adjustments:expenseAdjustments.results,
     donations:donationDetails.results,donation_adjustments:donationAdjustments.results,member_contributions:memberContributions,
     reversals:{count:n(reversals?.count),total:n(reversals?.total)},meetings:meetingSummary.length,
-    meeting_summary:meetingSummary,meeting_actions:meetingActions.results
+    meeting_summary:meetingSummary,meeting_actions:meetingActions.results,projects:projectSummary.results
   };
 }
 

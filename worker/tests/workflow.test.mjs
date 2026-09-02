@@ -31,7 +31,7 @@ test("allocation planner prefetches future state", () => {
 
 test("schema version is current", () => {
   const ops=read("src/ops.ts");
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 16/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 17/);
 });
 
 test("demotion preserves member record and removes admin access only", () => {
@@ -118,4 +118,13 @@ test('organization branding settings are migration controlled', () => {
   assert.match(migration, /short_name/);
   assert.match(settings, /fund_name.*short_name|short_name.*fund_name/s);
   assert.match(db, /getBranding/);
+});
+
+
+test("community projects and fund-protection migration exists", () => {
+  const migration = read('migrations/0017_community_projects_and_fund_protection.sql');
+  assert.match(migration,/CREATE TABLE IF NOT EXISTS projects/);
+  assert.match(migration,/ADD COLUMN project_id/);
+  assert.match(migration,/ADD COLUMN fund_override/);
+  assert.match(migration,/VALUES\(17,'community_projects_and_fund_protection'\)/);
 });

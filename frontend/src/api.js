@@ -41,6 +41,7 @@ function shouldBroadcastDataChange(path, method) {
   const liveDataPrefixes = [
     "/api/members",
     "/api/expenses",
+    "/api/projects",
     "/api/donations",
     "/api/governance/reverse",
     "/api/governance/month-close",
@@ -92,7 +93,9 @@ async function request(path, options = {}) {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || `Request failed: ${res.status}`);
+      const error = new Error(body.error || `Request failed: ${res.status}`);
+      Object.assign(error, body, { status: res.status });
+      throw error;
     }
     const data = await res.json();
     if (startedAt) perfLog(`${method} ${path}`, startedAt);
@@ -159,7 +162,7 @@ async function prefetchAdminData(stage = "primary", canFinance = false) {
   } else if (stage === "operations") {
     paths = [
       "/api/admin/meetings",
-      ...(canFinance ? ["/api/expenses", "/api/expenses/categories"] : []),
+      ...(canFinance ? ["/api/expenses", "/api/expenses/categories", "/api/projects"] : []),
     ];
   } else if (stage === "reports") {
     paths = [
@@ -190,7 +193,8 @@ async function prefetchTabData({ tab, adminView = false, canFinance = false, mem
     if (tab === "members") paths = ["/api/members"];
     else if (tab === "pending" && canFinance) paths = ["/api/admin/pending"];
     else if (tab === "activity") paths = ["/api/reports/activity"];
-    else if (tab === "expenses" && canFinance) paths = ["/api/expenses", "/api/expenses/categories"];
+    else if (tab === "expenses" && canFinance) paths = ["/api/expenses", "/api/expenses/categories", "/api/projects"];
+    else if (tab === "projects" && canFinance) paths = ["/api/projects", "/api/members"];
     else if (tab === "meetings") paths = ["/api/admin/meetings"];
     else if (tab === "reports") paths = [
       `/api/reports/summary?month=${month}`,
@@ -266,12 +270,25 @@ export const api = {
     create: (data) => request("/api/expenses", { method: "POST", body: JSON.stringify(data) }),
     update: (id, data) => request(`/api/expenses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     remove: (id, reason) => request(`/api/expenses/${id}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
-    approve: (id) => request(`/api/expenses/${id}/approve`, { method: "POST" }),
+    approve: (id, data = {}) => request(`/api/expenses/${id}/approve`, { method: "POST", body: JSON.stringify(data) }),
     reject: (id) => request(`/api/expenses/${id}/reject`, { method: "POST" }),
     categories: () => request("/api/expenses/categories"),
     addCategory: (name) => request("/api/expenses/categories", { method: "POST", body: JSON.stringify({ name }) }),
     updateCategory: (id, data) => request(`/api/expenses/categories/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     removeCategory: (id) => request(`/api/expenses/categories/${id}`, { method: "DELETE" }),
+  },
+
+  projects: {
+    list: ({ status = "", q = "" } = {}) => {
+      const params = new URLSearchParams();
+      if (status) params.set("status", status);
+      if (q) params.set("q", q);
+      const qs = params.toString();
+      return request(`/api/projects${qs ? `?${qs}` : ""}`);
+    },
+    get: (id) => request(`/api/projects/${id}`),
+    create: (data) => request("/api/projects", { method: "POST", body: JSON.stringify(data) }),
+    update: (id, data) => request(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   },
 
   donations: {

@@ -96,11 +96,32 @@ CREATE TABLE IF NOT EXISTS expense_categories (
   active INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  budget REAL,
+  start_date TEXT,
+  target_end_date TEXT,
+  status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned','active','completed','cancelled')),
+  responsible_member_id INTEGER REFERENCES members(id),
+  created_by INTEGER NOT NULL REFERENCES admins(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT,
+  completed_at TEXT,
+  completed_by INTEGER REFERENCES admins(id),
+  cancelled_at TEXT,
+  cancelled_by INTEGER REFERENCES admins(id),
+  cancel_reason TEXT
+);
+
 CREATE TABLE IF NOT EXISTS expenses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   txn_id TEXT UNIQUE,
   description TEXT NOT NULL,
   category_id INTEGER REFERENCES expense_categories(id),
+  project_id INTEGER REFERENCES projects(id),
   amount REAL NOT NULL,
   receipt_file_id TEXT,
   logged_by INTEGER NOT NULL REFERENCES admins(id),
@@ -115,7 +136,14 @@ CREATE TABLE IF NOT EXISTS expenses (
   voided_at TEXT,
   void_reason TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT
+  updated_at TEXT,
+  fund_override INTEGER NOT NULL DEFAULT 0,
+  fund_override_reason TEXT,
+  fund_override_by INTEGER REFERENCES admins(id),
+  fund_override_at TEXT,
+  fund_balance_before REAL,
+  budget_override_reason TEXT,
+  budget_override_by INTEGER REFERENCES admins(id)
 );
 
 CREATE TABLE IF NOT EXISTS exemptions (
@@ -323,7 +351,7 @@ CREATE TABLE IF NOT EXISTS member_contribution_rates (
 );
 CREATE INDEX IF NOT EXISTS idx_member_contribution_rates_member_period ON member_contribution_rates(member_id,effective_from,effective_to);
 
--- Schema migration ledger. Fresh databases created from schema.sql are current through v16.
+-- Schema migration ledger. Fresh databases created from schema.sql are current through v17.
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -344,6 +372,7 @@ INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (13,'governance_rep
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (14,'expense_dates_and_financial_integrity');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (15,'member_contribution_rate_history_and_member_app');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (16,'organization_branding_settings');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (17,'community_projects_and_fund_protection');
 
 CREATE INDEX IF NOT EXISTS idx_members_normalized_name ON members(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_members_normalized_phone ON members(normalized_phone);
@@ -352,6 +381,8 @@ CREATE INDEX IF NOT EXISTS idx_allocations_month_contribution ON contribution_al
 CREATE INDEX IF NOT EXISTS idx_exemptions_member_month ON exemptions(member_id,month);
 CREATE INDEX IF NOT EXISTS idx_month_closures_month ON month_closures(month);
 CREATE INDEX IF NOT EXISTS idx_expenses_status_transaction_month_category ON expenses(status,transaction_month,category_id);
+CREATE INDEX IF NOT EXISTS idx_projects_status_start ON projects(status,start_date);
+CREATE INDEX IF NOT EXISTS idx_expenses_project_status ON expenses(project_id,status,transaction_month);
 CREATE INDEX IF NOT EXISTS idx_expenses_expense_date ON expenses(expense_date);
 CREATE INDEX IF NOT EXISTS idx_donations_status_transaction_month ON donations(status,transaction_month);
 CREATE INDEX IF NOT EXISTS idx_meeting_rsvps_meeting_member ON meeting_rsvps(meeting_id,member_id);

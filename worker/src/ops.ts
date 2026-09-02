@@ -22,7 +22,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 16;
+const REQUIRED_SCHEMA_VERSION = 17;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -37,7 +37,8 @@ export async function ensureOperationalSchema(env: Env) {
       ["member_registration_requests", ["phone"]],
       ["contributions", ["bank_date","corrected_by","corrected_at","voided_by","voided_at","void_reason","duplicate_key"]],
       ["donations", ["member_id","transaction_month","status","voided_by","voided_at","void_reason"]],
-      ["expenses", ["expense_date","transaction_month","status","approval_required","approved_by","approved_at","voided_by","voided_at","void_reason"]],
+      ["expenses", ["expense_date","transaction_month","status","approval_required","approved_by","approved_at","voided_by","voided_at","void_reason","project_id","fund_override","fund_override_reason","fund_override_by","fund_override_at","fund_balance_before","budget_override_reason","budget_override_by"]],
+      ["projects", ["project_code","name","budget","status","responsible_member_id"]],
       ["expense_categories", ["active"]],
       ["meetings", ["updated_at","last_notification_at","cancelled_at","cancelled_by","cancel_reason"]],
       ["error_log", ["status","resolved_at","resolved_by"]],
@@ -90,6 +91,14 @@ export async function isMonthClosed(env: Env, month: string) {
 
 export async function requireOpenMonth(env: Env, month: string) {
   if (await isMonthClosed(env, month)) throw new Error(`Month ${month} is closed and cannot be changed.`);
+}
+
+export async function availableFundBalance(env: Env) {
+  const row = await env.DB.prepare(`SELECT
+    (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved') +
+    (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active') -
+    (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved') balance`).first<{balance:number}>();
+  return Number(row?.balance || 0);
 }
 
 export function contributionDuplicateKey(ref: string | null | undefined, amount: number, bankDate: string | null | undefined) {
