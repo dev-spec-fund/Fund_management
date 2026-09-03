@@ -127,3 +127,32 @@ test('PDF/CSV export paths remain wired through member statement and Telegram do
   assert.match(reportsSource, /\.pdf/);
   assert.match(reportsSource, /\.csv/);
 });
+
+
+test('expense create request tokens are unique so a retry cannot create a second expense', () => {
+  const db = dbWithSchema();
+  db.prepare("INSERT INTO admins(id,telegram_id,name,role) VALUES(1,'100','Owner','super_admin')").run();
+  db.prepare("INSERT INTO expense_categories(id,name,active) VALUES(10,'General',1)").run();
+
+  const sql = `INSERT INTO expenses(txn_id,description,category_id,amount,logged_by,expense_date,transaction_month,status,approved_by,approved_at,idempotency_key)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?)`;
+  db.prepare(sql).run('E1','Supplies',10,25,1,'2026-09-03','2026-09','approved',1,'2026-09-03T12:00:00Z','req-expense-12345678');
+  assert.throws(() => db.prepare(sql).run('E2','Supplies',10,25,1,'2026-09-03','2026-09','approved',1,'2026-09-03T12:00:01Z','req-expense-12345678'), /UNIQUE/);
+  assert.equal(scalar(db,"SELECT COUNT(*) FROM expenses"),1);
+  db.close();
+});
+
+test('stability routes guard historical month reopen and repeat void actions', () => {
+  const governanceSource = fs.readFileSync(path.join(root,'src/routes/governance.ts'),'utf8');
+  const expenseSource = fs.readFileSync(path.join(root,'src/routes/expenses.ts'),'utf8');
+  const pendingSource = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
+  const formSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/expenses/ExpenseForm.jsx'),'utf8');
+
+  assert.match(governanceSource, /SELECT month FROM month_closures WHERE month>\?/);
+  assert.match(governanceSource, /LATER_MONTH_ALREADY_CLOSED/);
+  assert.match(expenseSource, /WHERE id=\? AND status='approved'/);
+  assert.match(pendingSource, /WHERE id=\? AND status IN \('pending','approved'\)/);
+  assert.match(expenseSource, /idempotency_key/);
+  assert.match(formSource, /randomUUID/);
+  assert.match(formSource, /idempotency_key/);
+});

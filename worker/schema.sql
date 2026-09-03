@@ -160,7 +160,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   fund_override_at TEXT,
   fund_balance_before REAL,
   budget_override_reason TEXT,
-  budget_override_by INTEGER REFERENCES admins(id)
+  budget_override_by INTEGER REFERENCES admins(id),
+  idempotency_key TEXT
 );
 
 CREATE TABLE IF NOT EXISTS expense_documents (
@@ -447,3 +448,9 @@ CREATE INDEX IF NOT EXISTS idx_admin_role_permissions_role ON admin_role_permiss
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (21,'custom_admin_roles');
 
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (22,'remove_expense_approval_workflow');
+
+
+-- Stability Stage 3
+CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_idempotency_key
+  ON expenses(idempotency_key)
+  WHERE idempotency_key IS NOT NULL;

@@ -180,6 +180,12 @@ expensesRoute.post("/", requireFinance, async (c) => {
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!;
   const body=await c.req.json<any>();
+  const idempotencyKey=boundedText(body.idempotency_key,120);
+  if(idempotencyKey && !/^[A-Za-z0-9._:-]{8,120}$/.test(idempotencyKey)) return c.json({error:"Invalid expense request token"},400);
+  if(idempotencyKey){
+    const existing=await c.env.DB.prepare("SELECT id,txn_id,status,fund_override FROM expenses WHERE idempotency_key=?").bind(idempotencyKey).first<any>();
+    if(existing) return c.json({id:existing.id,txn_id:existing.txn_id,status:existing.status,fund_override:Boolean(existing.fund_override),idempotent:true},200);
+  }
   const description=boundedText(body.description,500,true);
   const amount=money(body.amount);
   const expenseDate=String(body.expense_date || currentDate(c.env.FUND_TIMEZONE || "Indian/Maldives")).trim();
@@ -203,12 +209,21 @@ expensesRoute.post("/", requireFinance, async (c) => {
   const txnId=await generateTxnId(c.env,"E");
   const fundOverride=amount>available+0.005 && wantsFundOverride && !!overrideReason && adminCan(admin,'manage_admins');
   const budgetOverrideReason=project?.budget!=null && amount>(Number(project.budget)-Number(project.spent||0))+0.005 ? boundedText(body.budget_override_reason,500) : null;
-  const res=await c.env.DB.prepare(`INSERT INTO expenses
-    (txn_id,description,category_id,project_id,amount,logged_by,expense_date,transaction_month,status,approved_by,approved_at,
-     fund_override,fund_override_reason,fund_override_by,fund_override_at,fund_balance_before,budget_override_reason,budget_override_by)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .bind(txnId,description,category?.id ?? null,project?.id ?? null,amount,admin.id,expenseDate,month,"approved",admin.id,new Date().toISOString(),
-      fundOverride?1:0,fundOverride?overrideReason:null,fundOverride?admin.id:null,fundOverride?new Date().toISOString():null,available,budgetOverrideReason,budgetOverrideReason?admin.id:null).run();
+  let res:any;
+  try {
+    res=await c.env.DB.prepare(`INSERT INTO expenses
+      (txn_id,description,category_id,project_id,amount,logged_by,expense_date,transaction_month,status,approved_by,approved_at,
+       fund_override,fund_override_reason,fund_override_by,fund_override_at,fund_balance_before,budget_override_reason,budget_override_by,idempotency_key)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(txnId,description,category?.id ?? null,project?.id ?? null,amount,admin.id,expenseDate,month,"approved",admin.id,new Date().toISOString(),
+        fundOverride?1:0,fundOverride?overrideReason:null,fundOverride?admin.id:null,fundOverride?new Date().toISOString():null,available,budgetOverrideReason,budgetOverrideReason?admin.id:null,idempotencyKey||null).run();
+  } catch (error:any) {
+    if(idempotencyKey){
+      const existing=await c.env.DB.prepare("SELECT id,txn_id,status,fund_override FROM expenses WHERE idempotency_key=?").bind(idempotencyKey).first<any>();
+      if(existing) return c.json({id:existing.id,txn_id:existing.txn_id,status:existing.status,fund_override:Boolean(existing.fund_override),idempotent:true},200);
+    }
+    throw error;
+  }
   await auditEntity(c.env,admin.id,"expense_created","expense",Number(res.meta.last_row_id),null,{txn_id:txnId,description,amount,expense_date:expenseDate,month,project_id:project?.id||null,status:"approved",fund_override:fundOverride,budget_override:!!budgetOverrideReason});
   return c.json({id:res.meta.last_row_id,txn_id:txnId,status:"approved",fund_override:fundOverride},201);
 });
@@ -270,10 +285,15 @@ expensesRoute.patch("/:id", requireFinance, async (c) => {
 expensesRoute.delete("/:id", requireFinance, async(c)=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const body=await c.req.json().catch(()=>({})) as any;
   const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:"Not found"},404);
+  if(before.status!=="approved") return c.json({error:`Expense is already ${before.status}`},409);
   const month=before.transaction_month||before.created_at.slice(0,7); try{await requireOpenMonth(c.env,month);}catch(e:any){return c.json({error:e.message},409);}
   const reason=boundedText(body.reason,500) || "Voided by admin";
-  await c.env.DB.prepare("UPDATE expenses SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason=? WHERE id=?")
+  const changed=await c.env.DB.prepare("UPDATE expenses SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason=? WHERE id=? AND status='approved'")
     .bind(admin.id,reason,id).run();
+  if(!changed.meta.changes){
+    const current=await c.env.DB.prepare("SELECT status FROM expenses WHERE id=?").bind(id).first<any>();
+    return c.json({error:`Expense is already ${current?.status||'changed'}`},409);
+  }
   const after=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
   await auditEntity(c.env,admin.id,"expense_voided","expense",id,before,after); return c.json({ok:true});
 });

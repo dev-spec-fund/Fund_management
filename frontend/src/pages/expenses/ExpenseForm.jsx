@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Paperclip } from "lucide-react";
 import { api } from "../../api";
 import { Modal, Field } from "../../components/FormControls";
@@ -18,6 +18,7 @@ export default function ExpenseForm({ onClose, onSaved, row = null }) {
     expense_date: row?.expense_date || (row?.transaction_month ? `${row.transaction_month}-01` : todayValue()),
   });
   const [busy, setBusy] = useState(false);
+  const createRequestIdRef = useRef(row ? null : (globalThis.crypto?.randomUUID?.() || `expense-${Date.now()}-${Math.random().toString(36).slice(2)}`));
   const [error, setError] = useState("");
   const [documents, setDocuments] = useState([]);
   const [documentType, setDocumentType] = useState("Receipt");
@@ -39,6 +40,7 @@ export default function ExpenseForm({ onClose, onSaved, row = null }) {
         project_id: form.project_id || null,
         amount: Number(form.amount),
         expense_date: form.expense_date,
+        ...(!row && createRequestIdRef.current ? { idempotency_key: createRequestIdRef.current } : {}),
       };
       const result = row
         ? await expenseMutationWithOverrides((data) => api.expenses.update(row.id, data), payload)

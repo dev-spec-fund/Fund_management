@@ -98,12 +98,23 @@ route.post('/pending/contributions/:id/reject', requireFinance, async c => {
 });
 
 route.delete('/contributions/:id', requireFinance, async c => {
-  const admin=c.get('admin')!; const id=Number(c.req.param('id')); const body=await c.req.json().catch(()=>({})) as any; const row=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>(); if(!row)return c.json({error:'Not found'},404);
+  const admin=c.get('admin')!; const id=Number(c.req.param('id')); const body=await c.req.json().catch(()=>({})) as any;
+  const row=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
+  if(!row)return c.json({error:'Not found'},404);
+  if(!['pending','approved'].includes(String(row.status))) return c.json({error:`Contribution is already ${row.status}`},409);
   try{await requireOpenMonth(c.env,row.month)}catch(e:any){return c.json({error:e.message},409)}
-  await c.env.DB.batch([
-    c.env.DB.prepare("UPDATE contributions SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason=? WHERE id=?").bind(admin.id,body.reason||'Voided by admin',id),
-    c.env.DB.prepare("DELETE FROM contribution_allocations WHERE contribution_id=?").bind(id)
-  ]); await auditEntity(c.env,admin.id,'contribution_voided','contribution',id,row,{...row,status:'voided'}); return c.json({ok:true});
+
+  const result=await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE contributions SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason=? WHERE id=? AND status IN ('pending','approved')").bind(admin.id,body.reason||'Voided by admin',id),
+    c.env.DB.prepare("DELETE FROM contribution_allocations WHERE contribution_id=? AND EXISTS (SELECT 1 FROM contributions c WHERE c.id=? AND c.status='voided')").bind(id,id)
+  ]);
+  if(!Number((result[0] as any)?.meta?.changes||0)) {
+    const current=await c.env.DB.prepare("SELECT status FROM contributions WHERE id=?").bind(id).first<any>();
+    return c.json({error:`Contribution is already ${current?.status||'reviewed'}`},409);
+  }
+
+  await auditEntity(c.env,admin.id,'contribution_voided','contribution',id,row,{...row,status:'voided'});
+  return c.json({ok:true});
 });
 
 

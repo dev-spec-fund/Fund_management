@@ -61,6 +61,10 @@ async function nextReversalId(env:any){
   return `RV${String(row?.value||1).padStart(7,'0')}`;
 }
 
+async function laterClosedMonth(env:any, month:string) {
+  return env.DB.prepare("SELECT month FROM month_closures WHERE month>? ORDER BY month ASC LIMIT 1").bind(month).first<{month:string}>();
+}
+
 governanceRoute.get('/month-close', requireAdmin, async c=>{
   await ensureOperationalSchema(c.env);
   const rows=await c.env.DB.prepare("SELECT mc.*,a.name closed_by_name FROM month_closures mc LEFT JOIN admins a ON a.id=mc.closed_by ORDER BY month DESC").all<any>();
@@ -72,10 +76,24 @@ governanceRoute.delete('/month-close/:month', requireCloseMonth, async c=>{
   const admin=c.get('admin')!; const month=c.req.param('month') || "";
   if(!validMonth(month)) return c.json({error:'Use YYYY-MM'},400);
   if(!(await isMonthClosed(c.env,month))) return c.json({error:'Month is not closed'},404);
-  await c.env.DB.batch([
-    c.env.DB.prepare("DELETE FROM month_closures WHERE month=?").bind(month),
-    c.env.DB.prepare("DELETE FROM monthly_snapshots WHERE month=?").bind(month)
+
+  const later=await laterClosedMonth(c.env,month);
+  if(later) return c.json({
+    error:`Cannot reopen ${month} because ${later.month} is already closed. Reopen the latest closed month first.`,
+    code:'LATER_MONTH_ALREADY_CLOSED',
+    later_month:later.month
+  },409);
+
+  const result=await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM month_closures WHERE month=? AND NOT EXISTS (SELECT 1 FROM month_closures WHERE month>?)").bind(month,month),
+    c.env.DB.prepare("DELETE FROM monthly_snapshots WHERE month=? AND NOT EXISTS (SELECT 1 FROM month_closures WHERE month>?)").bind(month,month)
   ]);
+  if(!Number((result[0] as any)?.meta?.changes||0)) {
+    const newest=await laterClosedMonth(c.env,month);
+    if(newest) return c.json({error:`Cannot reopen ${month} because ${newest.month} is already closed. Reopen the latest closed month first.`,code:'LATER_MONTH_ALREADY_CLOSED',later_month:newest.month},409);
+    return c.json({error:'Month could not be reopened. Refresh and try again.'},409);
+  }
+
   await auditEntity(c.env,admin.id,'month_reopened','month',month,null,{snapshot_removed:true});
   return c.json({ok:true});
 });
@@ -98,6 +116,12 @@ governanceRoute.post('/month-close/:month', requireCloseMonth, async c=>{
   await ensureOperationalSchema(c.env); const admin=c.get('admin')!; const month=c.req.param('month'); const body=await c.req.json().catch(()=>({})) as any;
   if(!validMonth(month)) return c.json({error:'Use YYYY-MM'},400);
   if(await isMonthClosed(c.env,month)) return c.json({error:'Month is already closed'},409);
+  const later=await laterClosedMonth(c.env,month);
+  if(later) return c.json({
+    error:`Cannot close ${month} while later month ${later.month} is already closed. Reopen later months first.`,
+    code:'LATER_MONTH_ALREADY_CLOSED',
+    later_month:later.month
+  },409);
   const m=await monthMetrics(c.env,month);
   if((m.pending_contributions||0)>0) return c.json({error:'Resolve pending contributions before closing',check:m},409);
   await c.env.DB.batch([
