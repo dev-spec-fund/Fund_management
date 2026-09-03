@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "rea
 import { api } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
+import { adminCan } from "./utils/permissions";
 
 
 const THEME_VALUES = new Set(["light", "dark"]);
@@ -74,7 +75,7 @@ export default function App() {
   const isMember = !!me?.member;
   const adminView = isAdmin && mode === "admin";
   const memberView = isMember && mode === "member";
-  const canFinance = adminView && ["owner", "super_admin", "treasurer"].includes(me?.admin?.role);
+  const canFinance = adminView && adminCan(me?.admin, "finance");
   const memberProjectsEnabled = me?.member_features?.projects !== false;
   const tabs = useMemo(() => adminView
     ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "projects", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])

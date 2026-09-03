@@ -157,6 +157,19 @@ export function requireSuperAdmin(c: Context<AppEnv>, next: Next) {
   return next();
 }
 
+
+export function requireCloseMonth(c: Context<AppEnv>, next: Next) {
+  const admin = c.get("admin");
+  if (!adminCan(admin, "close_month")) return c.json({ error: "Month-close permission required" }, 403);
+  return next();
+}
+
+export function requireBackup(c: Context<AppEnv>, next: Next) {
+  const admin = c.get("admin");
+  if (!adminCan(admin, "backup")) return c.json({ error: "Backup permission required" }, 403);
+  return next();
+}
+
 export async function requireMemberOrAdmin(c: Context<AppEnv>, next: Next) {
   const admin = c.get("admin");
   if (admin) return next();

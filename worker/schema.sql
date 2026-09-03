@@ -19,11 +19,28 @@ CREATE TABLE IF NOT EXISTS members (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS admin_roles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS admin_role_permissions (
+  role_id INTEGER NOT NULL REFERENCES admin_roles(id) ON DELETE CASCADE,
+  permission TEXT NOT NULL,
+  PRIMARY KEY(role_id, permission)
+);
+
 CREATE TABLE IF NOT EXISTS admins (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   telegram_id TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'treasurer',
+  custom_role_id INTEGER REFERENCES admin_roles(id),
   active INTEGER NOT NULL DEFAULT 1,
   deactivated_at TEXT,
   deactivated_by INTEGER REFERENCES admins(id),
@@ -371,7 +388,7 @@ CREATE TABLE IF NOT EXISTS member_contribution_rates (
 );
 CREATE INDEX IF NOT EXISTS idx_member_contribution_rates_member_period ON member_contribution_rates(member_id,effective_from,effective_to);
 
--- Schema migration ledger. Fresh databases created from schema.sql are current through v17.
+-- Schema migration ledger. Fresh databases created from schema.sql are current through v21.
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -426,3 +443,7 @@ CREATE INDEX IF NOT EXISTS idx_registrations_status_requested ON member_registra
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (19,'expense_document_management');
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (20,'project_linked_donations');
 CREATE INDEX IF NOT EXISTS idx_expense_documents_active ON expense_documents(expense_id, removed_at, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_admins_custom_role ON admins(custom_role_id, active);
+CREATE INDEX IF NOT EXISTS idx_admin_role_permissions_role ON admin_role_permissions(role_id);
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (21,'custom_admin_roles');

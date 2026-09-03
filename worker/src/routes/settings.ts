@@ -2,13 +2,26 @@ import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance, requireSuperAdmin } from "../auth";
 import { logAudit, setSetting } from "../db";
-import { auditEntity, ensureOperationalSchema, sanitizeAuditDetailForRole } from "../ops";
+import { adminCan, auditEntity, ensureOperationalSchema, sanitizeAuditDetailForRole } from "../ops";
 import { boundedText, telegramId } from "../validation";
 
 export const settingsRoute = new Hono<AppEnv>();
 
 const FINANCE_SETTINGS = new Set(["reminder_day","notify_new_slip","notify_member_deactivated","notify_budget_exceeded","notify_monthly_report"]);
 const SUPER_SETTINGS = new Set(["fund_name","short_name","default_monthly_amount","expense_approval_threshold","mini_app_url","reminder_schedule","show_projects_to_members"]);
+const ROLE_PERMISSIONS = ["read","finance","manage_admins","close_month","backup"] as const;
+const BUILTIN_ROLES = new Set(["super_admin","treasurer","viewer"]);
+
+function normalizeRolePermissions(value:any): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((x:any)=>String(x||"").trim()).filter((x:string)=>ROLE_PERMISSIONS.includes(x as any)))];
+}
+
+async function validCustomRole(env:any, id:any) {
+  const roleId=Number(id);
+  if(!Number.isInteger(roleId)||roleId<=0) return null;
+  return await env.DB.prepare("SELECT id,name,description,active FROM admin_roles WHERE id=? AND COALESCE(active,1)=1").bind(roleId).first<any>();
+}
 
 settingsRoute.get("/", requireAdmin, async (c) => {
   await ensureOperationalSchema(c.env);
@@ -18,7 +31,7 @@ settingsRoute.get("/", requireAdmin, async (c) => {
 
 settingsRoute.patch("/", requireFinance, async (c) => {
   const admin=c.get("admin")!; const body=await c.req.json<Record<string,unknown>>();
-  const isSuper=admin.role==='owner'||admin.role==='super_admin';
+  const isSuper=adminCan(admin,'manage_admins');
   for(const [key,raw] of Object.entries(body)) {
     if(!FINANCE_SETTINGS.has(key) && !(isSuper && SUPER_SETTINGS.has(key))) return c.json({error:`Setting '${key}' cannot be changed by this role`},403);
     const value=String(raw ?? '').trim();
@@ -36,35 +49,113 @@ settingsRoute.patch("/", requireFinance, async (c) => {
 });
 
 settingsRoute.get("/admins", requireAdmin, async(c)=>{
-  const caller=c.get("admin")!; const viewer=caller.role==='viewer';
+  const caller=c.get("admin")!;
+  const viewer=!adminCan(caller,"finance");
   const rows=await c.env.DB.prepare(`
-    SELECT a.id,${viewer ? "NULL" : "a.telegram_id"} telegram_id,a.name,a.role,COALESCE(a.active,1) active,a.created_at,a.deactivated_at,
+    SELECT a.id,${viewer ? "NULL" : "a.telegram_id"} telegram_id,a.name,a.role,a.custom_role_id,
+           r.name custom_role_name,COALESCE(a.active,1) active,a.created_at,a.deactivated_at,
            m.id member_id,m.member_code,m.name member_name,COALESCE(m.active,1) member_active
     FROM admins a
+    LEFT JOIN admin_roles r ON r.id=a.custom_role_id
     LEFT JOIN members m ON m.telegram_id=a.telegram_id
     ORDER BY a.name
   `).all<any>();
   return c.json(rows.results);
 });
+
+settingsRoute.get("/roles", requireAdmin, async(c)=>{
+  const roles=await c.env.DB.prepare(`
+    SELECT r.id,r.name,r.description,COALESCE(r.active,1) active,r.created_at,r.updated_at,
+           GROUP_CONCAT(p.permission) permissions_csv,
+           (SELECT COUNT(*) FROM admins a WHERE a.custom_role_id=r.id AND COALESCE(a.active,1)=1) assigned_admins
+    FROM admin_roles r
+    LEFT JOIN admin_role_permissions p ON p.role_id=r.id
+    WHERE COALESCE(r.active,1)=1
+    GROUP BY r.id
+    ORDER BY r.name
+  `).all<any>();
+  return c.json(roles.results.map((r:any)=>({
+    ...r,
+    permissions:String(r.permissions_csv||"").split(",").filter(Boolean),
+    permissions_csv:undefined,
+  })));
+});
+
+settingsRoute.post("/roles", requireSuperAdmin, async(c)=>{
+  const admin=c.get("admin")!;
+  const b=await c.req.json<any>();
+  const name=boundedText(b.name,60,true);
+  const description=boundedText(b.description,240);
+  const permissions=normalizeRolePermissions(b.permissions);
+  if(!name)return c.json({error:"Role name is required"},400);
+  if(!permissions.includes("read")) permissions.unshift("read");
+  try{
+    const r=await c.env.DB.prepare("INSERT INTO admin_roles(name,description,created_by) VALUES(?,?,?)").bind(name,description||null,admin.id).run();
+    const id=Number(r.meta.last_row_id);
+    if(permissions.length) await c.env.DB.batch(permissions.map(permission=>c.env.DB.prepare("INSERT INTO admin_role_permissions(role_id,permission) VALUES(?,?)").bind(id,permission)));
+    await auditEntity(c.env,admin.id,"admin_role_created","admin_role",id,null,{name,description,permissions});
+    return c.json({ok:true,id},201);
+  }catch(e:any){
+    if(String(e?.message||"").toLowerCase().includes("unique"))return c.json({error:"A role with this name already exists"},409);
+    throw e;
+  }
+});
+
+settingsRoute.patch("/roles/:id", requireSuperAdmin, async(c)=>{
+  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
+  const before=await c.env.DB.prepare("SELECT * FROM admin_roles WHERE id=? AND COALESCE(active,1)=1").bind(id).first<any>();
+  if(!before)return c.json({error:"Role not found"},404);
+  const b=await c.req.json<any>();
+  const name=b.name===undefined?before.name:boundedText(b.name,60,true);
+  const description=b.description===undefined?before.description:boundedText(b.description,240);
+  const permissions=b.permissions===undefined
+    ? (await c.env.DB.prepare("SELECT permission FROM admin_role_permissions WHERE role_id=?").bind(id).all<any>()).results.map((x:any)=>x.permission)
+    : normalizeRolePermissions(b.permissions);
+  if(!name)return c.json({error:"Role name is required"},400);
+  if(!permissions.includes("read")) permissions.unshift("read");
+  await c.env.DB.prepare("UPDATE admin_roles SET name=?,description=?,updated_at=datetime('now') WHERE id=?").bind(name,description||null,id).run();
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM admin_role_permissions WHERE role_id=?").bind(id),
+    ...permissions.map(permission=>c.env.DB.prepare("INSERT INTO admin_role_permissions(role_id,permission) VALUES(?,?)").bind(id,permission)),
+  ]);
+  await auditEntity(c.env,admin.id,"admin_role_updated","admin_role",id,before,{name,description,permissions});
+  return c.json({ok:true});
+});
+
+settingsRoute.delete("/roles/:id", requireSuperAdmin, async(c)=>{
+  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
+  const role=await c.env.DB.prepare("SELECT * FROM admin_roles WHERE id=? AND COALESCE(active,1)=1").bind(id).first<any>();
+  if(!role)return c.json({error:"Role not found"},404);
+  const used=await c.env.DB.prepare("SELECT COUNT(*) n FROM admins WHERE custom_role_id=? AND COALESCE(active,1)=1").bind(id).first<{n:number}>();
+  if(Number(used?.n||0)>0)return c.json({error:"This role is assigned to active admins. Reassign them first."},409);
+  await c.env.DB.prepare("UPDATE admin_roles SET active=0,updated_at=datetime('now') WHERE id=?").bind(id).run();
+  await auditEntity(c.env,admin.id,"admin_role_deactivated","admin_role",id,role,{...role,active:0});
+  return c.json({ok:true});
+});
+
 settingsRoute.post("/admins", requireSuperAdmin, async(c)=>{
   const admin=c.get("admin")!; const b=await c.req.json<any>();
-  const role=b.role||"treasurer"; if(!["super_admin","treasurer","viewer"].includes(role))return c.json({error:"Invalid role"},400);
+  const role=String(b.role||"treasurer"); if(!BUILTIN_ROLES.has(role))return c.json({error:"Invalid built-in role"},400);
+  const customRole=b.custom_role_id?await validCustomRole(c.env,b.custom_role_id):null;
+  if(b.custom_role_id && !customRole)return c.json({error:"Custom role not found"},400);
   const tg=telegramId(b.telegram_id); const name=boundedText(b.name,120,true); if(!tg||!name)return c.json({error:'Valid Telegram ID and name are required'},400);
   const existing=await c.env.DB.prepare("SELECT id,active FROM admins WHERE telegram_id=?").bind(tg).first<any>();
   if(existing) return c.json({error:"An admin record already exists for this Telegram account"},409);
-  const r=await c.env.DB.prepare("INSERT INTO admins(telegram_id,name,role,active) VALUES(?,?,?,1)").bind(tg,name,role).run();
+  const r=await c.env.DB.prepare("INSERT INTO admins(telegram_id,name,role,custom_role_id,active) VALUES(?,?,?,?,1)").bind(tg,name,role,customRole?.id||null).run();
   await auditEntity(c.env,admin.id,"admin_created","admin",Number(r.meta.last_row_id),null,{telegram_id:tg,name,role}); return c.json({ok:true,id:r.meta.last_row_id},201);
 });
 
 
 settingsRoute.post("/admins/promote-member", requireSuperAdmin, async(c)=>{
-  const admin=c.get("admin")!; const b=await c.req.json<any>(); const memberId=Number(b.member_id); const role=b.role||"treasurer";
-  if(!["super_admin","treasurer","viewer"].includes(role))return c.json({error:"Invalid role"},400);
+  const admin=c.get("admin")!; const b=await c.req.json<any>(); const memberId=Number(b.member_id); const role=String(b.role||"treasurer");
+  if(!BUILTIN_ROLES.has(role))return c.json({error:"Invalid built-in role"},400);
+  const customRole=b.custom_role_id?await validCustomRole(c.env,b.custom_role_id):null;
+  if(b.custom_role_id && !customRole)return c.json({error:"Custom role not found"},400);
   const member=await c.env.DB.prepare("SELECT id,name,telegram_id FROM members WHERE id=? AND COALESCE(active,1)=1").bind(memberId).first<any>();
   if(!member)return c.json({error:"Active member not found"},404); if(!member.telegram_id)return c.json({error:"This member must link Telegram before being promoted"},409);
   const existing=await c.env.DB.prepare("SELECT * FROM admins WHERE telegram_id=?").bind(member.telegram_id).first<any>();
-  if(existing){ await c.env.DB.prepare("UPDATE admins SET name=?,role=?,active=1,deactivated_at=NULL,deactivated_by=NULL WHERE id=?").bind(member.name,role,existing.id).run(); await auditEntity(c.env,admin.id,"member_promoted_to_admin","member",memberId,existing,{...existing,name:member.name,role,active:1}); return c.json({ok:true,id:existing.id}); }
-  const r=await c.env.DB.prepare("INSERT INTO admins(telegram_id,name,role,active) VALUES(?,?,?,1)").bind(member.telegram_id,member.name,role).run(); await auditEntity(c.env,admin.id,"member_promoted_to_admin","member",memberId,null,{admin_id:r.meta.last_row_id,role}); return c.json({ok:true,id:r.meta.last_row_id},201);
+  if(existing){ await c.env.DB.prepare("UPDATE admins SET name=?,role=?,custom_role_id=?,active=1,deactivated_at=NULL,deactivated_by=NULL WHERE id=?").bind(member.name,role,customRole?.id||null,existing.id).run(); await auditEntity(c.env,admin.id,"member_promoted_to_admin","member",memberId,existing,{...existing,name:member.name,role,active:1}); return c.json({ok:true,id:existing.id}); }
+  const r=await c.env.DB.prepare("INSERT INTO admins(telegram_id,name,role,custom_role_id,active) VALUES(?,?,?,?,1)").bind(member.telegram_id,member.name,role,customRole?.id||null).run(); await auditEntity(c.env,admin.id,"member_promoted_to_admin","member",memberId,null,{admin_id:r.meta.last_row_id,role}); return c.json({ok:true,id:r.meta.last_row_id},201);
 });
 
 async function activeSuperCount(c:any, excludeId?:number){
@@ -73,11 +164,25 @@ async function activeSuperCount(c:any, excludeId?:number){
 }
 
 settingsRoute.patch("/admins/:id", requireSuperAdmin, async(c)=>{
-  const admin=c.get("admin")!;const id=Number(c.req.param("id"));const b=await c.req.json<any>();const before=await c.env.DB.prepare("SELECT * FROM admins WHERE id=?").bind(id).first<any>();if(!before)return c.json({error:"Not found"},404);
-  const role=b.role??(before.role==="owner"?"super_admin":before.role);if(!["super_admin","treasurer","viewer"].includes(role))return c.json({error:"Invalid role"},400);
-  if(['owner','super_admin'].includes(before.role) && !['owner','super_admin'].includes(role) && await activeSuperCount(c,id)===0) return c.json({error:'At least one active Super Admin must remain'},409);
-  const name=b.name===undefined?before.name:boundedText(b.name,120,true); if(!name)return c.json({error:'Valid admin name required'},400);
-  await c.env.DB.prepare("UPDATE admins SET name=?,role=? WHERE id=?").bind(name,role,id).run();const after=await c.env.DB.prepare("SELECT * FROM admins WHERE id=?").bind(id).first<any>();await auditEntity(c.env,admin.id,"admin_updated","admin",id,before,after);return c.json({ok:true});
+  const admin=c.get("admin")!; const id=Number(c.req.param("id")); const b=await c.req.json<any>();
+  const before=await c.env.DB.prepare("SELECT * FROM admins WHERE id=?").bind(id).first<any>();
+  if(!before)return c.json({error:"Not found"},404);
+
+  const role=String(b.role??(before.role==="owner"?"super_admin":before.role));
+  if(!BUILTIN_ROLES.has(role))return c.json({error:"Invalid built-in role"},400);
+  const customRoleId=b.custom_role_id===undefined ? (before.custom_role_id||null) : (b.custom_role_id||null);
+  const customRole=customRoleId?await validCustomRole(c.env,customRoleId):null;
+  if(customRoleId && !customRole)return c.json({error:"Custom role not found"},400);
+
+  if(['owner','super_admin'].includes(before.role) && !['owner','super_admin'].includes(role) && await activeSuperCount(c,id)===0)
+    return c.json({error:'At least one active Super Admin must remain'},409);
+
+  const name=b.name===undefined?before.name:boundedText(b.name,120,true);
+  if(!name)return c.json({error:'Valid admin name required'},400);
+  await c.env.DB.prepare("UPDATE admins SET name=?,role=?,custom_role_id=? WHERE id=?").bind(name,role,customRole?.id||null,id).run();
+  const after=await c.env.DB.prepare("SELECT * FROM admins WHERE id=?").bind(id).first<any>();
+  await auditEntity(c.env,admin.id,"admin_updated","admin",id,before,after);
+  return c.json({ok:true});
 });
 
 

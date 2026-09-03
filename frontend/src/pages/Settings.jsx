@@ -5,6 +5,7 @@ import { LoadingState, ErrorState, MessageBanner, SectionTitle, EmptyLine, cardS
 import { currentMonthValue, todayValue, formatLocalDateTime } from "../utils/date";
 import { sendExportToTelegram } from "../utils/exports";
 import Pagination, { pageSlice } from "../components/Pagination";
+import { adminCan, adminRoleLabel } from "../utils/permissions";
 
 const AUDIT_HIDDEN_KEYS = new Set(["ocr_raw","slip_file_id","file_id","telegram_file_id","photo_file_id","raw","ai_response","model_response","prompt"]);
 const auditLabel = (s="") => s.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
@@ -63,6 +64,9 @@ export default function Settings({ admin }) {
   const [membersForAdmin,setMembersForAdmin]=useState([]);
   const [promoteMemberId,setPromoteMemberId]=useState("");
   const [promoteRole,setPromoteRole]=useState("treasurer");
+  const [customRoles,setCustomRoles]=useState([]);
+  const [newRoleName,setNewRoleName]=useState("");
+  const [newRolePermissions,setNewRolePermissions]=useState(["read"]);
   const [closeCheck,setCloseCheck]=useState(null);
   const [closeBusy,setCloseBusy]=useState(false);
   const [closeMonthValue,setCloseMonthValue]=useState(currentMonthValue());
@@ -72,8 +76,10 @@ export default function Settings({ admin }) {
   const [auditPage,setAuditPage]=useState(1);
 
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
-  const superAdmin = role === "super_admin";
-  const financeAdmin = superAdmin || role === "treasurer";
+  const superAdmin = adminCan(admin, "manage_admins");
+  const financeAdmin = adminCan(admin, "finance");
+  const canCloseMonth = adminCan(admin, "close_month");
+  const canBackup = adminCan(admin, "backup");
   const currentMonth = currentMonthValue();
 
   const [settingsLoading,setSettingsLoading]=useState(true);
@@ -106,6 +112,7 @@ export default function Settings({ admin }) {
     if(superAdmin){
       jobs.push(api.members.list().then(setMembersForAdmin));
       jobs.push(api.admin.errors().then(setErrors));
+      jobs.push(api.settings.roles().then(setCustomRoles));
     }
     await Promise.allSettled(jobs);
   };
@@ -278,7 +285,7 @@ export default function Settings({ admin }) {
         </div>
         {closeMonthValue<currentMonth && !monthClosed && <div className="sans" style={{fontSize:10,color:"var(--warning)",marginTop:9,lineHeight:1.4}}>⚠ {monthLabel(closeMonthValue)} is a past open month. You can review and close it now; the current month stays open.</div>}
         {superAdmin && !monthClosed && <button type="button" disabled={closeBusy} onClick={reviewMonthClose} style={{...rejectBtn,marginTop:12}}>{closeBusy?"Checking…":"Review month closing"}</button>}
-        {superAdmin && monthClosed && <button type="button" onClick={()=>api.governance.reopenMonth(closeMonthValue).then(()=>{setCloseCheck(null);return load()}).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen {monthLabel(closeMonthValue)}</button>}
+        {canCloseMonth && monthClosed && <button type="button" onClick={()=>api.governance.reopenMonth(closeMonthValue).then(()=>{setCloseCheck(null);return load()}).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen {monthLabel(closeMonthValue)}</button>}
       </div>
 
       {superAdmin && !monthClosed && closeCheck && <div style={{...cardStyle,marginTop:10,borderColor:(closeCheck.blockers||[]).length?"var(--danger-border)":"var(--success-border)"}}>
@@ -292,7 +299,7 @@ export default function Settings({ admin }) {
         </div>
         {(closeCheck.blockers||[]).map((x,i)=><div key={`b-${i}`} className="sans" style={{fontSize:11,color:"var(--danger)",marginTop:4}}>⛔ {x}</div>)}
         {(closeCheck.warnings||[]).map((x,i)=><div key={`w-${i}`} className="sans" style={{fontSize:11,color:"var(--warning)",marginTop:4}}>⚠ {x}</div>)}
-        {(closeCheck.blockers||[]).length===0 && <button type="button" disabled={closeBusy} onClick={closeMonth} style={{...rejectBtn,width:"100%",marginTop:12}}>Create snapshot & close month</button>}
+        {canCloseMonth && (closeCheck.blockers||[]).length===0 && <button type="button" disabled={closeBusy} onClick={closeMonth} style={{...rejectBtn,width:"100%",marginTop:12}}>Create snapshot & close month</button>}
       </div>}
 
       {closures.length>0 && <>
@@ -303,7 +310,7 @@ export default function Settings({ admin }) {
               <span><b>{x.month}</b><div style={{color:"var(--soft-2)",marginTop:2}}>by {x.closed_by_name || "admin"}</div></span>
               <div style={{display:"flex",gap:6}}>
                 <button type="button" onClick={async()=>{try{const summary=await api.reports.summary(x.month);const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month:x.month,monthLabel:monthLabel(x.month),summary});}catch(e){setMessage(e.message||"Could not create closed-month PDF")}}} style={compactBtn}>PDF</button>
-                {superAdmin&&<button type="button" onClick={()=>api.governance.reopenMonth(x.month).then(load).catch(e=>setMessage(e.message))} style={compactBtn}>Reopen</button>}
+                {canCloseMonth&&<button type="button" onClick={()=>api.governance.reopenMonth(x.month).then(load).catch(e=>setMessage(e.message))} style={compactBtn}>Reopen</button>}
               </div>
             </div>
           )}
@@ -314,6 +321,74 @@ export default function Settings({ admin }) {
 
     {settingsSection==="admins" && <>
       <SectionTitle>ADMINS & ROLES</SectionTitle>
+
+      {superAdmin && <div style={{...cardStyle,marginBottom:12}}>
+        <div className="sans" style={{fontSize:12,fontWeight:700,color:"var(--primary-text)"}}>Custom roles</div>
+        <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:3,marginBottom:10}}>
+          Create roles using the existing protected permission groups. Read access is always included.
+        </div>
+
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <input
+            value={newRoleName}
+            onChange={e=>setNewRoleName(e.target.value)}
+            placeholder="e.g. Secretary"
+            className="sans"
+            style={{flex:1,minWidth:0,border:"1px solid var(--border-strong)",borderRadius:8,padding:"9px 10px",background:"var(--bg)",color:"var(--text)"}}
+          />
+          <button type="button" disabled={!newRoleName.trim()} style={approveBtn} onClick={async()=>{
+            try{
+              await api.settings.createRole({name:newRoleName.trim(),permissions:newRolePermissions});
+              setNewRoleName(""); setNewRolePermissions(["read"]); setMessage("Custom role created"); load();
+            }catch(e){setMessage(e.message)}
+          }}>Create</button>
+        </div>
+
+        <div className="sans" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:10,marginBottom:10}}>
+          {[
+            ["read","Read"],
+            ["finance","Finance"],
+            ["manage_admins","Manage admins"],
+            ["close_month","Close / reopen month"],
+            ["backup","Database backup"],
+          ].map(([key,label])=><label key={key} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 7px",background:"var(--bg)",borderRadius:8}}>
+            <input type="checkbox" checked={newRolePermissions.includes(key)} disabled={key==="read"} onChange={e=>setNewRolePermissions(p=>e.target.checked?[...new Set([...p,key])]:p.filter(x=>x!==key))}/>
+            {label}
+          </label>)}
+        </div>
+
+        {customRoles.length===0
+          ? <div className="sans" style={{fontSize:10,color:"var(--soft)"}}>No custom roles yet.</div>
+          : customRoles.map(r=><div key={r.id} className="sans" style={{padding:"10px 0",borderTop:"1px solid var(--divider)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700}}>{r.name}</div>
+                  <div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{Number(r.assigned_admins||0)} active admin{Number(r.assigned_admins||0)===1?"":"s"}</div>
+                </div>
+                <button type="button" disabled={Number(r.assigned_admins||0)>0} style={{...rejectBtn,padding:"6px 8px"}} onClick={async()=>{
+                  if(!confirm(`Delete custom role "${r.name}"?`)) return;
+                  try{await api.settings.removeRole(r.id);setMessage("Custom role removed");load()}catch(e){setMessage(e.message)}
+                }}>Delete</button>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginTop:8}}>
+                {[
+                  ["read","Read"],
+                  ["finance","Finance"],
+                  ["manage_admins","Manage admins"],
+                  ["close_month","Close month"],
+                  ["backup","Backup"],
+                ].map(([key,label])=><label key={key} style={{display:"flex",alignItems:"center",gap:6,fontSize:9,padding:"5px 6px",background:"var(--bg)",borderRadius:7}}>
+                  <input type="checkbox" checked={(r.permissions||[]).includes(key)} disabled={key==="read"} onChange={async e=>{
+                    const next=e.target.checked?[...new Set([...(r.permissions||[]),key])]:(r.permissions||[]).filter(x=>x!==key);
+                    try{await api.settings.updateRole(r.id,{permissions:next});setMessage(`${r.name} permissions updated`);load()}catch(err){setMessage(err.message)}
+                  }}/>
+                  {label}
+                </label>)}
+              </div>
+            </div>)
+        }
+      </div>}
+
       {superAdmin&&<div style={{...cardStyle,marginBottom:12}}>
         <div className="sans" style={{fontSize:12,fontWeight:700,lineHeight:1.35,color:"var(--primary-text)",marginBottom:4}}>Promote existing member</div>
         <div className="sans" style={{fontSize:10,color:"var(--soft)",marginBottom:9}}>The member keeps their member account and contribution obligations. Telegram must be linked.</div>
@@ -321,14 +396,29 @@ export default function Settings({ admin }) {
           <option value="">Select member…</option>{membersForAdmin.filter(m=>m.active!==0).map(m=><option key={m.id} value={m.id}>{m.name} · {m.member_code}{m.telegram_id?"":" · Telegram not linked"}</option>)}
         </select>
         <div style={{display:"flex",gap:8}}>
-          <select value={promoteRole} onChange={e=>setPromoteRole(e.target.value)} style={{flex:1,border:"1px solid var(--border-strong)",borderRadius:8,padding:9,background:"var(--card)"}}><option value="super_admin">Super Admin</option><option value="treasurer">Treasurer</option><option value="viewer">Viewer</option></select>
-          <button type="button" disabled={!promoteMemberId} style={approveBtn} onClick={async()=>{const m=membersForAdmin.find(x=>String(x.id)===String(promoteMemberId));if(!confirm(`Promote ${m?.name||"this member"} to ${promoteRole.replace("_"," ")}?`))return;try{await api.settings.promoteMember(Number(promoteMemberId),promoteRole);setPromoteMemberId("");setMessage("Member promoted");load()}catch(e){setMessage(e.message)}}}>Promote</button>
+          <select value={promoteRole} onChange={e=>setPromoteRole(e.target.value)} style={{flex:1,border:"1px solid var(--border-strong)",borderRadius:8,padding:9,background:"var(--card)"}}>
+            <option value="super_admin">Super Admin</option>
+            <option value="treasurer">Treasurer</option>
+            <option value="viewer">Viewer</option>
+            {customRoles.map(r=><option key={r.id} value={`custom:${r.id}`}>{r.name}</option>)}
+          </select>
+          <button type="button" disabled={!promoteMemberId} style={approveBtn} onClick={async()=>{
+            const m=membersForAdmin.find(x=>String(x.id)===String(promoteMemberId));
+            const selected=promoteRole.startsWith("custom:")?customRoles.find(r=>String(r.id)===promoteRole.split(":")[1]):null;
+            const label=selected?.name || promoteRole.replace("_"," ");
+            if(!confirm(`Promote ${m?.name||"this member"} to ${label}?`))return;
+            try{
+              await api.settings.promoteMember(Number(promoteMemberId),selected?"viewer":promoteRole,selected?.id||null);
+              setPromoteMemberId("");setMessage("Member promoted");load()
+            }catch(e){setMessage(e.message)}
+          }}>Promote</button>
         </div>
       </div>}
+
       <div style={cardStyle}>
         {admins.map(a=>{
-          const displayRole=a.role==="owner"?"super_admin":a.role;
-          const roleLabel=displayRole==="super_admin"?"Super Admin":displayRole==="treasurer"?"Treasurer":"Viewer";
+          const displayRole=a.custom_role_id?`custom:${a.custom_role_id}`:(a.role==="owner"?"super_admin":a.role);
+          const roleLabel=a.custom_role_name || (displayRole==="super_admin"?"Super Admin":displayRole==="treasurer"?"Treasurer":"Viewer");
           return <div key={a.id} className="sans" style={{padding:"10px 0",borderBottom:"1px solid var(--divider)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
               <div style={{minWidth:0}}>
@@ -340,12 +430,16 @@ export default function Settings({ admin }) {
               </div>
               {superAdmin
                 ? <select disabled={a.active===0} value={displayRole} onChange={e=>{
-                    if(!confirm(`Change ${a.name}'s role to ${e.target.options[e.target.selectedIndex].text}?`)) return;
-                    api.settings.updateAdmin(a.id,{role:e.target.value}).then(load).catch(err=>setMessage(err.message));
+                    const value=e.target.value;
+                    const selected=value.startsWith("custom:")?customRoles.find(r=>String(r.id)===value.split(":")[1]):null;
+                    const label=selected?.name || e.target.options[e.target.selectedIndex].text;
+                    if(!confirm(`Change ${a.name}'s role to ${label}?`)) return;
+                    api.settings.updateAdmin(a.id,{role:selected?"viewer":value,custom_role_id:selected?.id||null}).then(load).catch(err=>setMessage(err.message));
                   }} style={{border:"1px solid var(--border-strong)",borderRadius:8,padding:"6px 7px",background:"var(--bg)",fontSize:11,opacity:a.active===0?.55:1}}>
                     <option value="super_admin">Super Admin</option>
                     <option value="treasurer">Treasurer</option>
                     <option value="viewer">Viewer</option>
+                    {customRoles.map(r=><option key={r.id} value={`custom:${r.id}`}>{r.name}</option>)}
                   </select>
                 : <span style={{fontSize:11,fontWeight:600}}>{roleLabel}</span>}
             </div>
@@ -365,7 +459,9 @@ export default function Settings({ admin }) {
               </button>}
           </div>
         })}
-        <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:9,lineHeight:1.45}}>Super Admin: full control · Treasurer: financial operations · Viewer: read-only. Promoted members remain normal contributing members; demotion removes only admin access.</div>
+        <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:9,lineHeight:1.45}}>
+          Built-in roles remain available. Custom roles override Treasurer/Viewer permissions for the assigned admin. At least one built-in Super Admin must always remain active.
+        </div>
       </div>
     </>}
 
@@ -396,7 +492,7 @@ export default function Settings({ admin }) {
         <SectionTitle>DATABASE BACKUP</SectionTitle>
         <div style={cardStyle}>
           <div className="sans" style={{fontSize:11,color:"var(--muted)",marginBottom:10}}>Create a JSON backup before important schema or financial data changes.</div>
-          <button type="button" onClick={backup} style={approveBtn}>Create backup</button>
+          {canBackup ? <button type="button" onClick={backup} style={approveBtn}>Create backup</button> : <div className="sans" style={{fontSize:10,color:"var(--soft)"}}>Backup permission required.</div>}
         </div>
 
         <SectionTitle>RECENT ERRORS</SectionTitle>

@@ -5,6 +5,7 @@ import { Modal, Field } from "../components/FormControls";
 import { Center, PrimaryButton, smallBtn, monthNavBtn, primaryBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, formatLocalDateTime } from "../utils/date";
 import { fmt } from "../utils/format";
+import { adminCan } from "../utils/permissions";
 import Pagination, { pageSlice } from "../components/Pagination";
 
 export default function Members({ isAdmin, admin }) {
@@ -30,7 +31,7 @@ export default function Members({ isAdmin, admin }) {
   useEffect(() => { if (isAdmin) api.settings.get().then(s=>{ const v=Number(s.default_monthly_amount)||250; setDefaultMonthly(v); setForm(f=>({...f,monthly_amount:f.monthly_amount===""?String(v):f.monthly_amount})); }).catch(()=>{}); }, [isAdmin]);
 
   if (!isAdmin) return <Center>Member directory is admin-only in this view.</Center>;
-  const financeAdmin = ["owner","super_admin","treasurer"].includes(admin?.role);
+  const financeAdmin = adminCan(admin, "finance");
 
   const addMember = async () => {
     if (!form.name.trim()) return;

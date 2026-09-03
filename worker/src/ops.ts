@@ -17,12 +17,16 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   if (!admin) return false;
   const role = admin.role === "owner" ? "super_admin" : admin.role;
   if (role === "super_admin") return true;
+
+  // A custom role replaces the built-in Treasurer/Viewer permission set.
+  if (admin.custom_role_id) return Array.isArray(admin.permissions) && admin.permissions.includes(permission as any);
+
   if (role === "treasurer") return permission === "read" || permission === "finance";
   if (role === "viewer") return permission === "read";
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 20;
+const REQUIRED_SCHEMA_VERSION = 21;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -32,7 +36,7 @@ export async function ensureOperationalSchema(env: Env) {
       throw new Error(`Database migration required: expected schema version ${REQUIRED_SCHEMA_VERSION}`);
     }
     const checks:[string,string[]][] = [
-      ["admins", ["active","deactivated_at","deactivated_by"]],
+      ["admins", ["active","deactivated_at","deactivated_by","custom_role_id"]],
       ["members", ["normalized_name","normalized_phone"]],
       ["member_registration_requests", ["phone"]],
       ["contributions", ["bank_date","corrected_by","corrected_at","voided_by","voided_at","void_reason","duplicate_key"]],
@@ -47,6 +51,8 @@ export async function ensureOperationalSchema(env: Env) {
       ["financial_reversals", ["reversal_id","entity_type","entity_id","reason"]],
       ["meeting_minutes", ["meeting_id","minutes","decisions"]],
       ["meeting_action_items", ["meeting_id","description","status"]],
+      ["admin_roles", ["name","active","created_by","created_at"]],
+      ["admin_role_permissions", ["role_id","permission"]],
     ];
     for (const [table,required] of checks) {
       const rows=await env.DB.prepare(`PRAGMA table_info(${table})`).all<any>();

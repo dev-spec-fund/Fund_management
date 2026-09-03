@@ -5,6 +5,7 @@ import { Modal, Field } from "../components/FormControls";
 import { LoadingState, EmptyState, MessageBanner, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
 import { currentMonthValue, shiftMonthValue, todayValue } from "../utils/date";
 import { fmt } from "../utils/format";
+import { adminCan } from "../utils/permissions";
 import Pagination, { pageSlice } from "../components/Pagination";
 import PdfPreview from "../components/PdfPreview";
 
@@ -240,7 +241,7 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const [docBusy, setDocBusy] = useState(false);
   const [docPreview, setDocPreview] = useState(null);
   const [addDocumentType, setAddDocumentType] = useState("Receipt");
-  const canViewDocuments = ["owner","super_admin","treasurer"].includes(String(admin?.role || ""));
+  const canViewDocuments = adminCan(admin, "finance");
 
   const loadDocuments = async () => { if (!canViewDocuments) return setDocuments([]); try { setDocuments(await api.expenses.documents(row.id)); } catch (e) { setError(e.message || "Could not load documents"); setDocuments([]); } };
   useEffect(() => { loadDocuments(); }, [row.id, canViewDocuments]);

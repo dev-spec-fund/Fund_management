@@ -32,7 +32,7 @@ test("allocation planner prefetches future state", () => {
 
 test("schema version is current", () => {
   const ops=read("src/ops.ts");
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 20/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 21/);
 });
 
 test("demotion preserves member record and removes admin access only", () => {
@@ -228,4 +228,17 @@ test("expense PDF preview uses PDF.js canvas viewer with page and zoom controls"
   assert.match(pdfPreview, /setZoom/);
   assert.match(packageJson, /pdfjs-dist/);
   assert.doesNotMatch(expensesUi, /<iframe/);
+});
+
+
+test("custom admin roles are migration-controlled and permission-backed", () => {
+  const migration = read("migrations/0021_custom_admin_roles.sql");
+  const ops = read("src/ops.ts");
+  const settings = read("src/routes/settings.ts");
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS admin_roles/);
+  assert.match(migration, /admin_role_permissions/);
+  assert.match(migration, /custom_role_id/);
+  assert.match(ops, /admin\.custom_role_id/);
+  assert.match(settings, /settingsRoute\.post\("\/roles"/);
+  assert.match(settings, /settingsRoute\.patch\("\/roles\/:id"/);
 });

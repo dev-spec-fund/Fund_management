@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireFinance, requireSuperAdmin } from "../auth";
+import { requireAdmin, requireFinance, requireSuperAdmin, requireCloseMonth } from "../auth";
 import { auditEntity, ensureOperationalSchema, isMonthClosed, requireOpenMonth } from "../ops";
 import { validMonth } from "../validation";
 import { currentMonth, getBranding } from "../db";
@@ -68,7 +68,7 @@ governanceRoute.get('/month-close', requireAdmin, async c=>{
   return c.json(rows.results);
 });
 
-governanceRoute.delete('/month-close/:month', requireSuperAdmin, async c=>{
+governanceRoute.delete('/month-close/:month', requireCloseMonth, async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get('admin')!; const month=c.req.param('month') || "";
   if(!validMonth(month)) return c.json({error:'Use YYYY-MM'},400);
@@ -96,7 +96,7 @@ governanceRoute.get('/month-close/:month/check', requireAdmin, async c=>{
   ]});
 });
 
-governanceRoute.post('/month-close/:month', requireSuperAdmin, async c=>{
+governanceRoute.post('/month-close/:month', requireCloseMonth, async c=>{
   await ensureOperationalSchema(c.env); const admin=c.get('admin')!; const month=c.req.param('month'); const body=await c.req.json().catch(()=>({})) as any;
   if(!validMonth(month)) return c.json({error:'Use YYYY-MM'},400);
   if(await isMonthClosed(c.env,month)) return c.json({error:'Month is already closed'},409);

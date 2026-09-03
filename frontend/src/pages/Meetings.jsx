@@ -4,6 +4,7 @@ import { Modal, Field } from "../components/FormControls";
 import { LoadingState, EmptyState, MessageBanner, PageHeader, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
 import Pagination, { pageSlice } from "../components/Pagination";
+import { adminCan } from "../utils/permissions";
 
 export default function Meetings({admin}){
   const emptyForm={title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:""};
@@ -21,8 +22,7 @@ export default function Meetings({admin}){
   const [actionDraft,setActionDraft]=useState({description:"",assigned_member_id:"",due_date:""});
   const [memberOptions,setMemberOptions]=useState([]);
   const [page,setPage]=useState(1);
-  const role=admin?.role==="owner"?"super_admin":admin?.role;
-  const canFinance=role==="super_admin"||role==="treasurer";
+  const canFinance=adminCan(admin, "finance");
 
   const load=()=>api.admin.meetings().then(setRows).catch(e=>setMessage(e.message));
   useEffect(()=>{load();api.members.list().then(setMemberOptions).catch(()=>{})},[]);

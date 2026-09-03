@@ -21,7 +21,16 @@ export type Member = {
 };
 
 export type AdminRole = "owner" | "super_admin" | "treasurer" | "viewer";
-export type Admin = { id:number; telegram_id:string; name:string; role:AdminRole; };
+export type AdminPermission = "read" | "finance" | "manage_admins" | "close_month" | "backup";
+export type Admin = {
+  id:number;
+  telegram_id:string;
+  name:string;
+  role:AdminRole;
+  custom_role_id?:number|null;
+  custom_role_name?:string|null;
+  permissions?:AdminPermission[];
+};
 
 export type AppEnv = {
   Bindings: Env;

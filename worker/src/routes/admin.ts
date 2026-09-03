@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireFinance, requireSuperAdmin } from "../auth";
+import { requireAdmin, requireFinance, requireSuperAdmin, requireBackup } from "../auth";
 import { auditEntity, contributionDuplicateKey, duplicateSlip, ensureOperationalSchema, normalizeName, normalizePhone, requireOpenMonth, safeLogError } from "../ops";
 import { currentMonth, getSetting, getBranding, generateMemberCode } from "../db";
 import { ensureInitialContributionRate } from "../contributionRates";
@@ -474,7 +474,7 @@ adminRoute.get('/errors', requireSuperAdmin, async c => { await ensureOperationa
 adminRoute.post('/errors/:id/resolve', requireSuperAdmin, async c => { const admin=c.get('admin')!; const id=Number(c.req.param('id')); const before=await c.env.DB.prepare("SELECT * FROM error_log WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:'Not found'},404); await c.env.DB.prepare("UPDATE error_log SET status='resolved',resolved_at=datetime('now'),resolved_by=? WHERE id=?").bind(admin.id,id).run(); await auditEntity(c.env,admin.id,'error_resolved','error_log',id,before,{...before,status:'resolved'}); return c.json({ok:true}); });
 adminRoute.post('/errors/resolve-all', requireSuperAdmin, async c => { const admin=c.get('admin')!; const row=await c.env.DB.prepare("SELECT COUNT(*) n FROM error_log WHERE status='open'").first<any>(); await c.env.DB.prepare("UPDATE error_log SET status='resolved',resolved_at=datetime('now'),resolved_by=? WHERE status='open'").bind(admin.id).run(); await auditEntity(c.env,admin.id,'errors_resolved','error_log','open',null,{resolved:Number(row?.n||0)}); return c.json({ok:true,resolved:Number(row?.n||0)}); });
 
-adminRoute.get('/backup', requireSuperAdmin, async c => {
+adminRoute.get('/backup', requireBackup, async c => {
   await ensureOperationalSchema(c.env);
   const tables=['members','admins','member_registration_requests','contributions','contribution_allocations','donations','expense_categories','projects','expenses','expense_documents','exemptions','settings','id_sequences','audit_log','month_closures','meetings','meeting_rsvps','meeting_minutes','meeting_action_items','monthly_snapshots','financial_reversals','error_log','rate_limits','schema_migrations'];
   const version=await c.env.DB.prepare("SELECT MAX(version) version FROM schema_migrations").first<any>();

@@ -71,10 +71,19 @@ export async function generateTxnId(env: Env, kind: "C" | "D" | "E"): Promise<st
 }
 
 export async function getAdminByTelegramId(env: Env, telegramId: string): Promise<Admin | null> {
-  const row = await env.DB.prepare("SELECT * FROM admins WHERE telegram_id = ? AND COALESCE(active,1)=1")
-    .bind(telegramId)
-    .first<Admin>();
-  return row ?? null;
+  const row = await env.DB.prepare(`
+    SELECT a.*, r.name custom_role_name,
+           GROUP_CONCAT(rp.permission) permissions_csv
+    FROM admins a
+    LEFT JOIN admin_roles r ON r.id=a.custom_role_id AND COALESCE(r.active,1)=1
+    LEFT JOIN admin_role_permissions rp ON rp.role_id=r.id
+    WHERE a.telegram_id=? AND COALESCE(a.active,1)=1
+    GROUP BY a.id
+  `).bind(telegramId).first<any>();
+  if (!row) return null;
+  const permissions = String(row.permissions_csv || "").split(",").map((x:string)=>x.trim()).filter(Boolean);
+  delete row.permissions_csv;
+  return { ...row, permissions } as Admin;
 }
 
 export async function logAudit(env: Env, adminId: number | null, action: string, detail: string) {
