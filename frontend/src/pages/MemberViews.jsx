@@ -5,6 +5,7 @@ import { Modal, Field } from "../components/FormControls";
 import { Center, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, formatLocalDateTime, shiftMonthValue, todayValue } from "../utils/date";
 import { fmt } from "../utils/format";
+import Pagination, { pageSlice } from "../components/Pagination";
 import { ActivityRow, activityDayLabel } from "../components/ActivityRow";
 
 function smallBtn(color) {
@@ -66,6 +67,7 @@ export function FundView() {
   const [expenseDetail, setExpenseDetail] = useState(null);
   const [expenseLoading, setExpenseLoading] = useState(false);
   const [expenseError, setExpenseError] = useState("");
+  const [page, setPage] = useState(1);
 
   const loadSummary = () => {
     setSummary(null);
@@ -252,6 +254,7 @@ export function Activity({ isAdmin, canFinance = false }) {
   const [expenseCategories, setExpenseCategories] = useState([]);
   const [expenseBusy, setExpenseBusy] = useState(false);
   const [expenseError, setExpenseError] = useState("");
+  const [page, setPage] = useState(1);
 
   const monthEnd = (month) => {
     const [year, mon] = String(month).split("-").map(Number);
@@ -388,8 +391,9 @@ export function Activity({ isAdmin, canFinance = false }) {
   const filtered = normalizedRows.filter((r) => filter === "all" || r._kind === filter);
   const income = filtered.filter((r) => r._kind === "contribution" || r._kind === "donation").reduce((n, r) => n + Number(r.amount || 0), 0);
   const expenses = filtered.filter((r) => r._kind === "expense").reduce((n, r) => n + Number(r.amount || 0), 0);
+  const activityPage = pageSlice(filtered, page);
   const groups = [];
-  filtered.forEach((row) => {
+  activityPage.rows.forEach((row) => {
     const label = activityDayLabel(row);
     const last = groups[groups.length - 1];
     if (last && last.label === label) last.rows.push(row);
@@ -457,6 +461,7 @@ export function Activity({ isAdmin, canFinance = false }) {
           </div>
         ))}
         {filtered.length === 0 && <div className="sans" style={{ fontSize: 13, color: "var(--soft)" }}>Nothing here yet.</div>}
+        <Pagination page={activityPage.page} total={filtered.length} onChange={setPage} />
       </div>
 
       {editingExpense && <Modal title="Edit expense" onClose={() => !expenseBusy && setEditingExpense(null)}>
@@ -486,41 +491,6 @@ export function Activity({ isAdmin, canFinance = false }) {
   );
 }
 /* ---------- Reports (admin) ---------- */
-
-export function MemberProjects() {
-  const [data,setData]=useState(null);
-  const [error,setError]=useState("");
-  const [openId,setOpenId]=useState(null);
-  const load=()=>{setError("");api.myProjects().then(setData).catch(e=>setError(e?.message||"Could not load community projects"));};
-  useEffect(()=>{load();},[]);
-  useEffect(()=>onDataChange(()=>{api.myProjects().then(setData).catch(()=>{});}),[]);
-  if(error)return <div className="sans" style={{background:"var(--danger-bg)",border:"1px solid var(--danger-border)",borderRadius:12,padding:14,color:"var(--danger)"}}>{error}</div>;
-  if(!data)return <Center>Loading community projects…</Center>;
-  if(data.enabled===false)return <div className="sans" style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:18,color:"var(--muted)"}}>Community project transparency is currently disabled by the administrator.</div>;
-  const projects=data.projects||[];
-  return <>
-    <div className="sans" style={{display:"flex",alignItems:"center",gap:7,background:"var(--success-bg)",color:"var(--success-strong)",fontSize:12,borderRadius:10,padding:"9px 12px",marginBottom:14}}><Eye size={13}/> Approved community-project information · read only</div>
-    {projects.map(p=>{
-      const budget=p.budget==null?null:Number(p.budget), spent=Number(p.spent||0), remaining=p.remaining_budget==null?null:Number(p.remaining_budget), pct=p.budget_used_pct==null?null:Number(p.budget_used_pct);
-      const open=openId===p.id;
-      return <div key={p.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:14,padding:15,marginBottom:10}}>
-        <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start"}}><div><div className="sans" style={{fontSize:10,color:"var(--soft)",letterSpacing:.6}}>{p.project_code}</div><div className="sans" style={{fontSize:15,fontWeight:700,marginTop:2}}>{p.name}</div></div><span className="sans" style={{fontSize:10,fontWeight:700,textTransform:"capitalize",padding:"4px 8px",borderRadius:999,background:p.status==="active"?"var(--success-bg)":"var(--bg)",color:p.status==="active"?"var(--success)":"var(--muted)"}}>{p.status}</span></div>
-        {p.description&&<div className="sans" style={{fontSize:11,color:"var(--muted)",marginTop:7,lineHeight:1.45}}>{p.description}</div>}
-        <div className="sans" style={{display:"grid",gridTemplateColumns:budget==null?"1fr 1fr":"1fr 1fr",gap:8,marginTop:12}}>
-          {budget!=null&&<div><div style={{fontSize:9,color:"var(--soft)"}}>BUDGET</div><b style={{fontSize:12}}>MVR {fmt(budget)}</b></div>}
-          <div><div style={{fontSize:9,color:"var(--soft)"}}>TOTAL SPENT</div><b style={{fontSize:12}}>MVR {fmt(spent)}</b></div>
-          {budget!=null&&<div><div style={{fontSize:9,color:"var(--soft)"}}>REMAINING</div><b style={{fontSize:12,color:remaining<0?"var(--danger)":"inherit"}}>MVR {fmt(remaining)}</b></div>}
-          {budget!=null&&<div><div style={{fontSize:9,color:"var(--soft)"}}>BUDGET USED</div><b style={{fontSize:12}}>{Math.round(pct||0)}%</b></div>}
-          {budget==null&&<div><div style={{fontSize:9,color:"var(--soft)"}}>BUDGET</div><b style={{fontSize:12,color:"var(--muted)"}}>Open cost</b></div>}
-        </div>
-        <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:10}}>{p.start_date?`Started ${p.start_date}`:"Start date not set"}{p.target_end_date?` · Target ${p.target_end_date}`:""}{p.responsible_member_name?` · Responsible: ${p.responsible_member_name}`:""}</div>
-        <button onClick={()=>setOpenId(open?null:p.id)} style={{...compactBtn,width:"100%",marginTop:11}}>{open?"Hide approved expenses":`View approved expenses (${p.expense_count||0})`}</button>
-        {open&&<div style={{marginTop:8,borderTop:"1px solid var(--divider)"}}>{(p.expenses||[]).map(e=><div key={e.id} className="sans" style={{display:"flex",justifyContent:"space-between",gap:10,padding:"9px 0",borderBottom:"1px solid var(--divider)",fontSize:11}}><span><b>{e.description}</b><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{e.expense_date||"—"} · {e.category}</div></span><b style={{whiteSpace:"nowrap"}}>MVR {fmt(e.amount)}</b></div>)}{(p.expenses||[]).length===0&&<div className="sans" style={{fontSize:11,color:"var(--soft)",padding:"10px 0"}}>No approved expenses yet.</div>}</div>}
-      </div>;
-    })}
-    {projects.length===0&&<div className="sans" style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:18,color:"var(--soft)"}}>No active or completed community projects are available yet.</div>}
-  </>;
-}
 
 export function MemberMeetings() {
   const [rows, setRows] = useState(null);

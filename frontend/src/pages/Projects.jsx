@@ -5,6 +5,7 @@ import { Modal, Field } from "../components/FormControls";
 import { Center, MessageBanner, PrimaryButton, smallBtn } from "../components/Shared";
 import { fmt } from "../utils/format";
 import { todayValue } from "../utils/date";
+import Pagination, { pageSlice } from "../components/Pagination";
 
 const FILTERS = [["all","All"],["active","Active"],["planned","Planned"],["completed","Completed"],["cancelled","Cancelled"]];
 const isSuper = (admin) => ["owner","super_admin"].includes(admin?.role);
@@ -14,11 +15,13 @@ const adjustmentStatuses = new Set(["voided","reversed","rejected","cancelled"])
 export default function Projects({ admin }) {
   const [filter,setFilter]=useState("all"), [query,setQuery]=useState(""), [rows,setRows]=useState(null);
   const [selected,setSelected]=useState(null), [showAdd,setShowAdd]=useState(false), [message,setMessage]=useState(""), [error,setError]=useState("");
+  const [page,setPage]=useState(1);
   const load=async()=>{setError("");try{setRows(await api.projects.list({status:filter==="all"?"":filter,q:query.trim()}));}catch(e){setError(e.message);setRows([]);}};
-  useEffect(()=>{const t=setTimeout(load,220);return()=>clearTimeout(t);},[filter,query]);
+  useEffect(()=>{setPage(1);const t=setTimeout(load,220);return()=>clearTimeout(t);},[filter,query]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses")||path?.startsWith("/api/donations"))load();}),[filter,query]);
   const totalSpent=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.spent||0),0),[rows]);
   const pendingSpend=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.pending_spend||0),0),[rows]);
+  const projectPage=pageSlice(rows||[],page);
   const saved=async(text)=>{setSelected(null);setShowAdd(false);setMessage(text);await load();};
   return <>
     <div className="page-sticky-controls">
@@ -30,7 +33,7 @@ export default function Projects({ admin }) {
       <div className="expense-search sans" style={{marginBottom:14}}><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search project name, code or responsible member"/>{query&&<button type="button" onClick={()=>setQuery("")}><X size={14}/></button>}</div>
     </div>
     <MessageBanner>{message}</MessageBanner><MessageBanner tone="error">{error}</MessageBanner>
-    {rows===null?<Center>Loading projects…</Center>:rows.length===0?<Center>No projects found.</Center>:rows.map(p=><button type="button" key={p.id} onClick={()=>setSelected(p)} className="expense-row" style={{alignItems:"flex-start"}}>
+    {rows===null?<Center>Loading projects…</Center>:rows.length===0?<Center>No projects found.</Center>:projectPage.rows.map(p=><button type="button" key={p.id} onClick={()=>setSelected(p)} className="expense-row" style={{alignItems:"flex-start"}}>
       <div style={{minWidth:0,textAlign:"left",flex:1}}>
         <div className="sans" style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}><strong style={{fontSize:13}}>{p.name}</strong><span style={{fontSize:9,fontWeight:700,color:tone(p.status),textTransform:"uppercase"}}>{p.status}</span></div>
         <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:4}}>{p.project_code}{p.responsible_member_name?` · ${p.responsible_member_name}`:""}</div>
@@ -39,6 +42,7 @@ export default function Projects({ admin }) {
       </div>
       <div className="sans" style={{textAlign:"right",whiteSpace:"nowrap"}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>Spent</div><strong style={{fontSize:13}}>MVR {fmt(p.spent)}</strong>{Number(p.pending_spend||0)>0&&<div style={{fontSize:9,color:"var(--warning)",marginTop:3}}>MVR {fmt(p.pending_spend)} pending</div>}{p.budget!=null&&<div style={{fontSize:9,color:Number(p.remaining_budget)<0?"var(--danger)":"var(--soft)",marginTop:3}}>{Number(p.remaining_budget)<0?`Over MVR ${fmt(Math.abs(p.remaining_budget))}`:`MVR ${fmt(p.remaining_budget)} left`}</div>}</div>
     </button>)}
+    <Pagination page={projectPage.page} total={(rows||[]).length} onChange={setPage}/>
     {showAdd&&<ProjectForm admin={admin} onClose={()=>setShowAdd(false)} onSaved={()=>saved("Project created")}/>} 
     {selected&&<ProjectDetails project={selected} admin={admin} onClose={()=>setSelected(null)} onSaved={saved}/>} 
   </>;

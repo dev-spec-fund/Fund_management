@@ -3,6 +3,7 @@ import { api } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, MessageBanner, PageHeader, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
+import Pagination, { pageSlice } from "../components/Pagination";
 
 export default function Meetings({admin}){
   const emptyForm={title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:""};
@@ -19,11 +20,14 @@ export default function Meetings({admin}){
   const [minutesDraft,setMinutesDraft]=useState({minutes:"",decisions:""});
   const [actionDraft,setActionDraft]=useState({description:"",assigned_member_id:"",due_date:""});
   const [memberOptions,setMemberOptions]=useState([]);
+  const [page,setPage]=useState(1);
   const role=admin?.role==="owner"?"super_admin":admin?.role;
   const canFinance=role==="super_admin"||role==="treasurer";
 
   const load=()=>api.admin.meetings().then(setRows).catch(e=>setMessage(e.message));
   useEffect(()=>{load();api.members.list().then(setMemberOptions).catch(()=>{})},[]);
+
+  const meetingPage=pageSlice(rows||[],page);
 
   const fmtMeetingDateTime=(date,time)=>{
     if(!date)return "";
@@ -194,7 +198,7 @@ export default function Meetings({admin}){
 
     {rows===null?<Center>Loading…</Center>:rows.length===0
       ?<div className="sans" style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:18,color:"var(--soft)",fontSize:12}}>No meetings created yet.</div>
-      :rows.map(m=>{
+      :meetingPage.rows.map(m=>{
         const answered=Number(m.going||0)+Number(m.maybe||0)+Number(m.declined||0);
         const status=meetingLifecycle(m);
         return <div key={m.id} style={{background:"var(--card)",border:`1px solid ${status.label==="Cancelled"?"var(--danger-border-2)":"var(--border)"}`,borderRadius:12,padding:14,marginBottom:10,opacity:status.label==="Cancelled"?.78:1}}>
@@ -218,6 +222,7 @@ export default function Meetings({admin}){
           </div>
         </div>
       })}
+    <Pagination page={meetingPage.page} total={(rows||[]).length} onChange={setPage}/>
 
     {showCreate&&<Modal title="New meeting" onClose={()=>!busy&&setShowCreate(false)}>
       <Field label="Meeting title" value={form.title} onChange={v=>setForm({...form,title:v})}/>

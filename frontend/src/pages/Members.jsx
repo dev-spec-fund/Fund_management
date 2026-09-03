@@ -5,6 +5,7 @@ import { Modal, Field } from "../components/FormControls";
 import { Center, PrimaryButton, smallBtn } from "../components/Shared";
 import { currentMonthValue, formatLocalDateTime } from "../utils/date";
 import { fmt } from "../utils/format";
+import Pagination, { pageSlice } from "../components/Pagination";
 
 export default function Members({ isAdmin, admin }) {
   const [members, setMembers] = useState([]);
@@ -18,6 +19,7 @@ export default function Members({ isAdmin, admin }) {
   const [reminderMessage, setReminderMessage] = useState("");
   const [defaultMonthly, setDefaultMonthly] = useState(250);
   const [form, setForm] = useState({ name: "", phone: "", monthly_amount: "" });
+  const [page, setPage] = useState(1);
 
   const load = () => Promise.all([
     api.members.list().then(setMembers),
@@ -58,6 +60,7 @@ export default function Members({ isAdmin, admin }) {
     return matchesSearch && matchesFilter;
   });
 
+  const memberPage = pageSlice(filtered, page);
   const shiftMonth = (delta) => {
     const [y, m] = month.split("-").map(Number);
     const d = new Date(Date.UTC(y, m - 1 + delta, 1));
@@ -135,7 +138,7 @@ export default function Members({ isAdmin, admin }) {
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, ID or phone…" className="sans" style={{ width: "100%", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px 10px 36px", fontSize: 13, boxSizing: "border-box", background: "var(--card)" }} />
       </div>
 
-      {filtered.map((m) => {
+      {memberPage.rows.map((m) => {
         const monthly = outstandingByMember.get(Number(m.id));
         const status = memberStatus(m);
         const paid = Number(monthly?.paid ?? (status === "paid" ? m.monthly_amount : 0));
@@ -161,6 +164,7 @@ export default function Members({ isAdmin, admin }) {
         );
       })}
       {filtered.length === 0 && <div className="sans" style={{ textAlign: "center", fontSize: 13, color: "var(--soft)", padding: "24px 0" }}>No members match this view.</div>}
+      <Pagination page={memberPage.page} total={filtered.length} onChange={setPage} />
 
       {selected && <MemberPopup member={selected} month={month} canRemind={financeAdmin} onClose={() => setSelected(null)} onChanged={load} />}
       {showAdd && (

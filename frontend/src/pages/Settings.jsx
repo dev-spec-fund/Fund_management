@@ -4,6 +4,7 @@ import { api } from "../api";
 import { Center, MessageBanner, SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, todayValue, formatLocalDateTime } from "../utils/date";
 import { sendExportToTelegram } from "../utils/exports";
+import Pagination, { pageSlice } from "../components/Pagination";
 
 const AUDIT_HIDDEN_KEYS = new Set(["ocr_raw","slip_file_id","file_id","telegram_file_id","photo_file_id","raw","ai_response","model_response","prompt"]);
 const auditLabel = (s="") => s.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
@@ -65,6 +66,10 @@ export default function Settings({ admin }) {
   const [closeCheck,setCloseCheck]=useState(null);
   const [closeBusy,setCloseBusy]=useState(false);
   const [closeMonthValue,setCloseMonthValue]=useState(currentMonthValue());
+  const [closurePage,setClosurePage]=useState(1);
+  const [errorPage,setErrorPage]=useState(1);
+  const [errorFilter,setErrorFilter]=useState("open");
+  const [auditPage,setAuditPage]=useState(1);
 
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
   const superAdmin = role === "super_admin";
@@ -175,6 +180,9 @@ export default function Settings({ admin }) {
     setCloseCheck(null);
   };
   const tabs=[["general","General"],["admins","Admins"],["system","System"],...(financeAdmin?[["audit","Audit"]]:[])];
+  const filteredErrors=errors.filter(e=>errorFilter==="all"?true:errorFilter==="resolved"?e.status==="resolved":e.status!=="resolved");
+  const errorRows=pageSlice(filteredErrors,errorPage);
+  const auditRows=pageSlice(audit,auditPage);
 
   return <>
     <MessageBanner>{message}</MessageBanner>
@@ -184,7 +192,7 @@ export default function Settings({ admin }) {
         {tabs.map(([key,label])=>
           <button key={key} type="button" onClick={()=>setSettingsSection(key)} className="sans"
             style={{flex:"0 0 auto",border:`1px solid ${settingsSection===key?"var(--primary)":"var(--border-2)"}`,background:settingsSection===key?"var(--primary)":"var(--card)",color:settingsSection===key?"var(--on-primary)":"var(--muted)",borderRadius:20,padding:"7px 13px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-            {label}{key==="system" && errors.length>0 ? ` · ${errors.length}` : ""}
+            {label}
           </button>
         )}
       </div>
@@ -296,12 +304,16 @@ export default function Settings({ admin }) {
       {closures.length>0 && <>
         <SectionTitle>CLOSED MONTHS</SectionTitle>
         <div style={cardStyle}>
-          {closures.slice(0,6).map(x=>
-            <div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11,padding:"7px 0",borderBottom:"1px solid var(--divider)"}}>
+          {pageSlice(closures,closurePage).rows.map(x=>
+            <div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,fontSize:11,padding:"7px 0",borderBottom:"1px solid var(--divider)"}}>
               <span><b>{x.month}</b><div style={{color:"var(--soft-2)",marginTop:2}}>by {x.closed_by_name || "admin"}</div></span>
-              {superAdmin&&<button onClick={()=>api.admin.reopenMonth(x.month).then(load).catch(e=>setMessage(e.message))} style={compactBtn}>Reopen</button>}
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={async()=>{try{const summary=await api.reports.summary(x.month);const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month:x.month,monthLabel:monthLabel(x.month),summary});}catch(e){setMessage(e.message||"Could not create closed-month PDF")}}} style={compactBtn}>PDF</button>
+                {superAdmin&&<button onClick={()=>api.admin.reopenMonth(x.month).then(load).catch(e=>setMessage(e.message))} style={compactBtn}>Reopen</button>}
+              </div>
             </div>
           )}
+          <Pagination page={pageSlice(closures,closurePage).page} total={closures.length} onChange={setClosurePage}/>
         </div>
       </>}
     </>}
@@ -393,8 +405,9 @@ export default function Settings({ admin }) {
           <button onClick={backup} style={approveBtn}>Create backup</button>
         </div>
 
-        <SectionTitle>RECENT ERRORS {errors.length>0?`· ${errors.length}`:""}</SectionTitle>
+        <SectionTitle>RECENT ERRORS</SectionTitle>
         <div style={cardStyle}>
+          <div className="expense-filter-row sans" style={{marginBottom:8}}>{[["open","Open"],["resolved","Resolved"],["all","All"]].map(([v,l])=><button key={v} type="button" onClick={()=>{setErrorFilter(v);setErrorPage(1)}} className={errorFilter===v?"expense-filter-chip active":"expense-filter-chip"}>{l}{v==="all"?` ${errors.length}`:""}</button>)}</div>
           {errors.some(e=>e.status!=="resolved")&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}>
             <button onClick={async()=>{
               if(!confirm("Mark all open errors as resolved? Error history will be retained.")) return;
@@ -405,7 +418,7 @@ export default function Settings({ admin }) {
               }catch(e){setMessage(e.message)}
             }} style={compactBtn}>Resolve all open</button>
           </div>}
-          {errors.slice(0,30).map(e=><div key={e.id} className="sans" style={{padding:"8px 0",borderBottom:"1px solid var(--divider)",fontSize:11,opacity:e.status==="resolved"?.62:1}}>
+          {errorRows.rows.map(e=><div key={e.id} className="sans" style={{padding:"8px 0",borderBottom:"1px solid var(--divider)",fontSize:11,opacity:e.status==="resolved"?.62:1}}>
             <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"flex-start"}}>
               <b>{e.source}</b>
               <span style={{fontSize:9,fontWeight:700,color:e.status==="resolved"?"var(--muted)":"var(--danger)"}}>{e.status==="resolved"?"RESOLVED":"OPEN"}</span>
@@ -416,7 +429,8 @@ export default function Settings({ admin }) {
               {e.status!=="resolved"&&<button onClick={async()=>{try{await api.admin.resolveError(e.id);setErrors(await api.admin.errors())}catch(err){setMessage(err.message)}}} style={{...compactBtn,padding:"4px 7px",fontSize:9}}>Resolve</button>}
             </div>
           </div>)}
-          {!errors.length&&<EmptyLine>No logged errors.</EmptyLine>}
+          {!filteredErrors.length&&<EmptyLine>No errors in this view.</EmptyLine>}
+          <Pagination page={errorRows.page} total={filteredErrors.length} onChange={setErrorPage}/>
         </div>
       </>}
     </>}
@@ -424,7 +438,8 @@ export default function Settings({ admin }) {
     {settingsSection==="audit" && <>
       <SectionTitle>AUDIT LOG</SectionTitle>
       <div style={cardStyle}>
-        {audit.slice(0,100).map(a=><AuditEntry key={a.id} a={a}/>)}
+        {auditRows.rows.map(a=><AuditEntry key={a.id} a={a}/>)}
+        <Pagination page={auditRows.page} total={audit.length} onChange={setAuditPage}/>
         {!audit.length&&<EmptyLine>No audit entries.</EmptyLine>}
       </div>
     </>}

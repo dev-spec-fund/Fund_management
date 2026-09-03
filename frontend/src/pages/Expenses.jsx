@@ -5,6 +5,7 @@ import { Modal, Field } from "../components/FormControls";
 import { Center, MessageBanner, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
 import { currentMonthValue, shiftMonthValue, todayValue } from "../utils/date";
 import { fmt } from "../utils/format";
+import Pagination, { pageSlice } from "../components/Pagination";
 
 const FILTERS = [
   ["all", "All"],
@@ -64,6 +65,7 @@ export default function Expenses({ admin }) {
   const [error, setError] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query.trim()), 250);
@@ -81,7 +83,7 @@ export default function Expenses({ admin }) {
     }
   };
 
-  useEffect(() => { setRows(null); load(); }, [month, filter, debouncedQuery, documentsFilter]);
+  useEffect(() => { setRows(null); setPage(1); load(); }, [month, filter, debouncedQuery, documentsFilter]);
 
   const totals = useMemo(() => {
     const base = rows || [];
@@ -90,6 +92,8 @@ export default function Expenses({ admin }) {
       count: base.length,
     };
   }, [rows]);
+
+  const expensePage = pageSlice(rows || [], page);
 
   const saved = async (text = "Expense saved") => {
     setSelected(null); setShowAdd(false); setMessage(text); await load();
@@ -129,7 +133,7 @@ export default function Expenses({ admin }) {
       <MessageBanner>{message}</MessageBanner>
       <MessageBanner tone="error">{error}</MessageBanner>
 
-      {rows === null ? <Center>Loading expenses…</Center> : rows.length === 0 ? <Center>No expenses found.</Center> : rows.map((row) => {
+      {rows === null ? <Center>Loading expenses…</Center> : rows.length === 0 ? <Center>No expenses found.</Center> : expensePage.rows.map((row) => {
         const tone = statusTone(row.status);
         return <button type="button" key={row.id} onClick={() => setSelected(row)} className="expense-row">
           <div style={{ minWidth: 0, textAlign: "left" }}>
@@ -145,6 +149,8 @@ export default function Expenses({ admin }) {
           <div className="sans" style={{ color: "var(--danger)", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>MVR {fmt(row.amount)}</div>
         </button>;
       })}
+
+      <Pagination page={expensePage.page} total={(rows||[]).length} onChange={setPage} />
 
       {showAdd && <ExpenseForm admin={admin} onClose={() => setShowAdd(false)} onSaved={saved} />}
       {selected && <ExpenseDetails admin={admin} row={selected} onClose={() => setSelected(null)} onSaved={saved} />}
