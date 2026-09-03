@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { api, onDataChange } from "../api";
-import { Center, MessageBanner, SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
+import { LoadingState, ErrorState, MessageBanner, SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, todayValue, formatLocalDateTime } from "../utils/date";
 import { sendExportToTelegram } from "../utils/exports";
 import Pagination, { pageSlice } from "../components/Pagination";
@@ -120,22 +120,8 @@ export default function Settings({ admin }) {
     ) load();
   }),[admin?.id,role]);
 
-  if(settingsLoading)return <Center>Loading settings…</Center>;
-  if(settingsError && !Object.keys(settings||{}).length) return <div style={{...cardStyle,textAlign:"center"}}>
-    <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--danger)"}}>Settings could not load</div>
-    <div className="sans" style={{fontSize:11,color:"var(--muted)",marginTop:6}}>{settingsError}</div>
-    <button onClick={load} className="sans" style={{
-      marginTop:12,
-      border:"none",
-      borderRadius:9,
-      padding:"9px 14px",
-      background:"var(--primary)",
-      color:"var(--on-primary)",
-      fontSize:12,
-      fontWeight:700,
-      cursor:"pointer"
-    }}>Retry</button>
-  </div>;
+  if(settingsLoading)return <LoadingState>Loading settings…</LoadingState>;
+  if(settingsError && !Object.keys(settings||{}).length) return <ErrorState onRetry={load}>{settingsError}</ErrorState>;
 
   const saveSetting=async(key,value)=>{
     try{

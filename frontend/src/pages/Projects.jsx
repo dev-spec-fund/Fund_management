@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Pencil, CheckCircle2, RotateCcw, X, History, WalletCards, Paperclip } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
-import { Center, MessageBanner, PrimaryButton, smallBtn } from "../components/Shared";
+import { LoadingState, EmptyState, MessageBanner, PrimaryButton, smallBtn } from "../components/Shared";
 import { fmt } from "../utils/format";
 import { todayValue } from "../utils/date";
 import Pagination, { pageSlice } from "../components/Pagination";
@@ -33,7 +33,7 @@ export default function Projects({ admin }) {
       <div className="expense-search sans" style={{marginBottom:14}}><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search project name, code or responsible member"/>{query&&<button type="button" onClick={()=>setQuery("")}><X size={14}/></button>}</div>
     </div>
     <MessageBanner>{message}</MessageBanner><MessageBanner tone="error">{error}</MessageBanner>
-    {rows===null?<Center>Loading projects…</Center>:rows.length===0?<Center>No projects found.</Center>:projectPage.rows.map(p=><button type="button" key={p.id} onClick={()=>setSelected(p)} className="expense-row" style={{alignItems:"flex-start"}}>
+    {rows===null?<LoadingState>Loading projects…</LoadingState>:rows.length===0?<EmptyState>No projects found.</EmptyState>:projectPage.rows.map(p=><button type="button" key={p.id} onClick={()=>setSelected(p)} className="expense-row" style={{alignItems:"flex-start"}}>
       <div style={{minWidth:0,textAlign:"left",flex:1}}>
         <div className="sans" style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}><strong style={{fontSize:13}}>{p.name}</strong><span style={{fontSize:9,fontWeight:700,color:tone(p.status),textTransform:"uppercase"}}>{p.status}</span></div>
         <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:4}}>{p.project_code}{p.responsible_member_name?` · ${p.responsible_member_name}`:""}</div>
@@ -54,7 +54,7 @@ function ProjectForm({admin,onClose,onSaved,project=null}){
   useEffect(()=>{api.members.list().then(setMembers).catch(()=>{});},[]);
   const locked=project&&["completed","cancelled"].includes(project.status)&&!isSuper(admin);
   const save=async()=>{if(locked)return;if(!form.name.trim())return setError("Project name is required.");setBusy(true);setError("");try{const payload={...form,name:form.name.trim(),description:form.description.trim()||null,budget:form.budget===""?null:Number(form.budget),responsible_member_id:form.responsible_member_id||null,target_end_date:form.target_end_date||null};if(project)await api.projects.update(project.id,payload);else await api.projects.create(payload);await onSaved(project?"Project updated":"Project created");}catch(e){setError(e.message);}finally{setBusy(false);}};
-  return <Modal onClose={onClose} title={project?"Edit project":"New project"}><MessageBanner tone="error">{error}</MessageBanner>
+  return <Modal onClose={onClose} closeDisabled={busy} title={project?"Edit project":"New project"}><MessageBanner tone="error">{error}</MessageBanner>
     <Field label="Project name" value={form.name} onChange={v=>setForm({...form,name:v})}/><Field label="Description (optional)" value={form.description} onChange={v=>setForm({...form,description:v})}/>
     <div className="sans" style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Budget (optional)</div><input className="sans" type="number" min="0" step="0.01" value={form.budget} onChange={e=>setForm({...form,budget:e.target.value})} placeholder="Leave blank for open-cost project" style={inputStyle}/>
     <Field label="Start date" type="date" value={form.start_date} onChange={v=>setForm({...form,start_date:v})}/><Field label="Target end date (optional)" type="date" value={form.target_end_date} onChange={v=>setForm({...form,target_end_date:v})}/>
@@ -78,7 +78,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
   const adjustments=expenses.filter(e=>adjustmentStatuses.has(String(e.status)));
   const canEdit=!["completed","cancelled"].includes(p.status)||isSuper(admin);
   const changeStatus=async(status)=>{let cancel_reason=null;if(status==="cancelled"){cancel_reason=prompt("Reason for cancelling this project:")||"";if(cancel_reason.trim().length<3)return;}setBusy(true);setError("");try{await api.projects.update(p.id,{status,cancel_reason});await onSaved(status==="active"?"Project reopened/activated":status==="completed"?"Project completed":"Project cancelled");}catch(e){setError(e.message);}finally{setBusy(false);}};
-  return <Modal onClose={onClose} title={`${p.project_code} · ${p.name}`}><MessageBanner tone="error">{error}</MessageBanner>
+  return <Modal onClose={onClose} closeDisabled={busy} title={`${p.project_code} · ${p.name}`}><MessageBanner tone="error">{error}</MessageBanner>
     <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:12}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
         <Metric label="Status" value={String(p.status||"").toUpperCase()} color={tone(p.status)}/><Metric label="Total spent" value={`MVR ${fmt(p.spent)}`}/>

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Search, Pencil, RotateCcw, X, Paperclip, FileText, Send, Eye, Trash2, Tag } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
-import { Center, MessageBanner, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
+import { LoadingState, EmptyState, MessageBanner, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
 import { currentMonthValue, shiftMonthValue, todayValue } from "../utils/date";
 import { fmt } from "../utils/format";
 import Pagination, { pageSlice } from "../components/Pagination";
@@ -136,7 +136,7 @@ export default function Expenses({ admin }) {
       <MessageBanner>{message}</MessageBanner>
       <MessageBanner tone="error">{error}</MessageBanner>
 
-      {rows === null ? <Center>Loading expenses…</Center> : rows.length === 0 ? <Center>No expenses found.</Center> : expensePage.rows.map((row) => {
+      {rows === null ? <LoadingState>Loading expenses…</LoadingState> : rows.length === 0 ? <EmptyState>No expenses found.</EmptyState> : expensePage.rows.map((row) => {
         const tone = statusTone(row.status);
         return <button type="button" key={row.id} onClick={() => setSelected(row)} className="expense-row">
           <div style={{ minWidth: 0, textAlign: "left" }}>
@@ -199,7 +199,7 @@ function ExpenseForm({ admin, onClose, onSaved, row = null }) {
     } catch (e) { setError(e.message || "Could not save expense"); } finally { setBusy(false); }
   };
 
-  return <Modal onClose={onClose} title={row ? "Edit expense" : "Add expense"}>
+  return <Modal onClose={onClose} closeDisabled={busy} title={row ? "Edit expense" : "Add expense"}>
     <MessageBanner tone="error">{error}</MessageBanner>
     <Field label="Description" value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
     <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{form.project_id ? "Category (optional)" : "Category"}</div>
@@ -289,7 +289,7 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
     catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
-  return <Modal onClose={onClose} title={row.txn_id || "Expense details"}>
+  return <Modal onClose={onClose} closeDisabled={busy || docBusy} title={row.txn_id || "Expense details"}>
     <MessageBanner tone="error">{error}</MessageBanner>
     <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, marginBottom: 14 }}>
       <Detail label="Description" value={row.description} />

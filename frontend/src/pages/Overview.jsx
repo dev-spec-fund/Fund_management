@@ -3,7 +3,7 @@ import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { currentMonthValue } from "../utils/date";
 import { fmt } from "../utils/format";
-import { Center } from "../components/Shared";
+import { LoadingState } from "../components/Shared";
 import { ActivityRow } from "../components/ActivityRow";
 
 export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null }) {
@@ -40,7 +40,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
   useEffect(() => onDataChange(() => refreshOverview()), [isAdmin, canFinance]);
 
-  if (!summary) return <Center>Loading overview…</Center>;
+  if (!summary) return <LoadingState>Loading overview…</LoadingState>;
 
   const contributions = Number(summary.memberIncome || 0);
   const allocatedContributions = Number(summary.allocatedContributions ?? summary.memberIncome ?? 0);

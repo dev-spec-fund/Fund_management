@@ -28,10 +28,35 @@ export function Center({ children }) {
   return <div style={{ padding: 60, textAlign: "center", fontFamily: "\'Inter\',sans-serif", color: "var(--muted)" }}>{children}</div>;
 }
 
-export function PrimaryButton({ onClick, children }) {
+export function PageState({ kind = "empty", title, message, action, compact = false }) {
+  const isError = kind === "error";
+  const isLoading = kind === "loading";
+  const resolvedTitle = title || (isLoading ? "Loading…" : isError ? "Something went wrong" : "Nothing to show");
   return (
-    <button onClick={onClick} className="sans"
-      style={{ width: "100%", background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 10, padding: 13, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+    <div className="sans" role={isError ? "alert" : "status"} aria-live={isError ? "assertive" : "polite"} style={{
+      padding: compact ? "22px 14px" : "48px 18px", textAlign: "center", color: "var(--muted)"
+    }}>
+      <div style={{fontSize:13,fontWeight:700,color:isError?"var(--danger)":"var(--primary-text)"}}>{resolvedTitle}</div>
+      {message && <div style={{fontSize:11,lineHeight:1.5,margin:"6px auto 0",maxWidth:320,color:"var(--soft)"}}>{message}</div>}
+      {action && <div style={{marginTop:12,display:"flex",justifyContent:"center"}}>{action}</div>}
+    </div>
+  );
+}
+
+export function LoadingState({ children = "Loading…", compact = false }) {
+  return <PageState kind="loading" title={children} compact={compact} />;
+}
+export function EmptyState({ children = "Nothing to show.", compact = false }) {
+  return <PageState kind="empty" title={children} compact={compact} />;
+}
+export function ErrorState({ children = "Could not load this view.", onRetry, compact = false }) {
+  return <PageState kind="error" title="Could not load" message={children} compact={compact} action={onRetry ? <button type="button" onClick={onRetry} style={compactBtn}>Try again</button> : null} />;
+}
+
+export function PrimaryButton({ onClick, children, disabled = false, type = "button" }) {
+  return (
+    <button type={type} onClick={onClick} disabled={disabled} className="sans"
+      style={{ width: "100%", background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 10, padding: 13, fontSize: 14, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? .65 : 1 }}>
       {children}
     </button>
   );

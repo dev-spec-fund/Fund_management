@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
-import { Center, MessageBanner, PageHeader, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
+import { LoadingState, EmptyState, MessageBanner, PageHeader, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
 import Pagination, { pageSlice } from "../components/Pagination";
 
@@ -199,8 +199,8 @@ export default function Meetings({admin}){
 
     <MessageBanner>{message}</MessageBanner>
 
-    {rows===null?<Center>Loading…</Center>:rows.length===0
-      ?<div className="sans" style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:18,color:"var(--soft)",fontSize:12}}>No meetings created yet.</div>
+    {rows===null?<LoadingState>Loading meetings…</LoadingState>:rows.length===0
+      ?<EmptyState>No meetings created yet.</EmptyState>
       :meetingPage.rows.map(m=>{
         const answered=Number(m.going||0)+Number(m.maybe||0)+Number(m.declined||0);
         const status=meetingLifecycle(m);
@@ -227,7 +227,7 @@ export default function Meetings({admin}){
       })}
     <Pagination page={meetingPage.page} total={(rows||[]).length} onChange={setPage}/>
 
-    {showCreate&&<Modal title="New meeting" onClose={()=>!busy&&setShowCreate(false)}>
+    {showCreate&&<Modal title="New meeting" closeDisabled={busy} onClose={()=>!busy&&setShowCreate(false)}>
       <Field label="Meeting title" value={form.title} onChange={v=>setForm({...form,title:v})}/>
       <Field label="Date" type="date" value={form.meeting_date} onChange={v=>setForm({...form,meeting_date:v})}/>
       <Field label="Time" type="time" value={form.meeting_time} onChange={v=>setForm({...form,meeting_time:v})}/>
@@ -241,8 +241,8 @@ export default function Meetings({admin}){
       <button disabled={busy} onClick={create} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:busy?.6:1}}>{busy?"Creating…":"Create meeting"}</button>
     </Modal>}
 
-    {selected&&<Modal title={details?.title||selected.title} onClose={()=>!busy&&setSelected(null)}>
-      {!details?<Center>Loading details…</Center>:editing?<>
+    {selected&&<Modal title={details?.title||selected.title} closeDisabled={busy} onClose={()=>!busy&&setSelected(null)}>
+      {!details?<LoadingState compact>Loading details…</LoadingState>:editing?<>
         <Field label="Meeting title" value={form.title} onChange={v=>setForm({...form,title:v})}/>
         <Field label="Date" type="date" value={form.meeting_date} onChange={v=>setForm({...form,meeting_date:v})}/>
         <Field label="Time" type="time" value={form.meeting_time} onChange={v=>setForm({...form,meeting_time:v})}/>

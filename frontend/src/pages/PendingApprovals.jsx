@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
-import { Center, SectionTitle, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
+import { LoadingState, ErrorState, SectionTitle, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
 import { fmt } from "../utils/format";
 
@@ -20,7 +20,8 @@ export default function PendingApprovals() {
   useEffect(() => { load(); }, []);
   useEffect(() => onDataChange(() => load()), []);
 
-  if (!data) return <Center>{error || "Loading approvals…"}</Center>;
+  if (!data && error) return <ErrorState onRetry={load}>{error}</ErrorState>;
+  if (!data) return <LoadingState>Loading approvals…</LoadingState>;
 
   const registrations = data.registrations || [];
   const contributions = data.contributions || [];

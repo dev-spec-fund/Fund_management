@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Plus, X, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
-import { Center, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
+import { LoadingState, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
 import { currentMonthValue, shiftMonthValue } from "../utils/date";
 import { fmt } from "../utils/format";
 
@@ -78,7 +78,7 @@ export default function Reports({ setTab }) {
   const monthLabel = new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" })
     .format(new Date(`${month}-01T00:00:00Z`));
 
-  if (!summary) return <Center>Loading reports…</Center>;
+  if (!summary) return <LoadingState>Loading reports…</LoadingState>;
 
   const maxVal = Math.max(1, ...trend.map((t) => Math.max(Number(t.income || 0), Number(t.expense || 0))));
   const members = summary.outstanding?.members || [];

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
-export function Modal({ title, onClose, action, children }) {
+export function Modal({ title, onClose, action, children, closeDisabled = false }) {
   const readViewport = () => ({
     height: Math.round(window.visualViewport?.height || window.innerHeight || 700),
     top: Math.round(window.visualViewport?.offsetTop || 0),
@@ -26,16 +26,19 @@ export function Modal({ title, onClose, action, children }) {
     vv?.addEventListener("resize", update);
     vv?.addEventListener("scroll", update);
     window.addEventListener("resize", update);
+    const onKeyDown = (event) => { if (event.key === "Escape" && !closeDisabled) onClose?.(); };
+    window.addEventListener("keydown", onKeyDown);
     return () => {
       vv?.removeEventListener("resize", update);
       vv?.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
+      window.removeEventListener("keydown", onKeyDown);
       if (appRoot) {
         appRoot.style.overflowY = previousOverflowY;
         appRoot.scrollTop = previousScrollTop;
       }
     };
-  }, []);
+  }, [closeDisabled, onClose]);
 
   const keepFocusedFieldVisible = (e) => {
     const el = e.target;
@@ -48,6 +51,7 @@ export function Modal({ title, onClose, action, children }) {
   const modal = (
     <div
       className="app-modal-overlay"
+      role="presentation"
       onFocusCapture={keepFocusedFieldVisible}
       style={{
         position: "fixed",
@@ -67,7 +71,7 @@ export function Modal({ title, onClose, action, children }) {
         paddingTop: "max(10px, env(safe-area-inset-top))"
       }}
     >
-      <div className="app-modal-sheet" style={{
+      <div className="app-modal-sheet" role="dialog" aria-modal="true" aria-label={title || "Dialog"} style={{
         background: "var(--bg)",
         borderRadius: "18px 18px 0 0",
         width: "100%",
@@ -92,7 +96,7 @@ export function Modal({ title, onClose, action, children }) {
           <div style={{ fontSize: 18, fontWeight: 600 }}>{title}</div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {action}
-            <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", padding: 8 }}><X size={20} /></button>
+            <button type="button" onClick={onClose} disabled={closeDisabled} aria-label="Close" style={{ background: "none", border: "none", cursor: closeDisabled ? "not-allowed" : "pointer", opacity: closeDisabled ? .45 : 1, padding: 8 }}><X size={20} /></button>
           </div>
         </div>
         <div className="app-modal-body" style={{

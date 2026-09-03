@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { X, Eye } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
-import { Center, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
+import { LoadingState, ErrorState, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, formatLocalDateTime, shiftMonthValue, todayValue } from "../utils/date";
 import { fmt } from "../utils/format";
 import Pagination, { pageSlice } from "../components/Pagination";
@@ -24,8 +24,8 @@ export function MyHistory({ member }) {
     if (!member?.id) return;
     api.members.statement(member.id).then(setStatement).catch(() => {});
   }), [member?.id]);
-  if (error) return <div className="sans" style={{background:"var(--danger-bg)",border:"1px solid var(--danger-border)",borderRadius:12,padding:14,color:"var(--danger)"}}>{error}</div>;
-  if (!statement) return <Center>Loading your statement…</Center>;
+  if (error) return <ErrorState>{error}</ErrorState>;
+  if (!statement) return <LoadingState>Loading your statement…</LoadingState>;
   const rows=statement.contributions||[];
   const approved=rows.filter(r=>String(r.status).toLowerCase()==="approved");
   const total=approved.reduce((sum,r)=>sum+Number(r.amount||0),0);
@@ -119,7 +119,7 @@ export function FundView() {
       <button onClick={loadSummary} style={compactBtn}>Try again</button>
     </div>
   );
-  if (!summary) return <Center>Loading…</Center>;
+  if (!summary) return <LoadingState>Loading fund information…</LoadingState>;
 
   const categories = summary.byCategory || [];
   const visibleCategories = showAllCategories ? categories : categories.filter(c => Number(c.spent || 0) > 0);
@@ -205,7 +205,7 @@ export function FundView() {
       })}
       {recent.length === 0 && <div className="sans" style={{fontSize:12,color:"var(--soft)"}}>No fund activity yet.</div>}
 
-      {expenseDetail && <Modal title={expenseDetail.category?.name || "Expense details"} onClose={()=>!expenseLoading&&setExpenseDetail(null)}>
+      {expenseDetail && <Modal title={expenseDetail.category?.name || "Expense details"} closeDisabled={expenseLoading} onClose={()=>!expenseLoading&&setExpenseDetail(null)}>
         <div className="sans" style={{background:"var(--bg)",borderRadius:11,padding:12,marginBottom:12}}>
           <div style={{fontSize:10,color:"var(--soft)"}}>{monthLabel.toUpperCase()}</div>
           <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"end",marginTop:4}}>
@@ -214,7 +214,7 @@ export function FundView() {
           </div>
         </div>
 
-        {expenseLoading && <Center>Loading expenses…</Center>}
+        {expenseLoading && <LoadingState compact>Loading expenses…</LoadingState>}
         {expenseError && <div className="sans" style={{background:"var(--danger-bg-4)",border:"1px solid var(--danger-border-3)",borderRadius:10,padding:11,color:"var(--danger-strong)",fontSize:11}}>{expenseError}</div>}
 
         {!expenseLoading && !expenseError && (expenseDetail.expenses || []).map((e)=><div key={e.id}
@@ -378,7 +378,7 @@ export function Activity({ isAdmin, canFinance = false }) {
       await loadActivity();
     } catch(e) { window.alert(e.message || "Could not reverse transaction"); }
   };
-  if (rows === null) return <Center>Loading…</Center>;
+  if (rows === null) return <LoadingState>Loading activity…</LoadingState>;
 
   const normalizeKind = (value) => {
     const kind = String(value || "").trim().toLowerCase();
@@ -464,7 +464,7 @@ export function Activity({ isAdmin, canFinance = false }) {
         <Pagination page={activityPage.page} total={filtered.length} onChange={setPage} />
       </div>
 
-      {editingExpense && <Modal title="Edit expense" onClose={() => !expenseBusy && setEditingExpense(null)}>
+      {editingExpense && <Modal title="Edit expense" closeDisabled={expenseBusy} onClose={() => !expenseBusy && setEditingExpense(null)}>
         <div className="sans" style={{fontSize:11,color:"var(--muted)",background:"var(--success-bg)",padding:"9px 10px",borderRadius:9,marginBottom:12,lineHeight:1.45}}>
           {editingExpense.txn_id || `Expense #${editingExpense.id}`} · Changes are saved to the audit log. Use Void instead of permanently deleting a financial record.
         </div>
@@ -509,7 +509,7 @@ export function MemberMeetings() {
     finally { setBusyId(null); }
   };
   if (error && rows === null) return <div className="sans" style={{color:"var(--danger)",background:"var(--danger-bg)",border:"1px solid var(--danger-border)",padding:12,borderRadius:10}}>{error}</div>;
-  if (rows === null) return <Center>Loading meetings…</Center>;
+  if (rows === null) return <LoadingState>Loading meetings…</LoadingState>;
   return <>
     <div className="sans" style={{fontSize:15,fontWeight:700,color:"var(--primary-text)",marginBottom:3}}>Meetings</div>
     <div className="sans" style={{fontSize:11,color:"var(--soft)",marginBottom:13}}>Invitations, RSVP, minutes and decisions</div>
@@ -553,7 +553,7 @@ export function MyActions() {
     finally { setBusyId(null); }
   };
   if(error && rows===null) return <div className="sans" style={{color:"var(--danger)",background:"var(--danger-bg)",border:"1px solid var(--danger-border)",padding:12,borderRadius:10}}>{error}</div>;
-  if(rows===null) return <Center>Loading action items…</Center>;
+  if(rows===null) return <LoadingState>Loading action items…</LoadingState>;
   const open=rows.filter(x=>x.status==="open"), completed=rows.filter(x=>x.status!=="open");
   const render=(a)=><div key={a.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:8}}>
     <div style={{display:"flex",justifyContent:"space-between",gap:10}}>
@@ -582,7 +582,7 @@ export function MyProfile({ member }) {
   useEffect(()=>{load();},[]);
   useEffect(()=>onDataChange(()=>load({silent:true})),[]);
   if(error && !dashboard) return <div className="sans" style={{color:"var(--danger)",background:"var(--danger-bg)",border:"1px solid var(--danger-border)",padding:12,borderRadius:10}}>{error}</div>;
-  if(!dashboard) return <Center>Loading profile…</Center>;
+  if(!dashboard) return <LoadingState>Loading profile…</LoadingState>;
   const m=dashboard.member || member || {};
   const c=dashboard.contribution || {};
   return <>
