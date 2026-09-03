@@ -246,10 +246,10 @@ export function Activity({ isAdmin, canFinance = false }) {
         </label>
         <Field label="Expense month" type="month" value={editingExpense.transaction_month || ""} onChange={(v)=>setEditingExpense({...editingExpense,transaction_month:v})}/>
         {expenseError && <div className="sans" style={{fontSize:11,color:"var(--danger)",background:"var(--danger-bg)",padding:9,borderRadius:8,marginBottom:10}}>{expenseError}</div>}
-        <button disabled={expenseBusy} onClick={saveExpense} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:expenseBusy?.6:1}}>
+        <button type="button" disabled={expenseBusy} onClick={saveExpense} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:expenseBusy?.6:1}}>
           {expenseBusy ? "Saving…" : "Save changes"}
         </button>
-        <button disabled={expenseBusy} onClick={voidExpense} style={{...rejectBtn,width:"100%",padding:"10px 12px",marginTop:8,opacity:expenseBusy?.6:1}}>
+        <button type="button" disabled={expenseBusy} onClick={voidExpense} style={{...rejectBtn,width:"100%",padding:"10px 12px",marginTop:8,opacity:expenseBusy?.6:1}}>
           Void expense
         </button>
       </Modal>}

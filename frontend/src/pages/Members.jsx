@@ -91,19 +91,19 @@ export default function Members({ isAdmin, admin }) {
           <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "var(--primary-text)" }}>Members</div>
           <div className="sans" style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{activeMembers.length} active members</div>
         </div>
-        <button onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={{ display: "flex", alignItems: "center", gap: 5, background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 9, padding: "8px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+        <button type="button" onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={{ display: "flex", alignItems: "center", gap: 5, background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 9, padding: "8px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
           <Plus size={15} /> Add
         </button>
       </div>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: 14, marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <button onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
+          <button type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
           <label className="sans" style={{ position: "relative", fontSize: 14, fontWeight: 700, color: "var(--primary-text)", cursor: "pointer" }}>
             {monthLabel}
             <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", cursor: "pointer" }} />
           </label>
-          <button onClick={() => shiftMonth(1)} aria-label="Next month" style={monthNavBtn()}><ChevronRight size={18} /></button>
+          <button type="button" onClick={() => shiftMonth(1)} aria-label="Next month" style={monthNavBtn()}><ChevronRight size={18} /></button>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <div className="sans" style={{ fontSize: 18, fontWeight: 750, color: "var(--primary-text)" }}>MVR {fmt(collected)} <span style={{ fontSize: 12, fontWeight: 500, color: "var(--soft)" }}>/ {fmt(expected)}</span></div>
@@ -119,7 +119,7 @@ export default function Members({ isAdmin, admin }) {
       </div>
 
       {financeAdmin && (counts.partial + counts.unpaid) > 0 && (
-        <button onClick={sendOutstandingReminders} disabled={reminderBusy}
+        <button type="button" onClick={sendOutstandingReminders} disabled={reminderBusy}
           className="sans"
           style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, background:"var(--success-bg)", color:"var(--success-strong)", border:"1px solid var(--success-border)", borderRadius:11, padding:"10px 12px", fontSize:12, fontWeight:700, cursor:reminderBusy?"default":"pointer", opacity:reminderBusy?.7:1, marginBottom:8 }}>
           <Bell size={14} /> {reminderBusy ? "Sending reminders…" : `Remind ${counts.partial + counts.unpaid} outstanding ${counts.partial + counts.unpaid === 1 ? "member" : "members"}`}
@@ -129,7 +129,7 @@ export default function Members({ isAdmin, admin }) {
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 3, marginBottom: 10 }}>
         {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt']].map(([key,label]) => (
-          <button key={key} onClick={() => setFilter(key)} className="sans" style={{ flexShrink: 0, border: filter === key ? "1px solid var(--primary)" : "1px solid var(--border-strong-2)", background: filter === key ? "var(--primary)" : "var(--card)", color: filter === key ? "var(--on-primary)" : "var(--muted)", borderRadius: 999, padding: "6px 10px", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>{label}</button>
+          <button type="button" key={key} onClick={() => setFilter(key)} className="sans" style={{ flexShrink: 0, border: filter === key ? "1px solid var(--primary)" : "1px solid var(--border-strong-2)", background: filter === key ? "var(--primary)" : "var(--card)", color: filter === key ? "var(--on-primary)" : "var(--muted)", borderRadius: 999, padding: "6px 10px", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>{label}</button>
         ))}
       </div>
 
@@ -306,7 +306,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   };
 
   return (
-    <Modal onClose={onClose} title={member.name} action={<button onClick={() => setEditing(true)} style={{ background:"none", border:"none", cursor:"pointer" }}><Pencil size={17} color="var(--soft)" /></button>}>
+    <Modal onClose={onClose} title={member.name} action={<button type="button" onClick={() => setEditing(true)} style={{ background:"none", border:"none", cursor:"pointer" }}><Pencil size={17} color="var(--soft)" /></button>}>
       {editing ? (
         <>
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -353,7 +353,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
 
           {rejected.length>0 && (
             <>
-              <button onClick={()=>setShowRejected(!showRejected)} className="sans"
+              <button type="button" onClick={()=>setShowRejected(!showRejected)} className="sans"
                 style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",border:0,background:"transparent",padding:"10px 2px",color:"var(--soft)",fontSize:10,fontWeight:700,cursor:"pointer"}}>
                 <span>REJECTED / VOIDED · {rejected.length}</span><span>{showRejected?"▲":"▼"}</span>
               </button>
@@ -363,11 +363,11 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
 
           <div className="sans" style={{fontSize:10,color:"var(--soft)",fontWeight:700,marginTop:12,marginBottom:6}}>EXPORT STATEMENT</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <button className="sans" onClick={async () => { const { exportStatementPdf } = await import("../utils/exports"); return exportStatementPdf(member); }} style={smallBtn()}>PDF</button>
-            <button className="sans" onClick={async () => { const { exportStatementCsv } = await import("../utils/exports"); return exportStatementCsv(member); }} style={smallBtn()}>CSV</button>
+            <button type="button" className="sans" onClick={async () => { const { exportStatementPdf } = await import("../utils/exports"); return exportStatementPdf(member); }} style={smallBtn()}>PDF</button>
+            <button type="button" className="sans" onClick={async () => { const { exportStatementCsv } = await import("../utils/exports"); return exportStatementCsv(member); }} style={smallBtn()}>CSV</button>
           </div>
 
-          {member.active && canRemind && currentDue > 0 && <button className="sans" disabled={reminding} onClick={async()=>{
+          {member.active && canRemind && currentDue > 0 && <button type="button" className="sans" disabled={reminding} onClick={async()=>{
             if(!confirm(`Send a payment reminder to ${member.name} for ${monthLabel}?`)) return;
             try{
               setReminding(true); setReminderNote("");
@@ -386,7 +386,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
 
           {reminderNote && <div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5,textAlign:"center"}}>{reminderNote}</div>}
 
-          <button onClick={toggleActive} className="sans"
+          <button type="button" onClick={toggleActive} className="sans"
             style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"none",color:member.active?"var(--danger)":"var(--success)",border:"1px solid "+(member.active?"var(--danger-border)":"var(--success-bg-2)"),borderRadius:10,padding:12,fontSize:13,fontWeight:600,cursor:"pointer",marginTop:12}}>
             {member.active ? "Deactivate member" : "Reactivate member"}
           </button>

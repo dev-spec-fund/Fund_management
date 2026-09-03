@@ -57,7 +57,7 @@ export default function PendingApprovals() {
           ? <div style={{fontSize:11,color:"var(--soft)",marginTop:2}}>{count} item{count===1?"":"s"} waiting</div>
           : <div style={{fontSize:11,color:"var(--success)",marginTop:2}}>All caught up</div>}
       </div>
-      <button onClick={load} aria-label="Refresh approvals"
+      <button type="button" onClick={load} aria-label="Refresh approvals"
         style={{...compactBtn,width:34,height:34,padding:0,borderRadius:10,fontSize:17}}>↻</button>
     </div>
 
@@ -76,7 +76,7 @@ export default function PendingApprovals() {
       <>
         <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:3,marginBottom:16}}>
           {filters.map(([key,label,n]) => (
-            <button key={key} onClick={()=>setFilter(key)} className="sans"
+            <button type="button" key={key} onClick={()=>setFilter(key)} className="sans"
               style={{flex:"0 0 auto",border:`1px solid ${filter===key?"var(--primary)":"var(--border-2)"}`,background:filter===key?"var(--primary)":"var(--card)",color:filter===key?"var(--on-primary)":"var(--muted)",borderRadius:20,padding:"6px 11px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
               {label} {n}
             </button>
@@ -110,7 +110,7 @@ export default function PendingApprovals() {
                   </div>)}
                 </div>
               )}
-              <button onClick={() => setEditing({...c})}
+              <button type="button" onClick={() => setEditing({...c})}
                 style={{...approveBtn,width:"100%",marginTop:10,padding:"9px 10px"}}>
                 Review →
               </button>
@@ -130,11 +130,11 @@ export default function PendingApprovals() {
             {(r.possible_matches || []).map((m) => <div key={m.id} className="sans"
               style={{fontSize:11,background:"var(--warning-bg)",padding:8,borderRadius:8,marginTop:8}}>
               Possible existing member: <b>{m.member_code}</b> — {m.name}{m.phone ? ` · ${m.phone}` : ""}
-              <button onClick={() => act(() => api.admin.approveRegistration(r.id, m.id))} style={{...compactBtn,marginLeft:7}}>Link & update phone</button>
+              <button type="button" onClick={() => act(() => api.admin.approveRegistration(r.id, m.id))} style={{...compactBtn,marginLeft:7}}>Link & update phone</button>
             </div>)}
             <div style={{display:"flex",gap:7,marginTop:10}}>
-              <button onClick={() => act(() => api.admin.approveRegistration(r.id))} style={{...approveBtn,flex:1}}>Create & approve</button>
-              <button onClick={() => act(() => api.admin.rejectRegistration(r.id, "Rejected by admin"))} style={rejectBtn}>Reject</button>
+              <button type="button" onClick={() => act(() => api.admin.approveRegistration(r.id))} style={{...approveBtn,flex:1}}>Create & approve</button>
+              <button type="button" onClick={() => act(() => api.admin.rejectRegistration(r.id, "Rejected by admin"))} style={rejectBtn}>Reject</button>
             </div>
           </div>)}
         </>}
@@ -155,17 +155,17 @@ export default function PendingApprovals() {
         {editing.allocation_preview.map((a,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",marginTop:5}}><span>{a.month}</span><span>MVR {fmt(a.amount)} · {a.status_after==="paid"?"Paid":"Partial"}</span></div>)}
       </div>}
       <div style={{display:"flex",gap:8}}>
-        <button style={{...compactBtn,flex:1}} onClick={() => act(async()=>{
+        <button type="button" style={{...compactBtn,flex:1}} onClick={() => act(async()=>{
           await api.admin.correctContribution(editing.id,{amount:editing.amount,ref_number:editing.ref_number||null,bank_date:editing.bank_date||null,month:editing.month});
           setEditing(null);
         })}>Save correction</button>
-        <button style={{...approveBtn,flex:1}} onClick={() => act(async()=>{
+        <button type="button" style={{...approveBtn,flex:1}} onClick={() => act(async()=>{
           await api.admin.correctContribution(editing.id,{amount:editing.amount,ref_number:editing.ref_number||null,bank_date:editing.bank_date||null,month:editing.month});
           await api.admin.approveContribution(editing.id);
           setEditing(null);
         })}>Approve</button>
       </div>
-      <button style={{...rejectBtn,width:"100%",marginTop:8}} onClick={() => act(async()=>{
+      <button type="button" style={{...rejectBtn,width:"100%",marginTop:8}} onClick={() => act(async()=>{
         await api.admin.rejectContribution(editing.id,"Rejected by admin");
         setEditing(null);
       })}>Reject contribution</button>

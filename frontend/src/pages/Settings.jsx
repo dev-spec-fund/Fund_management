@@ -216,11 +216,11 @@ export default function Settings({ admin }) {
       <div style={cardStyle}>
         {categories.map(cat=><div key={cat.id} className="sans" style={{display:"flex",alignItems:"center",gap:7,padding:"8px 0",borderBottom:"1px solid var(--divider)",opacity:Number(cat.active)===0?.55:1}}>
           <span style={{flex:1,fontSize:12,fontWeight:600}}>{cat.name}{Number(cat.active)===0?" · Inactive":""}</span>
-          {financeAdmin&&<><button style={compactBtn} onClick={async()=>{const name=prompt("Category name",cat.name);if(!name||name===cat.name)return;try{await api.expenses.updateCategory(cat.id,{name});load()}catch(e){setMessage(e.message)}}}>Edit</button>
-          <button style={compactBtn} onClick={async()=>{try{await api.expenses.updateCategory(cat.id,{active:Number(cat.active)===0});load()}catch(e){setMessage(e.message)}}}>{Number(cat.active)===0?"Activate":"Deactivate"}</button>
-          <button style={{...compactBtn,color:"var(--danger)"}} onClick={async()=>{if(!confirm(`Delete ${cat.name}? If it has historical expenses it will be deactivated instead.`))return;try{await api.expenses.removeCategory(cat.id);load()}catch(e){setMessage(e.message)}}}>Delete</button></>}
+          {financeAdmin&&<><button type="button" style={compactBtn} onClick={async()=>{const name=prompt("Category name",cat.name);if(!name||name===cat.name)return;try{await api.expenses.updateCategory(cat.id,{name});load()}catch(e){setMessage(e.message)}}}>Edit</button>
+          <button type="button" style={compactBtn} onClick={async()=>{try{await api.expenses.updateCategory(cat.id,{active:Number(cat.active)===0});load()}catch(e){setMessage(e.message)}}}>{Number(cat.active)===0?"Activate":"Deactivate"}</button>
+          <button type="button" style={{...compactBtn,color:"var(--danger)"}} onClick={async()=>{if(!confirm(`Delete ${cat.name}? If it has historical expenses it will be deactivated instead.`))return;try{await api.expenses.removeCategory(cat.id);load()}catch(e){setMessage(e.message)}}}>Delete</button></>}
         </div>)}
-        {financeAdmin&&<button style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=prompt("New expense category name");if(!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}>+ Add category</button>}
+        {financeAdmin&&<button type="button" style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=prompt("New expense category name");if(!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}>+ Add category</button>}
       </div>
 
       <SectionTitle>PAYMENT REMINDERS</SectionTitle>
@@ -230,7 +230,7 @@ export default function Settings({ admin }) {
             <div style={{fontSize:13,fontWeight:700,color:"var(--primary-text)"}}>Automatic reminders</div>
             <div style={{fontSize:10,color:"var(--soft)",marginTop:3}}>Telegram reminder to unpaid and partially paid members.</div>
           </div>
-          <button disabled={!financeAdmin} onClick={()=>financeAdmin&&saveSetting("reminder_day",settings.reminder_day==="off"?"5":"off")}
+          <button type="button" disabled={!financeAdmin} onClick={()=>financeAdmin&&saveSetting("reminder_day",settings.reminder_day==="off"?"5":"off")}
             aria-label="Toggle automatic reminders"
             style={{width:42,height:24,border:0,borderRadius:999,padding:3,background:settings.reminder_day==="off"?"var(--toggle-off)":"var(--success)",cursor:"pointer"}}>
             <span style={{display:"block",width:18,height:18,borderRadius:999,background:"var(--card)",transform:settings.reminder_day==="off"?"translateX(0)":"translateX(18px)",transition:"transform .15s"}}/>
@@ -248,7 +248,7 @@ export default function Settings({ admin }) {
 
         {settings.reminder_day==="off" && <div className="sans" style={{fontSize:11,color:"var(--soft)",background:"var(--bg)",borderRadius:9,padding:10}}>Automatic reminders are off. Manual reminders are still available.</div>}
 
-        {financeAdmin && <button onClick={async()=>{
+        {financeAdmin && <button type="button" onClick={async()=>{
           if(!confirm("Send payment reminders now to all members with an outstanding balance for the current month?")) return;
           try{
             setMessage("Sending reminders…");
@@ -277,8 +277,8 @@ export default function Settings({ admin }) {
           <span style={{fontWeight:700,color:monthClosed?"var(--danger)":"var(--success)"}}>{monthClosed?"Closed":"Open"}</span>
         </div>
         {closeMonthValue<currentMonth && !monthClosed && <div className="sans" style={{fontSize:10,color:"var(--warning)",marginTop:9,lineHeight:1.4}}>⚠ {monthLabel(closeMonthValue)} is a past open month. You can review and close it now; the current month stays open.</div>}
-        {superAdmin && !monthClosed && <button disabled={closeBusy} onClick={reviewMonthClose} style={{...rejectBtn,marginTop:12}}>{closeBusy?"Checking…":"Review month closing"}</button>}
-        {superAdmin && monthClosed && <button onClick={()=>api.governance.reopenMonth(closeMonthValue).then(()=>{setCloseCheck(null);return load()}).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen {monthLabel(closeMonthValue)}</button>}
+        {superAdmin && !monthClosed && <button type="button" disabled={closeBusy} onClick={reviewMonthClose} style={{...rejectBtn,marginTop:12}}>{closeBusy?"Checking…":"Review month closing"}</button>}
+        {superAdmin && monthClosed && <button type="button" onClick={()=>api.governance.reopenMonth(closeMonthValue).then(()=>{setCloseCheck(null);return load()}).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen {monthLabel(closeMonthValue)}</button>}
       </div>
 
       {superAdmin && !monthClosed && closeCheck && <div style={{...cardStyle,marginTop:10,borderColor:(closeCheck.blockers||[]).length?"var(--danger-border)":"var(--success-border)"}}>
@@ -292,7 +292,7 @@ export default function Settings({ admin }) {
         </div>
         {(closeCheck.blockers||[]).map((x,i)=><div key={`b-${i}`} className="sans" style={{fontSize:11,color:"var(--danger)",marginTop:4}}>⛔ {x}</div>)}
         {(closeCheck.warnings||[]).map((x,i)=><div key={`w-${i}`} className="sans" style={{fontSize:11,color:"var(--warning)",marginTop:4}}>⚠ {x}</div>)}
-        {(closeCheck.blockers||[]).length===0 && <button disabled={closeBusy} onClick={closeMonth} style={{...rejectBtn,width:"100%",marginTop:12}}>Create snapshot & close month</button>}
+        {(closeCheck.blockers||[]).length===0 && <button type="button" disabled={closeBusy} onClick={closeMonth} style={{...rejectBtn,width:"100%",marginTop:12}}>Create snapshot & close month</button>}
       </div>}
 
       {closures.length>0 && <>
@@ -302,8 +302,8 @@ export default function Settings({ admin }) {
             <div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,fontSize:11,padding:"7px 0",borderBottom:"1px solid var(--divider)"}}>
               <span><b>{x.month}</b><div style={{color:"var(--soft-2)",marginTop:2}}>by {x.closed_by_name || "admin"}</div></span>
               <div style={{display:"flex",gap:6}}>
-                <button onClick={async()=>{try{const summary=await api.reports.summary(x.month);const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month:x.month,monthLabel:monthLabel(x.month),summary});}catch(e){setMessage(e.message||"Could not create closed-month PDF")}}} style={compactBtn}>PDF</button>
-                {superAdmin&&<button onClick={()=>api.governance.reopenMonth(x.month).then(load).catch(e=>setMessage(e.message))} style={compactBtn}>Reopen</button>}
+                <button type="button" onClick={async()=>{try{const summary=await api.reports.summary(x.month);const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month:x.month,monthLabel:monthLabel(x.month),summary});}catch(e){setMessage(e.message||"Could not create closed-month PDF")}}} style={compactBtn}>PDF</button>
+                {superAdmin&&<button type="button" onClick={()=>api.governance.reopenMonth(x.month).then(load).catch(e=>setMessage(e.message))} style={compactBtn}>Reopen</button>}
               </div>
             </div>
           )}
@@ -322,7 +322,7 @@ export default function Settings({ admin }) {
         </select>
         <div style={{display:"flex",gap:8}}>
           <select value={promoteRole} onChange={e=>setPromoteRole(e.target.value)} style={{flex:1,border:"1px solid var(--border-strong)",borderRadius:8,padding:9,background:"var(--card)"}}><option value="super_admin">Super Admin</option><option value="treasurer">Treasurer</option><option value="viewer">Viewer</option></select>
-          <button disabled={!promoteMemberId} style={approveBtn} onClick={async()=>{const m=membersForAdmin.find(x=>String(x.id)===String(promoteMemberId));if(!confirm(`Promote ${m?.name||"this member"} to ${promoteRole.replace("_"," ")}?`))return;try{await api.settings.promoteMember(Number(promoteMemberId),promoteRole);setPromoteMemberId("");setMessage("Member promoted");load()}catch(e){setMessage(e.message)}}}>Promote</button>
+          <button type="button" disabled={!promoteMemberId} style={approveBtn} onClick={async()=>{const m=membersForAdmin.find(x=>String(x.id)===String(promoteMemberId));if(!confirm(`Promote ${m?.name||"this member"} to ${promoteRole.replace("_"," ")}?`))return;try{await api.settings.promoteMember(Number(promoteMemberId),promoteRole);setPromoteMemberId("");setMessage("Member promoted");load()}catch(e){setMessage(e.message)}}}>Promote</button>
         </div>
       </div>}
       <div style={cardStyle}>
@@ -350,7 +350,7 @@ export default function Settings({ admin }) {
                 : <span style={{fontSize:11,fontWeight:600}}>{roleLabel}</span>}
             </div>
             {superAdmin && a.member_id && a.active!==0 && Number(a.id)!==Number(admin?.id) &&
-              <button
+              <button type="button"
                 onClick={async()=>{
                   if(!confirm(`Demote ${a.member_name || a.name} to normal member?\n\nThey will lose admin access immediately. Their member account, Telegram link, contribution history and payment obligations will remain unchanged.`)) return;
                   try{
@@ -389,21 +389,21 @@ export default function Settings({ admin }) {
             <b>{health.reminder_schedule ? "Daily" : "Not set"}</b>
           </div>
         </div> : <div className="sans" style={{fontSize:12,color:"var(--soft)"}}>Checking…</div>}
-        <button onClick={()=>api.admin.health().then(setHealth).catch(e=>setMessage(e.message))} style={{...compactBtn,marginTop:8}}>Refresh status</button>
+        <button type="button" onClick={()=>api.admin.health().then(setHealth).catch(e=>setMessage(e.message))} style={{...compactBtn,marginTop:8}}>Refresh status</button>
       </div>
 
       {superAdmin && <>
         <SectionTitle>DATABASE BACKUP</SectionTitle>
         <div style={cardStyle}>
           <div className="sans" style={{fontSize:11,color:"var(--muted)",marginBottom:10}}>Create a JSON backup before important schema or financial data changes.</div>
-          <button onClick={backup} style={approveBtn}>Create backup</button>
+          <button type="button" onClick={backup} style={approveBtn}>Create backup</button>
         </div>
 
         <SectionTitle>RECENT ERRORS</SectionTitle>
         <div style={cardStyle}>
           <div className="expense-filter-row sans" style={{marginBottom:8}}>{[["open","Open"],["resolved","Resolved"],["all","All"]].map(([v,l])=><button key={v} type="button" onClick={()=>{setErrorFilter(v);setErrorPage(1)}} className={errorFilter===v?"expense-filter-chip active":"expense-filter-chip"}>{l}{v==="all"?` ${errors.length}`:""}</button>)}</div>
           {errors.some(e=>e.status!=="resolved")&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}>
-            <button onClick={async()=>{
+            <button type="button" onClick={async()=>{
               if(!confirm("Mark all open errors as resolved? Error history will be retained.")) return;
               try{
                 await api.admin.resolveAllErrors();
@@ -420,7 +420,7 @@ export default function Settings({ admin }) {
             <div style={{color:"var(--muted)",marginTop:2}}>{e.message}</div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:3}}>
               <span style={{color:"var(--soft-4)"}}>{formatLocalDateTime(e.created_at)}</span>
-              {e.status!=="resolved"&&<button onClick={async()=>{try{await api.admin.resolveError(e.id);setErrors(await api.admin.errors())}catch(err){setMessage(err.message)}}} style={{...compactBtn,padding:"4px 7px",fontSize:9}}>Resolve</button>}
+              {e.status!=="resolved"&&<button type="button" onClick={async()=>{try{await api.admin.resolveError(e.id);setErrors(await api.admin.errors())}catch(err){setMessage(err.message)}}} style={{...compactBtn,padding:"4px 7px",fontSize:9}}>Resolve</button>}
             </div>
           </div>)}
           {!filteredErrors.length&&<EmptyLine>No errors in this view.</EmptyLine>}

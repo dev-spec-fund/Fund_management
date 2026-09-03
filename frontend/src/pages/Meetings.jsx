@@ -174,7 +174,7 @@ export default function Meetings({admin}){
   const group=(key,label,list,color)=>{
     const open=openGroups[key];
     return <div style={{borderTop:"1px solid var(--divider)",paddingTop:8,marginTop:8}}>
-      <button onClick={()=>setOpenGroups({...openGroups,[key]:!open})} className="sans"
+      <button type="button" onClick={()=>setOpenGroups({...openGroups,[key]:!open})} className="sans"
         style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",border:0,background:"transparent",padding:"2px 0 6px",cursor:"pointer"}}>
         <span style={{fontSize:10,fontWeight:700,color,letterSpacing:.3}}>{label} · {list?.length||0}</span>
         <span style={{fontSize:10,color:"var(--soft-2)"}}>{open?"▲":"▼"}</span>
@@ -194,7 +194,7 @@ export default function Meetings({admin}){
     <PageHeader
       title="Meetings"
       subtitle="Invitations, RSVP and meeting schedule"
-      action={<button onClick={()=>{setForm(emptyForm);setShowCreate(true)}} style={{...approveBtn,padding:"9px 12px"}}>+ New meeting</button>}
+      action={<button type="button" onClick={()=>{setForm(emptyForm);setShowCreate(true)}} style={{...approveBtn,padding:"9px 12px"}}>+ New meeting</button>}
     />
 
     <MessageBanner>{message}</MessageBanner>
@@ -220,8 +220,8 @@ export default function Meetings({admin}){
             <div><b>{answered}</b><div style={{fontSize:9,color:"var(--soft)"}}>Responded</div></div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:status.label==="Cancelled"?"1fr":"1fr 1fr",gap:7,marginTop:12}}>
-            <button onClick={()=>openDetails(m)} style={{...compactBtn,width:"100%",padding:"9px 10px"}}>View details</button>
-            {status.label!=="Cancelled"&&<button disabled={busy} onClick={()=>send(m)} style={{...approveBtn,width:"100%",padding:"9px 10px",opacity:busy?.6:1}}>{m.sent_at?"Resend":"Send invite"}</button>}
+            <button type="button" onClick={()=>openDetails(m)} style={{...compactBtn,width:"100%",padding:"9px 10px"}}>View details</button>
+            {status.label!=="Cancelled"&&<button type="button" disabled={busy} onClick={()=>send(m)} style={{...approveBtn,width:"100%",padding:"9px 10px",opacity:busy?.6:1}}>{m.sent_at?"Resend":"Send invite"}</button>}
           </div>
         </div>
       })}
@@ -238,7 +238,7 @@ export default function Meetings({admin}){
           style={{width:"100%",padding:"10px 11px",border:"1px solid var(--border-strong-2)",borderRadius:9,background:"var(--card)",fontSize:13,resize:"vertical"}}/>
       </label>
       <Field label="RSVP deadline (optional)" value={form.rsvp_deadline} onChange={v=>setForm({...form,rsvp_deadline:v})}/>
-      <button disabled={busy} onClick={create} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:busy?.6:1}}>{busy?"Creating…":"Create meeting"}</button>
+      <button type="button" disabled={busy} onClick={create} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:busy?.6:1}}>{busy?"Creating…":"Create meeting"}</button>
     </Modal>}
 
     {selected&&<Modal title={details?.title||selected.title} closeDisabled={busy} onClose={()=>!busy&&setSelected(null)}>
@@ -254,8 +254,8 @@ export default function Meetings({admin}){
         </label>
         <Field label="RSVP deadline (optional)" value={form.rsvp_deadline} onChange={v=>setForm({...form,rsvp_deadline:v})}/>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <button disabled={busy} onClick={()=>setEditing(false)} style={{...compactBtn,padding:10}}>Cancel edit</button>
-          <button disabled={busy} onClick={saveEdit} style={{...approveBtn,padding:10}}>{busy?"Saving…":"Save changes"}</button>
+          <button type="button" disabled={busy} onClick={()=>setEditing(false)} style={{...compactBtn,padding:10}}>Cancel edit</button>
+          <button type="button" disabled={busy} onClick={saveEdit} style={{...approveBtn,padding:10}}>{busy?"Saving…":"Save changes"}</button>
         </div>
       </>:<>
         {(()=>{
@@ -313,17 +313,17 @@ export default function Meetings({admin}){
             {group("pending","AWAITING RESPONSE",pending,"var(--muted)")}
 
             {details.status!=="cancelled"&&<>
-              {pending.length>0&&<button disabled={busy} onClick={remindPending} style={{...approveBtn,width:"100%",padding:10,marginTop:14}}>
+              {pending.length>0&&<button type="button" disabled={busy} onClick={remindPending} style={{...approveBtn,width:"100%",padding:10,marginTop:14}}>
                 Remind awaiting members
               </button>}
-              <button disabled={busy} onClick={beginEdit} style={{...compactBtn,width:"100%",padding:10,marginTop:8}}>Edit / reschedule</button>
-              {details.sent_at&&<button disabled={busy} onClick={async()=>{
+              <button type="button" disabled={busy} onClick={beginEdit} style={{...compactBtn,width:"100%",padding:10,marginTop:8}}>Edit / reschedule</button>
+              {details.sent_at&&<button type="button" disabled={busy} onClick={async()=>{
                 setBusy(true);setMessage("");
                 try{
                   setMessage("Edit the meeting first. Member notifications are offered automatically after a real change.");
                 }catch(e){setMessage(e.message)}finally{setBusy(false)}
               }} style={{...compactBtn,width:"100%",padding:10,marginTop:8}}>Changes notify after saving</button>}
-              <button disabled={busy} onClick={cancelMeeting} style={{...rejectBtn,width:"100%",padding:10,marginTop:8}}>Cancel meeting</button>
+              <button type="button" disabled={busy} onClick={cancelMeeting} style={{...rejectBtn,width:"100%",padding:10,marginTop:8}}>Cancel meeting</button>
             </>}
           </>;
         })()}

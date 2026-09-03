@@ -102,7 +102,7 @@ export default function App() {
         setMe(data);
         setMode(data?.admin ? "admin" : "member");
         if (import.meta.env.DEV && bootStartedAt.current && typeof performance !== "undefined") {
-          console.debug(`[Fund perf] app identity ready: ${Math.round(performance.now() - bootStartedAt.current)}ms`);
+          if (import.meta.env.DEV) console.debug(`[Fund perf] app identity ready: ${Math.round(performance.now() - bootStartedAt.current)}ms`);
         }
       })
       .catch((e) => setError(e.message))
@@ -215,8 +215,8 @@ export default function App() {
       {isAdmin && isMember && (
         <div style={{ flexShrink: 0, padding: "14px 20px 0", maxWidth: 480, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
           <div className="sans" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "var(--border)", borderRadius: 12, padding: 3 }}>
-            <button onClick={() => changeMode("admin")} style={modeButton(mode === "admin")}>Admin View</button>
-            <button onClick={() => changeMode("member")} style={modeButton(mode === "member")}>My Account</button>
+            <button type="button" onClick={() => changeMode("admin")} style={modeButton(mode === "admin")}>Admin View</button>
+            <button type="button" onClick={() => changeMode("member")} style={modeButton(mode === "member")}>My Account</button>
           </div>
         </div>
       )}
@@ -227,7 +227,7 @@ export default function App() {
       )}
       <div className="sans admin-tab-strip" style={{ flexShrink: 0, display: "flex", gap: 18, padding: "0 28px", marginTop: 18, overflowX: "auto", scrollPaddingInline: 28 }}>
         {tabs.map((t) => (
-          <button key={t} onPointerDown={() => warmTab(t)} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "var(--primary-text)" : "var(--muted-2)", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
+          <button type="button" key={t} onPointerDown={() => warmTab(t)} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "var(--primary-text)" : "var(--muted-2)", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
         ))}
       </div>
       <main ref={contentScrollRef} className="app-page-content" style={{ padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>

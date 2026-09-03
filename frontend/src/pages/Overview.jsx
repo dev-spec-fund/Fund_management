@@ -95,7 +95,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       </div>
 
       {isAdmin && outstandingTotal > 0 && (
-        <button onClick={() => setTab("members")}
+        <button type="button" onClick={() => setTab("members")}
           style={{ width: "100%", background: "var(--danger-bg-3)", border: "1px solid var(--danger-border)", borderRadius: 12, padding: "12px 14px", marginTop: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--danger)" }}>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>Outstanding</span>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>
@@ -105,7 +105,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       )}
 
       {isAdmin && pendingCount !== null && (
-        <button onClick={() => setTab("pending")}
+        <button type="button" onClick={() => setTab("pending")}
           style={{ width: "100%", background: pendingCount > 0 ? "var(--warning-bg-2)" : "var(--surface-success-soft)", border: `1px solid ${pendingCount > 0 ? "var(--warning-border-2)" : "var(--success-border-2)"}`, borderRadius: 12, padding: "12px 14px", marginTop: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", color: pendingCount > 0 ? "var(--warning)" : "var(--success)" }}>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>Pending approvals</span>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>
@@ -116,7 +116,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 8 }}>
         <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700, letterSpacing: .5 }}>RECENT ACTIVITY</span>
-        {activity.length > 0 && <button onClick={() => setTab("activity")} style={{ border: 0, background: "transparent", padding: 0, color: "var(--success)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>View all →</button>}
+        {activity.length > 0 && <button type="button" onClick={() => setTab("activity")} style={{ border: 0, background: "transparent", padding: 0, color: "var(--success)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>View all →</button>}
       </div>
       {activity.map((a) => <ActivityRow key={`${a.kind}-${a.id}`} a={a} isAdmin={isAdmin} />)}
       {activity.length === 0 && <div className="sans" style={{ fontSize: 12, color: "var(--soft)" }}>No activity yet.</div>}

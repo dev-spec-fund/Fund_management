@@ -62,7 +62,7 @@ export function FundView() {
     <div className="sans" style={{background:"var(--danger-bg-4)",border:"1px solid var(--danger-border-3)",borderRadius:12,padding:16,color:"var(--danger-strong)"}}>
       <div style={{fontWeight:700,marginBottom:5}}>Fund information unavailable</div>
       <div style={{fontSize:12,marginBottom:12}}>{summaryError}</div>
-      <button onClick={loadSummary} style={compactBtn}>Try again</button>
+      <button type="button" onClick={loadSummary} style={compactBtn}>Try again</button>
     </div>
   );
   if (!summary) return <LoadingState>Loading fund information…</LoadingState>;
@@ -98,9 +98,9 @@ export function FundView() {
 
       <div className="sans" style={{fontSize:13,color:"var(--muted)",marginBottom:8,fontWeight:700}}>SPENDING</div>
       <div style={{display:"grid",gridTemplateColumns:"42px 1fr 42px",alignItems:"center",gap:8,marginBottom:10}}>
-        <button onClick={()=>shiftMonth(-1)} style={{...compactBtn,padding:8}}>‹</button>
+        <button type="button" onClick={()=>shiftMonth(-1)} style={{...compactBtn,padding:8}}>‹</button>
         <div className="sans" style={{textAlign:"center",background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,padding:10,fontWeight:600}}>{monthLabel}</div>
-        <button onClick={()=>shiftMonth(1)} style={{...compactBtn,padding:8}}>›</button>
+        <button type="button" onClick={()=>shiftMonth(1)} style={{...compactBtn,padding:8}}>›</button>
       </div>
 
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"11px 14px",marginBottom:9,display:"flex",justifyContent:"space-between"}}>
@@ -111,7 +111,7 @@ export function FundView() {
       {visibleCategories.map((c, i) => {
         const spent = Number(c.spent || 0);
         const pct = monthSpent > 0 ? Math.round((spent / monthSpent) * 100) : 0;
-        return <button key={i} onClick={()=>openExpenseCategory(c)}
+        return <button type="button" key={i} onClick={()=>openExpenseCategory(c)}
           style={{width:"100%",textAlign:"left",background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"12px 14px",marginBottom:8,cursor:"pointer",color:"inherit"}}>
           <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
             <span className="sans" style={{fontSize:14,fontWeight:500}}>{c.category}</span>
@@ -131,7 +131,7 @@ export function FundView() {
         </div>}
 
       {categories.some(c => Number(c.spent || 0) === 0) &&
-        <button onClick={()=>setShowAllCategories(!showAllCategories)} className="sans"
+        <button type="button" onClick={()=>setShowAllCategories(!showAllCategories)} className="sans"
           style={{width:"100%",border:0,background:"transparent",color:"var(--muted)",fontSize:11,fontWeight:600,padding:"6px 0 16px",cursor:"pointer"}}>
           {showAllCategories ? "Hide zero-value categories" : "View all categories"}
         </button>}

@@ -194,7 +194,7 @@ export default function Reports({ setTab }) {
       </div>
 
       {(summary.outstanding?.total || 0) > 0 && (
-        <button onClick={() => setTab?.("members")} style={{ width: "100%", background: "var(--danger-bg-3)", border: "1px solid var(--danger-border)", borderRadius: 12, padding: "13px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", color: "var(--danger)" }}>
+        <button type="button" onClick={() => setTab?.("members")} style={{ width: "100%", background: "var(--danger-bg-3)", border: "1px solid var(--danger-border)", borderRadius: 12, padding: "13px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", color: "var(--danger)" }}>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>Outstanding dues</span>
           <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>MVR {fmt(summary.outstanding?.total)} · {members.length} members ›</span>
         </button>
@@ -253,8 +253,8 @@ export default function Reports({ setTab }) {
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:14}}>
         <div style={{display:"flex",gap:8}}>
           <input className="sans" type="number" min="2000" max="2100" value={annualYear} onChange={e=>setAnnualYear(e.target.value.slice(0,4))} style={{width:90,border:"1px solid var(--border-strong)",borderRadius:9,padding:"8px 10px",background:"var(--bg)"}}/>
-          <button disabled={annualBusy||annualYear.length!==4} onClick={loadAnnual} style={{...smallBtn("var(--primary-text)"),flex:1}}>{annualBusy?"Loading…":"Load annual report"}</button>
-          {annual&&<button onClick={async()=>{const {exportAnnualAgmPdf}=await import("../utils/exports");await exportAnnualAgmPdf(annual)}} style={{...smallBtn("var(--primary-text)"),flex:"0 0 auto"}}><Download size={13}/> AGM PDF</button>}
+          <button type="button" disabled={annualBusy||annualYear.length!==4} onClick={loadAnnual} style={{...smallBtn("var(--primary-text)"),flex:1}}>{annualBusy?"Loading…":"Load annual report"}</button>
+          {annual&&<button type="button" onClick={async()=>{const {exportAnnualAgmPdf}=await import("../utils/exports");await exportAnnualAgmPdf(annual)}} style={{...smallBtn("var(--primary-text)"),flex:"0 0 auto"}}><Download size={13}/> AGM PDF</button>}
         </div>
         {annual&&<>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
