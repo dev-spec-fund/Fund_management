@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { Eye } from "lucide-react";
 import { api, onDataChange } from "../../api";
+import { Modal } from "../../components/FormControls";
 import { LoadingState, compactBtn } from "../../components/Shared";
-import { currentMonthValue } from "../../utils/date";
+import { currentMonthValue, formatLocalDateTime } from "../../utils/date";
 import { fmt } from "../../utils/format";
-import Pagination, { pageSlice } from "../../components/Pagination";
 
 export function FundView() {
   const [month, setMonth] = useState(currentMonthValue());
@@ -14,7 +14,6 @@ export function FundView() {
   const [expenseDetail, setExpenseDetail] = useState(null);
   const [expenseLoading, setExpenseLoading] = useState(false);
   const [expenseError, setExpenseError] = useState("");
-  const [page, setPage] = useState(1);
 
   const loadSummary = () => {
     setSummary(null);
