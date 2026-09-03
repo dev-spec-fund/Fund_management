@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Bell, Eye, Paperclip, Pencil, Send } from "lucide-react";
+import { Bell, ChevronDown, Download, Eye, Paperclip, Pencil, Send } from "lucide-react";
 import { api } from "../../api";
 import { Modal, Field, useConfirmDialog } from "../../components/FormControls";
 import { PrimaryButton, smallBtn, approveBtn, rejectBtn } from "../../components/Shared";
@@ -32,6 +32,8 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
   const [slipPreview, setSlipPreview] = useState(null);
   const [slipBusy, setSlipBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
+  const [expandedContribution, setExpandedContribution] = useState(null);
+  const [showExport, setShowExport] = useState(false);
   const [form, setForm] = useState({ name: member.name, phone: member.phone, monthly_amount: member.monthly_amount });
 
   useEffect(() => { api.members.statement(member.id).then(setDetail).catch(() => {}); }, [member.id]);
@@ -125,48 +127,59 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
   const contributionCard = (h) => {
     const applied = allocationsFor(h.id);
     const refValid = looksLikeBankRef(h.ref_number);
+    const expanded = Number(expandedContribution) === Number(h.id);
+    const when = h.approved_at || h.submitted_at;
     return (
-      <div key={h.id} style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:"12px 13px", marginBottom:8 }}>
-        <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start"}}>
+      <div key={h.id} style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:11, marginBottom:7, overflow:"hidden" }}>
+        <button
+          type="button"
+          onClick={() => setExpandedContribution(expanded ? null : h.id)}
+          aria-expanded={expanded}
+          className="sans"
+          style={{width:"100%",display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",alignItems:"center",gap:9,border:0,background:"transparent",padding:"10px 11px",textAlign:"left",cursor:"pointer",color:"var(--text)"}}
+        >
           <div style={{minWidth:0}}>
-            <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--primary-text)"}}>{h.txn_id}</div>
-            <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:2,textTransform:"capitalize"}}>
-              {h.status}{h.approved_at ? ` · ${formatLocalDateTime(h.approved_at)}` : h.submitted_at ? ` · ${formatLocalDateTime(h.submitted_at)}` : ""}
+            <div style={{fontSize:11,fontWeight:750,color:"var(--primary-text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h.txn_id || "Contribution"}</div>
+            <div style={{fontSize:9,color:"var(--soft)",marginTop:2,textTransform:"capitalize"}}>
+              {h.status}{when ? ` · ${formatLocalDateTime(when)}` : ""}
             </div>
           </div>
-          <div className="sans" style={{fontSize:14,fontWeight:700,whiteSpace:"nowrap"}}>MVR {fmt(h.amount)}</div>
-        </div>
+          <div style={{fontSize:13,fontWeight:750,whiteSpace:"nowrap"}}>MVR {fmt(h.amount)}</div>
+          <ChevronDown size={15} color="var(--soft)" style={{transition:"transform .18s ease",transform:expanded?"rotate(180deg)":"none"}} />
+        </button>
 
-        <div className="sans" style={{fontSize:10,color:refValid?"var(--muted)":"var(--warning-3)",marginTop:8}}>
-          {refValid ? <>Bank ref: <b style={{color:"var(--primary-text)"}}>{h.ref_number}</b></> : <>⚠ Reference needs review: <b>{h.ref_number || "not detected"}</b></>}
-        </div>
+        {expanded && <div style={{borderTop:"1px solid var(--border)",padding:"9px 11px 11px",background:"var(--bg)"}}>
+          <div className="sans" style={{fontSize:10,color:refValid?"var(--muted)":"var(--warning-3)"}}>
+            {refValid ? <>Bank ref: <b style={{color:"var(--primary-text)"}}>{h.ref_number}</b></> : <>⚠ Reference needs review: <b>{h.ref_number || "not detected"}</b></>}
+          </div>
 
-        {Boolean(h.has_slip) && canRemind && <div className="sans" style={{display:"flex",alignItems:"center",gap:7,background:"var(--surface-cool)",border:"1px solid var(--border)",borderRadius:9,padding:"7px 8px",marginTop:8}}>
-          <Paperclip size={13} color="var(--muted)"/>
-          <div style={{flex:1,minWidth:0,fontSize:10,fontWeight:700,color:"var(--primary-text)"}}>Payment slip attached</div>
-          <button type="button" title="Preview payment slip" disabled={slipBusy} onClick={()=>openContributionSlip(h)} style={{...smallBtn("var(--primary-text)"),padding:6,opacity:slipBusy?.65:1}}><Eye size={13}/></button>
-          <button type="button" title="Send payment slip to my Telegram" onClick={()=>sendContributionSlip(h)} style={{...smallBtn("var(--primary-text)"),padding:6}}><Send size={13}/></button>
+          {Boolean(h.has_slip) && canRemind && <div className="sans" style={{display:"flex",alignItems:"center",gap:7,background:"var(--card)",border:"1px solid var(--border)",borderRadius:9,padding:"7px 8px",marginTop:8}}>
+            <Paperclip size={13} color="var(--muted)"/>
+            <div style={{flex:1,minWidth:0,fontSize:10,fontWeight:700,color:"var(--primary-text)"}}>Payment slip</div>
+            <button type="button" title="Preview payment slip" disabled={slipBusy} onClick={()=>openContributionSlip(h)} style={{...smallBtn("var(--primary-text)"),padding:6,opacity:slipBusy?.65:1}}><Eye size={13}/></button>
+            <button type="button" title="Send payment slip to my Telegram" onClick={()=>sendContributionSlip(h)} style={{...smallBtn("var(--primary-text)"),padding:6}}><Send size={13}/></button>
+          </div>}
+
+          {applied.length > 0 && (
+            <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:9,padding:"7px 9px",marginTop:8}}>
+              <div className="sans" style={{fontSize:9,fontWeight:700,color:"var(--muted)",letterSpacing:.5,marginBottom:3}}>APPLIED TO</div>
+              {applied.map((a,i)=> {
+                const monthly = Number(member.monthly_amount || 0);
+                const label = Number(a.amount) + .005 >= monthly ? "Paid" : "Allocated";
+                return <div key={i} className="sans" style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:10,padding:"3px 0"}}>
+                  <span>{a.month}</span>
+                  <span><b>MVR {fmt(a.amount)}</b> · {label}</span>
+                </div>
+              })}
+            </div>
+          )}
+
+          {applied.length === 0 && h.status === "approved" && (
+            <div className="sans" style={{fontSize:9,color:"var(--soft-2)",marginTop:7}}>
+              Legacy contribution · applied to {h.month}
+            </div>
+          )}
         </div>}
-
-        {applied.length > 0 && (
-          <div style={{background:"var(--bg)",borderRadius:9,padding:"8px 9px",marginTop:8}}>
-            <div className="sans" style={{fontSize:9,fontWeight:700,color:"var(--muted)",letterSpacing:.5,marginBottom:4}}>APPLIED TO</div>
-            {applied.map((a,i)=> {
-              const monthly = Number(member.monthly_amount || 0);
-              const label = Number(a.amount) + .005 >= monthly ? "Paid" : "Allocated";
-              return <div key={i} className="sans" style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:10,padding:"3px 0"}}>
-                <span>{a.month}</span>
-                <span><b>MVR {fmt(a.amount)}</b> · {label}</span>
-              </div>
-            })}
-          </div>
-        )}
-
-        {applied.length === 0 && h.status === "approved" && (
-          <div className="sans" style={{fontSize:9,color:"var(--soft-2)",marginTop:7}}>
-            Legacy contribution · applied to {h.month}
-          </div>
-        )}
       </div>
     );
   };
@@ -185,14 +198,17 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
         </>
       ) : (
         <>
-          <div className="sans" style={{fontSize:12,color:"var(--soft)"}}>
-            {member.member_code} · {member.phone || "Phone not added"} · MVR {fmt(member.monthly_amount)}/mo
-          </div>
-          <div className="sans" style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:member.telegram_id?"var(--success)":"var(--soft)",marginTop:5}}>
-            <span>{member.telegram_id ? "●" : "○"}</span>{member.telegram_id ? "Telegram linked" : "Telegram not linked"}
+          <div className="sans" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,paddingBottom:10,borderBottom:"1px solid var(--border)"}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:11,fontWeight:700,color:"var(--primary-text)"}}>{member.member_code}</div>
+              <div style={{fontSize:10,color:"var(--soft)",marginTop:2}}>{member.phone || "Phone not added"} · MVR {fmt(member.monthly_amount)}/mo</div>
+            </div>
+            <div style={{fontSize:9,fontWeight:700,color:member.telegram_id?"var(--success)":"var(--soft)",whiteSpace:"nowrap"}}>
+              {member.telegram_id ? "● Telegram linked" : "○ Not linked"}
+            </div>
           </div>
 
-          <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:12,padding:13,marginTop:14}}>
+          <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:11,padding:11,marginTop:11}}>
             <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
               <div>
                 <div style={{fontSize:10,color:"var(--soft)"}}>{monthLabel}</div>
@@ -205,18 +221,12 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
             </div>
           </div>
 
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:9,marginBottom:16}}>
-            <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:11,padding:11}}>
-              <div className="sans" style={{fontSize:9,color:"var(--soft)"}}>TOTAL CONTRIBUTED</div>
-              <div className="sans" style={{fontSize:14,fontWeight:700,marginTop:3}}>MVR {fmt(totalContributed)}</div>
-            </div>
-            <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:11,padding:11}}>
-              <div className="sans" style={{fontSize:9,color:"var(--soft)"}}>CURRENT OUTSTANDING</div>
-              <div className="sans" style={{fontSize:14,fontWeight:700,color:currentDue>0?"var(--danger)":"var(--success)",marginTop:3}}>MVR {fmt(currentDue)}</div>
-            </div>
+          <div className="sans" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,margin:"9px 1px 14px",fontSize:10,color:"var(--soft)"}}>
+            <span>Total contributed <b style={{color:"var(--primary-text)"}}>MVR {fmt(totalContributed)}</b></span>
+            <span>Outstanding <b style={{color:currentDue>0?"var(--danger)":"var(--success)"}}>MVR {fmt(currentDue)}</b></span>
           </div>
 
-          <div className="sans" style={{fontSize:11,color:"var(--muted)",marginBottom:8,fontWeight:700,letterSpacing:.5}}>CONTRIBUTION HISTORY</div>
+          <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:11,color:"var(--muted)",marginBottom:7,fontWeight:700,letterSpacing:.45}}><span>CONTRIBUTION HISTORY</span><span style={{fontSize:9,fontWeight:600,color:"var(--soft)"}}>Tap to expand</span></div>
           {approved.map(contributionCard)}
           {approved.length===0 && <div className="sans" style={{fontSize:12,color:"var(--soft)",padding:"8px 0"}}>No approved contributions yet.</div>}
 
@@ -230,11 +240,13 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
             </>
           )}
 
-          <div className="sans" style={{fontSize:10,color:"var(--soft)",fontWeight:700,marginTop:12,marginBottom:6}}>EXPORT STATEMENT</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <button type="button" className="sans" onClick={()=>setShowExport(!showExport)} style={{...smallBtn(),width:"100%",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            <Download size={14}/> Export statement
+          </button>
+          {showExport && <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:7}}>
             <button type="button" className="sans" onClick={async () => { const { exportStatementPdf } = await import("../../utils/exports"); return exportStatementPdf(member); }} style={smallBtn()}>PDF</button>
             <button type="button" className="sans" onClick={async () => { const { exportStatementCsv } = await import("../../utils/exports"); return exportStatementCsv(member); }} style={smallBtn()}>CSV</button>
-          </div>
+          </div>}
 
           {member.active && canRemind && currentDue > 0 && <button type="button" className="sans" disabled={reminding} onClick={async()=>{
             if(!await confirm({title:"Send payment reminder?",message:`Send a payment reminder to ${member.name} for ${monthLabel}?`,confirmLabel:"Send reminder",tone:"primary"})) return;
