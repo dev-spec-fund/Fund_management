@@ -113,7 +113,9 @@ test('duplicate live bank slips are blocked by canonical reference + amount + da
 });
 
 test('PDF/CSV export paths remain wired through member statement and Telegram document endpoint', () => {
-  const exportSource = fs.readFileSync(path.resolve(root,'../frontend/src/utils/exports.js'),'utf8');
+  const exportSource = [
+    'exports.js','statementExports.js','exportDelivery.js'
+  ].map((file) => fs.readFileSync(path.resolve(root,'../frontend/src/utils',file),'utf8')).join('\n');
   const apiSource = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
   const reportsSource = fs.readFileSync(path.join(root,'src/routes/reports.ts'),'utf8');
   assert.match(exportSource, /exportStatementCsv/);

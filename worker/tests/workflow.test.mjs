@@ -68,7 +68,7 @@ test("bulk Telegram sender has bounded concurrency", () => {
 
 
 test("Telegram registration captures the requesting user phone before approval", () => {
-  const bot=read("src/bot.ts");
+  const bot=[read("src/bot.ts"),read("src/botSupport.ts")].join("\n");
   const schema=read("migrations/0012_registration_phone_capture.sql");
   assert.match(bot,/request_contact:\s*true/);
   assert.match(bot,/message\.contact/);
