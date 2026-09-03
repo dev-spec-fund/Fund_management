@@ -456,33 +456,42 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
     );
   }
 
-  if ((summary.byProject || []).length) {
-    sectionTitle(ctx, "Project spending", "Approved expenses linked to community projects for the selected month.");
-    table(ctx,
-      [
-        { key: "project_code", label: "Project ID", width: 28, bold: true },
-        { key: "project_name", label: "Project", width: 82 },
-        { key: "budget", label: "Budget", width: 36, align: "right", format: v => v == null ? "Open cost" : money(v) },
-        { key: "spent", label: "Month spend", width: 36, align: "right", bold: true, color: C.red, format: v => money(v) },
-      ],
-      summary.byProject
-    );
+  const monthlyExpenseRows = summary.expenseDetails || [];
+  const monthlyProjectGroups = (summary.byProject || []).map(project => ({
+    ...project,
+    rows: monthlyExpenseRows.filter(row => String(row.project_id || "") === String(project.project_id || "") || (!row.project_id && row.project_code && row.project_code === project.project_code)),
+  }));
+  if (monthlyProjectGroups.length) {
+    sectionTitle(ctx, "Project spending & expenses", "Each project is shown together with its approved expenses for the selected month.");
+    monthlyProjectGroups.forEach(project => {
+      sectionTitle(ctx, `${project.project_code} · ${project.project_name}`, `${project.budget == null ? "Open-cost project" : `Budget ${money(project.budget)}`} · Month spend ${money(project.spent)}`, 15);
+      if (project.rows.length) table(ctx,
+        [
+          { key: "expense_date", label: "Date", width: 25, format: (v,r) => String(v || r.created_at || "").slice(0,10) },
+          { key: "txn_id", label: "Expense ID", width: 27, bold: true },
+          { key: "description", label: "Description", width: 70 },
+          { key: "category", label: "Category", width: 30, format: v => v || "Uncategorised" },
+          { key: "amount", label: "Amount", width: 30, align: "right", bold: true, color: C.red, format: v => money(v) },
+        ], project.rows, { fontSize: 7.0 }
+      );
+    });
   }
 
-  if ((summary.expenseDetails || []).length) {
-    sectionTitle(ctx, "Expense details", "Approved expenses included in the selected month's expense total.");
+  const monthlyGeneralExpenses = monthlyExpenseRows.filter(row => !row.project_id && !row.project_code);
+  if (monthlyGeneralExpenses.length) {
+    sectionTitle(ctx, "General expenses", "Approved expenses that are not linked to a community project.", 16);
     table(ctx,
       [
-        { key: "expense_date", label: "Date", width: 24, format: (v,r) => String(v || r.created_at || "").slice(0,10) },
-        { key: "txn_id", label: "Expense ID", width: 24, bold: true },
-        { key: "description", label: "Description", width: 60 },
-        { key: "category", label: "Category", width: 38, format: v => v || "Uncategorised" },
-        { key: "amount", label: "Amount", width: 36, align: "right", bold: true, color: C.red, format: v => money(v) },
-      ],
-      summary.expenseDetails,
-      { fontSize: 7.1 }
+        { key: "expense_date", label: "Date", width: 25, format: (v,r) => String(v || r.created_at || "").slice(0,10) },
+        { key: "txn_id", label: "Expense ID", width: 27, bold: true },
+        { key: "description", label: "Description", width: 70 },
+        { key: "category", label: "Category", width: 30, format: v => v || "Uncategorised" },
+        { key: "amount", label: "Amount", width: 30, align: "right", bold: true, color: C.red, format: v => money(v) },
+      ], monthlyGeneralExpenses, { fontSize: 7.0 }
     );
-    const expenseTotal = summary.expenseDetails.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  }
+  if (monthlyExpenseRows.length) {
+    const expenseTotal = monthlyExpenseRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     infoPanel(ctx, [["Detailed expense total", money(expenseTotal)]]);
   }
 
@@ -652,10 +661,11 @@ export async function exportAnnualAgmPdf(data) {
     );
   }
 
+  const annualExpenseRows = data?.expenses || [];
   if ((data?.projects || []).length) {
     const activeProjects = data.projects.filter((p) => Number(p.annual_spend || 0) > 0 || ["active","completed"].includes(String(p.status || "")));
     if (activeProjects.length) {
-      sectionTitle(ctx, "Community projects", "Project spending remains part of normal fund expenses; this section provides project-level tracking.", 16);
+      sectionTitle(ctx, "Community projects", "Each project is shown with its approved expenses for the reporting year. Project spending is already included in total fund expenses.", 16);
       table(ctx,
         [
           { key: "project_code", label: "Project ID", width: 22, bold: true },
@@ -665,6 +675,21 @@ export async function exportAnnualAgmPdf(data) {
           { key: "annual_spend", label: "Year spend", width: 34, align: "right", bold: true, color: C.red, format: v => money(v) },
         ], activeProjects, { fontSize: PDF_TYPE.table }
       );
+      activeProjects.forEach(project => {
+        const rows = annualExpenseRows.filter(row => String(row.project_id || "") === String(project.id || "") || (!row.project_id && row.project_code && row.project_code === project.project_code));
+        if (!rows.length) return;
+        sectionTitle(ctx, `${project.project_code} · ${project.name} — expenses`, `${project.budget == null ? "Open-cost project" : `Budget ${money(project.budget)}`} · Year spend ${money(project.annual_spend)}`, 16);
+        table(ctx,
+          [
+            { key: "transaction_month", label: "Month", width: 22, bold: true },
+            { key: "expense_date", label: "Date", width: 24, format: (v,r) => String(v || r.created_at || "").slice(0,10) },
+            { key: "txn_id", label: "Expense ID", width: 24, bold: true },
+            { key: "description", label: "Description", width: 52 },
+            { key: "category", label: "Category", width: 28, format: v => v || "Uncategorised" },
+            { key: "amount", label: "Amount", width: 32, align: "right", bold: true, color: C.red, format: v => money(v) },
+          ], rows, { fontSize: PDF_TYPE.table }
+        );
+      });
     }
   }
 
@@ -679,8 +704,9 @@ export async function exportAnnualAgmPdf(data) {
     );
   }
 
-  if ((data?.expenses || []).length) {
-    sectionTitle(ctx, "Detailed expenses", "Approved expense transactions included in the annual expense total.", 16);
+  const annualGeneralExpenses = annualExpenseRows.filter(row => !row.project_id && !row.project_code);
+  if (annualGeneralExpenses.length) {
+    sectionTitle(ctx, "General expenses", "Approved annual expenses that are not linked to a community project.", 16);
     table(ctx,
       [
         { key: "transaction_month", label: "Month", width: 22, bold: true },
@@ -689,11 +715,11 @@ export async function exportAnnualAgmPdf(data) {
         { key: "description", label: "Description", width: 50 },
         { key: "category", label: "Category", width: 29, format: v => v || "Uncategorised" },
         { key: "amount", label: "Amount", width: 33, align: "right", bold: true, color: C.red, format: v => money(v) },
-      ],
-      data.expenses,
-      { fontSize: PDF_TYPE.table }
+      ], annualGeneralExpenses, { fontSize: PDF_TYPE.table }
     );
-    const annualExpenseTotal = data.expenses.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  }
+  if (annualExpenseRows.length) {
+    const annualExpenseTotal = annualExpenseRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     infoPanel(ctx, [["Detailed annual expense total", money(annualExpenseTotal)]]);
   }
 

@@ -35,6 +35,7 @@ export default function Projects({ admin }) {
         <div className="sans" style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}><strong style={{fontSize:13}}>{p.name}</strong><span style={{fontSize:9,fontWeight:700,color:tone(p.status),textTransform:"uppercase"}}>{p.status}</span></div>
         <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:4}}>{p.project_code}{p.responsible_member_name?` · ${p.responsible_member_name}`:""}</div>
         {p.budget!=null?<><div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5}}>Budget MVR {fmt(p.budget)} · {Math.max(0,Number(p.budget_used_pct||0)).toFixed(0)}% used</div><Progress value={Number(p.budget_used_pct||0)}/></>:<div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5}}>Open-cost project</div>}
+        <div className="sans" style={{fontSize:9,color:"var(--primary-text)",marginTop:6,fontWeight:600}}>{Number(p.expense_count||0)} approved expense{Number(p.expense_count||0)===1?"":"s"} · Tap to view all</div>
       </div>
       <div className="sans" style={{textAlign:"right",whiteSpace:"nowrap"}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>Spent</div><strong style={{fontSize:13}}>MVR {fmt(p.spent)}</strong>{Number(p.pending_spend||0)>0&&<div style={{fontSize:9,color:"var(--warning)",marginTop:3}}>MVR {fmt(p.pending_spend)} pending</div>}{p.budget!=null&&<div style={{fontSize:9,color:Number(p.remaining_budget)<0?"var(--danger)":"var(--soft)",marginTop:3}}>{Number(p.remaining_budget)<0?`Over MVR ${fmt(Math.abs(p.remaining_budget))}`:`MVR ${fmt(p.remaining_budget)} left`}</div>}</div>
     </button>)}
@@ -83,7 +84,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
       <Detail label="Responsible" value={p.responsible_member_name||"Not assigned"}/><Detail label="Start" value={p.start_date||"—"}/><Detail label="Target end" value={p.target_end_date||"—"}/>{p.cancel_reason&&<Detail label="Cancellation reason" value={p.cancel_reason}/>} {p.description&&<div className="sans" style={{fontSize:11,color:"var(--muted)",lineHeight:1.5,marginTop:10}}>{p.description}</div>}
     </div>
 
-    <ExpenseSection title="ACTIVE PROJECT SPENDING" rows={approved} empty="No approved project expenses yet."/>
+    <ExpenseSection title={`PROJECT EXPENSES — APPROVED (${approved.length})`} rows={approved} empty="No approved project expenses yet."/>
     {pending.length>0&&<ExpenseSection title="PENDING EXPENSES" rows={pending} empty="" pending/>}
     {adjustments.length>0&&<ExpenseSection title="REVERSED / VOIDED ADJUSTMENTS" rows={adjustments} empty="" adjustment/>}
 

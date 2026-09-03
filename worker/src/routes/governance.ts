@@ -220,7 +220,7 @@ async function yearData(env:any, year:string){
     env.DB.prepare(`SELECT COALESCE(cat.name,'Uncategorised') category,COALESCE(SUM(e.amount),0) total FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id WHERE e.status='approved' AND e.transaction_month LIKE ? GROUP BY COALESCE(cat.name,'Uncategorised') ORDER BY total DESC`).bind(`${year}-%`).all<any>(),
     env.DB.prepare(`
       SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.approved_at,
-             COALESCE(cat.name,'Uncategorised') category,p.project_code,p.name project_name,COALESCE(a.name,'-') logged_by_name
+             COALESCE(cat.name,'Uncategorised') category,e.project_id,p.project_code,p.name project_name,COALESCE(a.name,'-') logged_by_name
       FROM expenses e
       LEFT JOIN expense_categories cat ON cat.id=e.category_id
       LEFT JOIN projects p ON p.id=e.project_id
@@ -230,7 +230,7 @@ async function yearData(env:any, year:string){
     `).bind(`${year}-%`).all<any>(),
     env.DB.prepare(`
       SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.voided_at,e.void_reason,
-             COALESCE(cat.name,'Uncategorised') category,p.project_code,p.name project_name
+             COALESCE(cat.name,'Uncategorised') category,e.project_id,p.project_code,p.name project_name
       FROM expenses e
       LEFT JOIN expense_categories cat ON cat.id=e.category_id
       LEFT JOIN projects p ON p.id=e.project_id

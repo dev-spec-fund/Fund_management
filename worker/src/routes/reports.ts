@@ -340,7 +340,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
     `).bind(month).all<any>(),
     c.env.DB.prepare(`
       SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.approved_at,
-             COALESCE(cat.name,'Uncategorised') category,p.project_code,p.name project_name,COALESCE(a.name,'-') logged_by_name
+             COALESCE(cat.name,'Uncategorised') category,e.project_id,p.project_code,p.name project_name,COALESCE(a.name,'-') logged_by_name
       FROM expenses e
       LEFT JOIN expense_categories cat ON cat.id=e.category_id
       LEFT JOIN projects p ON p.id=e.project_id
@@ -350,7 +350,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
     `).bind(month).all<any>(),
     c.env.DB.prepare(`
       SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.voided_at,e.void_reason,
-             COALESCE(cat.name,'Uncategorised') category,p.project_code,p.name project_name
+             COALESCE(cat.name,'Uncategorised') category,e.project_id,p.project_code,p.name project_name
       FROM expenses e
       LEFT JOIN expense_categories cat ON cat.id=e.category_id
       LEFT JOIN projects p ON p.id=e.project_id

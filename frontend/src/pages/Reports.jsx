@@ -88,6 +88,12 @@ export default function Reports({ setTab }) {
   const totalRequired = allocatedContributions + Number(summary.outstanding?.total || 0);
   const collectionPct = totalRequired > 0 ? Math.min(100, Math.round((allocatedContributions / totalRequired) * 100)) : 0;
   const activeCategories = (summary.byCategory || []).filter((c) => Number(c.spent || 0) > 0);
+  const expenseDetails = summary.expenseDetails || [];
+  const projectExpenseGroups = (summary.byProject || []).map((project) => ({
+    ...project,
+    expenses: expenseDetails.filter((e) => String(e.project_id || "") === String(project.project_id || "") || (!e.project_id && e.project_code && e.project_code === project.project_code)),
+  }));
+  const generalExpenses = expenseDetails.filter((e) => !e.project_id && !e.project_code);
 
   const exportCsv = async () => {
     const rows = [
@@ -105,6 +111,10 @@ export default function Reports({ setTab }) {
       [],
       ["Expense category", "Amount"],
       ...activeCategories.map((c) => [c.category, c.spent]),
+      [],
+      ["Project", "Expense ID", "Date", "Description", "Category", "Amount"],
+      ...projectExpenseGroups.flatMap((p) => p.expenses.map((e) => [p.project_name, e.txn_id, String(e.expense_date || e.created_at || "").slice(0,10), e.description, e.category || "Uncategorised", e.amount])),
+      ...(generalExpenses.length ? [["General expenses"], ...generalExpenses.map((e) => ["General", e.txn_id, String(e.expense_date || e.created_at || "").slice(0,10), e.description, e.category || "Uncategorised", e.amount])] : []),
     ];
     const csv = rows.map((r) => r.map((v) => {
       const safe = String(v ?? "").replace(/"/g, '""');
@@ -222,9 +232,20 @@ export default function Reports({ setTab }) {
       ))}
       {activeCategories.length === 0 && <div className="sans" style={{ fontSize: 12, color: "var(--soft)", marginBottom: 8 }}>No expenses for this month.</div>}
 
-      {(summary.byProject || []).length > 0 && <>
-        <div className="sans" style={{ fontSize: 12, color: "var(--muted)", margin: "20px 0 7px", fontWeight: 700 }}>PROJECT SPENDING</div>
-        {(summary.byProject || []).map((p) => <div key={p.project_id} style={{ display: "flex", justifyContent: "space-between", gap: 10, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "11px 14px", marginBottom: 7 }}><div className="sans" style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600}}>{p.project_name}</div><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{p.project_code}{p.budget == null ? " · Open-cost project" : ` · Budget MVR ${fmt(p.budget)}`}</div></div><strong className="sans" style={{fontSize:13,whiteSpace:"nowrap",color:"var(--danger)"}}>MVR {fmt(p.spent)}</strong></div>)}
+      {projectExpenseGroups.length > 0 && <>
+        <div className="sans" style={{ fontSize: 12, color: "var(--muted)", margin: "20px 0 7px", fontWeight: 700 }}>PROJECT SPENDING & EXPENSES</div>
+        {projectExpenseGroups.map((p) => <div key={p.project_id} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", marginBottom: 9 }}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start"}}><div className="sans" style={{minWidth:0}}><div style={{fontSize:13,fontWeight:700}}>{p.project_name}</div><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{p.project_code}{p.budget == null ? " · Open-cost project" : ` · Budget MVR ${fmt(p.budget)}`}</div></div><div className="sans" style={{textAlign:"right",whiteSpace:"nowrap"}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>Month spent</div><strong style={{fontSize:13,color:"var(--danger)"}}>MVR {fmt(p.spent)}</strong></div></div>
+          <div className="sans" style={{fontSize:9,fontWeight:700,color:"var(--muted)",marginTop:10,marginBottom:2}}>EXPENSES</div>
+          {p.expenses.length ? p.expenses.map((e) => <div key={e.id} style={{display:"flex",justifyContent:"space-between",gap:10,borderTop:"1px solid var(--divider)",padding:"7px 0"}}><div className="sans" style={{fontSize:10,minWidth:0}}><b>{e.description}</b><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{String(e.expense_date||e.created_at||"").slice(0,10)} · {e.txn_id} · {e.category||"Uncategorised"}</div></div><b className="sans" style={{fontSize:10,whiteSpace:"nowrap",color:"var(--danger)"}}>MVR {fmt(e.amount)}</b></div>) : <div className="sans" style={{fontSize:10,color:"var(--soft)",paddingTop:5}}>No approved expenses in this month.</div>}
+        </div>)}
+      </>}
+
+      {generalExpenses.length > 0 && <>
+        <div className="sans" style={{ fontSize: 12, color: "var(--muted)", margin: "20px 0 7px", fontWeight: 700 }}>GENERAL EXPENSES</div>
+        <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"4px 14px",marginBottom:10}}>
+          {generalExpenses.map((e) => <div key={e.id} style={{display:"flex",justifyContent:"space-between",gap:10,borderTop:"1px solid var(--divider)",padding:"8px 0"}}><div className="sans" style={{fontSize:10,minWidth:0}}><b>{e.description}</b><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{String(e.expense_date||e.created_at||"").slice(0,10)} · {e.txn_id} · {e.category||"Uncategorised"}</div></div><b className="sans" style={{fontSize:10,whiteSpace:"nowrap",color:"var(--danger)"}}>MVR {fmt(e.amount)}</b></div>)}
+        </div>
       </>}
 
       <div className="sans" style={{fontSize:12,color:"var(--muted)",margin:"20px 0 7px",fontWeight:700}}>ANNUAL / AGM & ANALYTICS</div>
@@ -239,6 +260,10 @@ export default function Reports({ setTab }) {
             {[['Contributions',annual.totals?.contributions,'var(--success)'],['Donations',annual.totals?.donations,'var(--success)'],['Expenses',annual.totals?.expenses,'var(--danger)'],['Closing balance',annual.totals?.closing_balance,'var(--text)']].map(([l,v,c])=><div key={l} style={{background:"var(--bg)",borderRadius:9,padding:10}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>{l}</div><b style={{fontSize:13,color:c}}>MVR {fmt(v)}</b></div>)}
           </div>
           <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid var(--divider)",display:"flex",justifyContent:"space-between",fontSize:12}}><span>Annual collection rate</span><b style={{color:"var(--success)"}}>{Number(annual.totals?.due||0)>0?`${Number(annual.totals?.collection_rate||0).toFixed(1)}%`:"N/A"}</b></div>
+          {(annual.projects||[]).some(p=>Number(p.annual_spend||0)>0)&&<div style={{marginTop:14}}>
+            <div className="sans" style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginBottom:7}}>COMMUNITY PROJECTS & EXPENSES</div>
+            {(annual.projects||[]).filter(p=>Number(p.annual_spend||0)>0).map(p=>{const rows=(annual.expenses||[]).filter(e=>String(e.project_id||"")===String(p.id||"")||(!e.project_id&&e.project_code===p.project_code));return <div key={p.id} style={{background:"var(--bg)",border:"1px solid var(--divider)",borderRadius:10,padding:"10px 11px",marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",gap:8}}><div className="sans"><b style={{fontSize:11}}>{p.project_code} · {p.name}</b><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{p.budget==null?"Open-cost project":`Budget MVR ${fmt(p.budget)}`}</div></div><b className="sans" style={{fontSize:11,color:"var(--danger)",whiteSpace:"nowrap"}}>MVR {fmt(p.annual_spend)}</b></div>{rows.map(e=><div key={e.id} style={{display:"flex",justifyContent:"space-between",gap:8,borderTop:"1px solid var(--divider)",paddingTop:6,marginTop:6}}><div className="sans" style={{fontSize:9,minWidth:0}}><b>{e.description}</b><div style={{color:"var(--soft)",marginTop:2}}>{String(e.expense_date||e.created_at||"").slice(0,10)} · {e.txn_id}</div></div><b className="sans" style={{fontSize:9,whiteSpace:"nowrap"}}>MVR {fmt(e.amount)}</b></div>)}</div>})}
+          </div>}
         </>}
         {analytics&&<>
           <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:16,marginBottom:7}}>12-MONTH COLLECTION PERFORMANCE</div>
