@@ -156,3 +156,34 @@ test('stability routes guard historical month reopen and repeat void actions', (
   assert.match(formSource, /randomUUID/);
   assert.match(formSource, /idempotency_key/);
 });
+
+
+test('frontend crashes are reported to the authenticated production error log endpoint', () => {
+  const indexSource = fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
+  const appSource = fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
+  const apiSource = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+
+  assert.match(indexSource, /app\.post\("\/api\/client-error"/);
+  assert.match(indexSource, /safeLogError\(c\.env,`client:\$\{source\}`/);
+  assert.match(appSource, /window\.addEventListener\("error"/);
+  assert.match(appSource, /window\.addEventListener\("unhandledrejection"/);
+  assert.match(appSource, /source: "page-boundary"/);
+  assert.match(apiSource, /async function reportClientError/);
+  assert.match(apiSource, /keepalive: true/);
+});
+
+test('critical financial workflow guards remain wired after stability hardening', () => {
+  const governanceSource = fs.readFileSync(path.join(root,'src/routes/governance.ts'),'utf8');
+  const pendingSource = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
+  const expensesSource = fs.readFileSync(path.join(root,'src/routes/expenses.ts'),'utf8');
+  const projectsSource = fs.readFileSync(path.join(root,'src/routes/projects.ts'),'utf8');
+
+  assert.match(governanceSource, /LATER_MONTH_ALREADY_CLOSED/);
+  assert.match(governanceSource, /financial_reversals WHERE entity_type=\? AND entity_id=\?/);
+  assert.match(pendingSource, /duplicateSlip/);
+  assert.match(pendingSource, /approveWithAllocations/);
+  assert.match(expensesSource, /idempotency_key/);
+  assert.match(expensesSource, /status='voided'/);
+  assert.match(projectsSource, /donation_received/);
+  assert.match(projectsSource, /status='approved'/);
+});

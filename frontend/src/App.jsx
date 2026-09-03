@@ -166,6 +166,43 @@ export default function App() {
   useEffect(() => {
     if (!me) return undefined;
 
+    const context = () => ({
+      route: typeof window !== "undefined" ? window.location.pathname : "",
+      page: tab,
+      mode,
+      occurred_at: new Date().toISOString(),
+    });
+
+    const onWindowError = (event) => {
+      api.reportClientError({
+        source: "window.error",
+        message: event?.error?.message || event?.message || "Unhandled window error",
+        stack: event?.error?.stack || "",
+        ...context(),
+      });
+    };
+
+    const onUnhandledRejection = (event) => {
+      const reason=event?.reason;
+      api.reportClientError({
+        source: "unhandledrejection",
+        message: reason?.message || String(reason || "Unhandled promise rejection"),
+        stack: reason?.stack || "",
+        ...context(),
+      });
+    };
+
+    window.addEventListener("error", onWindowError);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+    return () => {
+      window.removeEventListener("error", onWindowError);
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    };
+  }, [me, tab, mode]);
+
+  useEffect(() => {
+    if (!me) return undefined;
+
     // Performance Stage 1: preload JavaScript chunks only.
     // API data is fetched on actual navigation, where the shared GET cache and
     // in-flight de-duplication let the page reuse the request started on touch.
@@ -221,15 +258,10 @@ export default function App() {
   const openTab = (nextTab) => {
     warmTab(nextTab);
 
-    // Keep a very small warm-page window for smooth back-and-forth navigation.
-    // This avoids the old unlimited hidden-page listener buildup while allowing
-    // the three most recently visited screens to remain instantly available.
-    setMountedTabs((current) => {
-      const ordered = [...current].filter((page) => page !== nextTab);
-      ordered.push(nextTab);
-      while (ordered.length > 3) ordered.shift();
-      return new Set(ordered);
-    });
+    // Only keep the active page mounted. Hidden visited pages previously kept
+    // data-change listeners and large UI state alive, causing background reloads
+    // after financial mutations. Lazy modules and GET data remain cached.
+    setMountedTabs(new Set([nextTab]));
     setTab(nextTab);
   };
 
@@ -273,11 +305,7 @@ export default function App() {
           You are an admin but not yet linked to a member account. Send /start to the bot and choose “Register Myself as Member”.
         </div>
       )}
-      <nav
-        className="sans admin-tab-strip app-icon-nav"
-        aria-label={adminView ? "Admin navigation" : "My Account navigation"}
-        style={{ gridTemplateColumns: tabs.map((t) => t === tab ? "2.15fr" : "1fr").join(" ") }}
-      >
+      <nav className="sans admin-tab-strip app-icon-nav" aria-label={adminView ? "Admin navigation" : "My Account navigation"}>
         {tabs.map((t) => (
           <NavItem
             key={t}
@@ -297,7 +325,7 @@ export default function App() {
             style={{ display: tab === page ? "block" : "none" }}
             aria-hidden={tab !== page}
           >
-            <PageErrorBoundary page={page}>
+            <PageErrorBoundary page={page} mode={mode}>
               <Suspense fallback={tab === page ? <PageSkeleton /> : null}>
                 {renderPage(page)}
               </Suspense>
@@ -316,7 +344,18 @@ class PageErrorBoundary extends React.Component {
     this.state = { error: null };
   }
   static getDerivedStateFromError(error) { return { error }; }
-  componentDidCatch(error, info) { console.error(`Page ${this.props.page} crashed`, error, info); }
+  componentDidCatch(error, info) {
+    console.error(`Page ${this.props.page} crashed`, error, info);
+    api.reportClientError({
+      source: "page-boundary",
+      message: error?.message || "Page crashed",
+      stack: `${error?.stack || ""}\n${info?.componentStack || ""}`.slice(0,3500),
+      route: typeof window !== "undefined" ? window.location.pathname : "",
+      page: this.props.page,
+      mode: this.props.mode || "",
+      occurred_at: new Date().toISOString(),
+    });
+  }
   componentDidUpdate(prevProps) {
     if (prevProps.page !== this.props.page && this.state.error) this.setState({ error: null });
   }

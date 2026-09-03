@@ -236,6 +236,29 @@ async function upload(path, formData) {
   return data;
 }
 
+async function reportClientError(payload = {}) {
+  try {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 3500) : null;
+    try {
+      await fetch(apiUrl("/api/client-error"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Init-Data": initData(),
+        },
+        body: JSON.stringify(payload),
+        signal: controller?.signal,
+        keepalive: true,
+      });
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } catch {
+    // Diagnostics must never create another visible app error.
+  }
+}
+
 async function downloadBlob(path) {
   const res = await fetch(apiUrl(path), { headers: { "X-Telegram-Init-Data": initData() } });
   if (!res.ok) {
@@ -247,6 +270,7 @@ async function downloadBlob(path) {
 
 export const api = {
   me: () => request("/api/me"),
+  reportClientError,
   prefetchMemberData,
   prefetchAdminData,
   prefetchTabData,

@@ -64,6 +64,26 @@ app.route("/api/projects", projectsRoute);
 
 app.get("/api/branding", async (c) => c.json(await getBranding(c.env)));
 
+// Authenticated Mini App diagnostics. The client sends only a short safe message
+// and UI context; safeLogError sanitizes values again before persistence.
+app.post("/api/client-error", async (c) => {
+  const user=c.get("telegramUser");
+  const body=await c.req.json().catch(()=>({})) as any;
+  const source=String(body.source||"frontend").trim().slice(0,120) || "frontend";
+  const message=String(body.message||"Client error").trim().slice(0,1000) || "Client error";
+  const detail={
+    route:String(body.route||"").slice(0,160),
+    page:String(body.page||"").slice(0,80),
+    mode:String(body.mode||"").slice(0,30),
+    stack:String(body.stack||"").slice(0,3500),
+    user_agent:String(c.req.header("User-Agent")||"").slice(0,300),
+    telegram_user_id:String(user?.id||"").slice(0,40),
+    occurred_at:String(body.occurred_at||"").slice(0,40),
+  };
+  await safeLogError(c.env,`client:${source}`,new Error(message),detail);
+  return c.json({ok:true},202);
+});
+
 app.get("/api/me", async (c) => {
   const user = c.get("telegramUser");
   const member = await c.env.DB.prepare(
