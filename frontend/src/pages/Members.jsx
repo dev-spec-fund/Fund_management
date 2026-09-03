@@ -179,9 +179,6 @@ export default function Members({ isAdmin, admin }) {
   );
 }
 
-function monthNavBtn() {
-  return { display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, background: "var(--bg)", color: "var(--primary-text)", border: "1px solid var(--border)", borderRadius: 9, cursor: "pointer" };
-}
 
 function StatusBadge({ status }) {
   const styles = {
