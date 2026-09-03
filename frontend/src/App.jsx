@@ -3,6 +3,11 @@ import { api } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
 import { adminCan } from "./utils/permissions";
+import {
+  House, Clock3, Users, Activity as ActivityIcon, ReceiptText, FolderKanban,
+  ChartNoAxesCombined, CalendarDays, Settings as SettingsIcon, History,
+  WalletCards, ListChecks, UserRound
+} from "lucide-react";
 
 
 const THEME_VALUES = new Set(["light", "dark"]);
@@ -59,6 +64,41 @@ const loaderForTab = (tab, adminView = false) => {
   if (tab === "meetings") return adminView ? pageLoaders.meetings : pageLoaders.memberViews;
   return pageLoaders[tab] || null;
 };
+
+const NAV_ITEMS = {
+  overview: { label: "Overview", icon: House },
+  pending: { label: "Pending", icon: Clock3 },
+  members: { label: "Members", icon: Users },
+  activity: { label: "Activity", icon: ActivityIcon },
+  expenses: { label: "Expenses", icon: ReceiptText },
+  projects: { label: "Projects", icon: FolderKanban },
+  reports: { label: "Reports", icon: ChartNoAxesCombined },
+  meetings: { label: "Meetings", icon: CalendarDays },
+  settings: { label: "Settings", icon: SettingsIcon },
+  history: { label: "History", icon: History },
+  fund: { label: "Fund", icon: WalletCards },
+  actions: { label: "Actions", icon: ListChecks },
+  profile: { label: "Profile", icon: UserRound },
+};
+
+function NavItem({ name, active, onWarm, onOpen }) {
+  const meta = NAV_ITEMS[name] || { label: name, icon: House };
+  const Icon = meta.icon;
+  return (
+    <button
+      type="button"
+      className={`app-nav-item${active ? " active" : ""}`}
+      onPointerDown={onWarm}
+      onClick={onOpen}
+      aria-current={active ? "page" : undefined}
+      aria-label={meta.label}
+      title={meta.label}
+    >
+      <Icon size={16} strokeWidth={active ? 2.25 : 1.9} aria-hidden="true" />
+      <span className="app-nav-label">{meta.label}</span>
+    </button>
+  );
+}
 
 export default function App() {
   const [me, setMe] = useState(null);
@@ -229,11 +269,17 @@ export default function App() {
           You are an admin but not yet linked to a member account. Send /start to the bot and choose “Register Myself as Member”.
         </div>
       )}
-      <div className="sans admin-tab-strip">
+      <nav className="sans admin-tab-strip app-icon-nav" aria-label={adminView ? "Admin navigation" : "My Account navigation"}>
         {tabs.map((t) => (
-          <button type="button" key={t} onPointerDown={() => warmTab(t)} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "var(--primary-text)" : "var(--muted-2)", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
+          <NavItem
+            key={t}
+            name={t}
+            active={tab === t}
+            onWarm={() => warmTab(t)}
+            onOpen={() => openTab(t)}
+          />
         ))}
-      </div>
+      </nav>
       <main ref={contentScrollRef} className="app-page-content">
         {tabs.filter((page) => mountedTabs.has(page)).map((page) => (
           <div

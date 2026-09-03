@@ -1260,3 +1260,139 @@ button:not(:disabled):active {
     text-align: center !important;
   }
 }
+
+
+/* v74: compact all-icon navigation.
+   Every destination remains visible; only the active item expands to reveal its label. */
+.admin-tab-strip.app-icon-nav {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  width: calc(100% - 24px);
+  max-width: 456px;
+  margin: 10px auto 0;
+  padding: 4px 5px;
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 4px 14px -12px var(--shadow);
+  scrollbar-width: none;
+}
+
+.admin-tab-strip.app-icon-nav::before,
+.admin-tab-strip.app-icon-nav::after {
+  display: none;
+}
+
+.app-nav-item {
+  flex: 0 1 32px;
+  min-width: 28px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    flex-basis .16s ease,
+    min-width .16s ease,
+    padding .16s ease,
+    background-color .16s ease,
+    color .16s ease,
+    gap .16s ease;
+}
+
+.app-nav-item > svg {
+  flex: 0 0 16px;
+}
+
+.app-nav-label {
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+  transition: max-width .16s ease, opacity .12s ease;
+}
+
+.app-nav-item.active {
+  flex: 1 1 auto;
+  min-width: 72px;
+  max-width: 104px;
+  padding: 0 10px;
+  gap: 5px;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.app-nav-item.active .app-nav-label {
+  max-width: 72px;
+  opacity: 1;
+}
+
+.app-nav-item:not(.active):active {
+  background: var(--button-soft);
+  color: var(--primary-text);
+}
+
+.app-nav-item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+:root[data-theme="dark"] .admin-tab-strip.app-icon-nav {
+  background: var(--card);
+  border-color: var(--border-strong);
+}
+
+@media (max-width: 390px) {
+  .admin-tab-strip.app-icon-nav {
+    width: calc(100% - 16px);
+    gap: 0;
+    padding-left: 3px;
+    padding-right: 3px;
+  }
+  .app-nav-item {
+    min-width: 27px;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+  .app-nav-item.active {
+    min-width: 68px;
+    max-width: 94px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .app-nav-label {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 350px) {
+  .app-nav-item {
+    min-width: 25px;
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+  .app-nav-item.active {
+    min-width: 62px;
+    max-width: 86px;
+  }
+  .app-nav-item > svg {
+    flex-basis: 15px;
+    width: 15px;
+    height: 15px;
+  }
+}
