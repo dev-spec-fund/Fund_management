@@ -277,6 +277,32 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
       return null;
     });
   };
+
+  const openPdfDocument = async () => {
+    if (!docPreview?.url) return;
+    try {
+      const response = await fetch(docPreview.url);
+      const blob = await response.blob();
+      const filename = docPreview.name || "expense-document.pdf";
+      const file = new File([blob], filename.toLowerCase().endsWith(".pdf") ? filename : `${filename}.pdf`, { type: "application/pdf" });
+
+      // On iPhone/Telegram Mini App, the native share sheet gives a much better
+      // route to Quick Look / Files / another PDF viewer than an embedded iframe.
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: filename });
+        return;
+      }
+
+      const a = document.createElement("a");
+      a.href = docPreview.url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {
+      setError(e?.message || "Could not open PDF");
+    }
+  };
   const sendDocument = async (doc) => {
     setDocBusy(true); setError("");
     try { await api.expenses.sendDocumentToTelegram(row.id, doc.id); }
@@ -365,11 +391,27 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
             style={{display:"block",width:"100%",maxHeight:"70vh",objectFit:"contain",borderRadius:8,background:"#fff"}}
           />
         ) : String(docPreview.mime).includes("pdf") ? (
-          <iframe
-            title={docPreview.name}
-            src={docPreview.url}
-            style={{display:"block",width:"100%",height:"70vh",border:0,borderRadius:8,background:"#fff"}}
-          />
+          <div className="sans" style={{padding:"20px 14px"}}>
+            <FileText size={38} style={{margin:"0 auto 10px",display:"block"}} />
+            <div style={{fontSize:13,fontWeight:700,color:"var(--primary-text)",wordBreak:"break-word"}}>{docPreview.name}</div>
+            <div style={{fontSize:10,color:"var(--muted)",marginTop:5}}>PDF document</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:16}}>
+              <button type="button" onClick={openPdfDocument} style={smallBtn("var(--primary-text)")}>Open PDF</button>
+              <button
+                type="button"
+                onClick={() => {
+                  const doc = documents?.find((d) => (d.display_name || d.original_filename || "Expense document") === docPreview.name);
+                  if (doc) sendDocument(doc);
+                }}
+                style={smallBtn("var(--primary-text)")}
+              >
+                Send to Telegram
+              </button>
+            </div>
+            <div style={{fontSize:9,color:"var(--soft)",marginTop:10,lineHeight:1.45}}>
+              Open PDF uses your device’s document/share viewer for better zoom and multi-page viewing.
+            </div>
+          </div>
         ) : (
           <div className="sans" style={{padding:20,fontSize:11,color:"var(--muted)"}}>
             This document type cannot be previewed inside the Mini App. Use “Send to my Telegram” to open the original file.

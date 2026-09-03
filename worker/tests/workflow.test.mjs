@@ -207,7 +207,9 @@ test("expense documents preview inside the Mini App and prefer detected MIME", (
   const expensesRoute = read("src/routes/expenses.ts");
   assert.match(expensesUi, /docPreview/);
   assert.match(expensesUi, /<img/);
-  assert.match(expensesUi, /<iframe/);
+  assert.match(expensesUi, /openPdfDocument/);
+  assert.match(expensesUi, /navigator\.share/);
+  assert.doesNotMatch(expensesUi, /<iframe/);
   assert.doesNotMatch(expensesUi, /a\.target="_blank".*original_filename/);
   assert.match(expensesRoute, /responseMime/);
   assert.match(expensesRoute, /detectedMime/);
