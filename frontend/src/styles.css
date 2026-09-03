@@ -1542,3 +1542,83 @@ button:not(:disabled):active {
     transform: none !important;
   }
 }
+
+
+/* v80: synchronized grid navigation motion.
+   The complete icon layout interpolates together instead of each Flex item
+   independently pushing its neighbours. */
+.admin-tab-strip.app-icon-nav {
+  display: grid !important;
+  align-items: center;
+  justify-content: stretch;
+  gap: 2px;
+  transition: grid-template-columns 240ms cubic-bezier(.22,.78,.2,1);
+}
+
+.app-nav-item {
+  width: 100%;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: none !important;
+  padding-left: 6px;
+  padding-right: 6px;
+  transition:
+    padding 190ms cubic-bezier(.22,.78,.2,1),
+    gap 170ms ease-out,
+    color 145ms ease-out,
+    background-color 180ms ease-out,
+    transform 95ms ease-out !important;
+}
+
+.app-nav-item.active {
+  min-width: 0 !important;
+  max-width: none !important;
+  padding-left: 9px;
+  padding-right: 9px;
+}
+
+.app-nav-item > svg {
+  transform: scale(1);
+  transition:
+    transform 165ms cubic-bezier(.22,.78,.2,1),
+    opacity 145ms ease-out,
+    color 145ms ease-out !important;
+}
+
+.app-nav-item.active > svg {
+  transform: scale(1.045);
+}
+
+.app-nav-item.active .app-nav-label.visible {
+  transition:
+    max-width 165ms cubic-bezier(.22,.78,.2,1),
+    opacity 130ms ease-out 45ms,
+    transform 145ms ease-out 30ms !important;
+}
+
+/* Fade pages rather than visibly moving the whole content area. */
+.page-panel--active {
+  animation: page-fade-soft 120ms ease-out both !important;
+}
+
+@keyframes page-fade-soft {
+  from { opacity: .92; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 390px) {
+  .admin-tab-strip.app-icon-nav {
+    gap: 1px;
+  }
+  .app-nav-item,
+  .app-nav-item.active {
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-tab-strip.app-icon-nav {
+    transition: none !important;
+  }
+}
