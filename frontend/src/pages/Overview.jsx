@@ -70,9 +70,16 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   const expenses = Number(summary.expenses || 0);
   const netMonth = contributions + donations - expenses;
   const outstandingTotal = Number(summary.outstanding?.total || 0);
-  const outstandingMembers = (summary.outstanding?.members || []).length;
-  const expected = allocatedContributions + outstandingTotal;
-  const collectionPct = expected > 0 ? Math.min(100, Math.round((allocatedContributions / expected) * 100)) : 0;
+  const outstandingMembers = isAdmin
+    ? (summary.outstanding?.members || []).length
+    : Number(summary.collection?.outstanding_members || 0);
+  const collectedForProgress = isAdmin
+    ? allocatedContributions
+    : Number(summary.collection?.collected ?? allocatedContributions ?? 0);
+  const expected = isAdmin
+    ? allocatedContributions + outstandingTotal
+    : Number(summary.collection?.expected ?? collectedForProgress ?? 0);
+  const collectionPct = expected > 0 ? Math.min(100, Math.round((collectedForProgress / expected) * 100)) : 0;
   const overviewMonth = summary.month || currentMonthValue();
   const monthLabel = (() => {
     try {
@@ -139,7 +146,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       <div className="sans" style={{ fontSize: 11, color: "var(--muted)", marginTop: 18, marginBottom: 7, fontWeight: 700, letterSpacing: .5 }}>MONTHLY COLLECTION · {monthLabel.toUpperCase()}</div>
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 13, padding: "13px 14px" }}>
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12 }}>
-          <span><b style={{ color: "var(--primary-text)" }}>MVR {fmt(allocatedContributions)}</b> <span style={{ color: "var(--soft-2)" }}>/ MVR {fmt(expected)}</span></span>
+          <span><b style={{ color: "var(--primary-text)" }}>MVR {fmt(collectedForProgress)}</b> <span style={{ color: "var(--soft-2)" }}>/ MVR {fmt(expected)}</span></span>
           <b style={{ color: "var(--success)" }}>{collectionPct}% collected</b>
         </div>
         <div style={{ height: 6, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", marginTop: 8 }}>
