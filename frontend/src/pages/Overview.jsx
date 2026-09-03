@@ -118,7 +118,6 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
       <div className={`theme-brand-surface${!isAdmin ? " member-fund-card" : ""}`} style={{ background: "var(--primary)", borderRadius: 16, padding: !isAdmin ? "17px 19px" : "23px 22px", color: "var(--on-primary)", marginTop: !isAdmin ? 10 : 0 }}>
         <div className="sans" style={{ fontSize: 11, opacity: 0.62, letterSpacing: 1.1 }}>{isAdmin ? "FUND BALANCE" : "TOTAL FUND BALANCE"}</div>
-        <div className="sans" style={{ fontSize: 11, opacity: 0.62, letterSpacing: 1.1 }}>FUND BALANCE</div>
         <div style={{ fontSize: isAdmin ? 39 : 30, fontWeight: 600, marginTop: 4 }}>MVR {fmt(summary.fundBalance)}</div>
         <div className="sans" style={{ fontSize: 11, opacity: 0.7, marginTop: 5 }}>
           {netMonth >= 0 ? "+" : "−"} MVR {fmt(Math.abs(netMonth))} this month
