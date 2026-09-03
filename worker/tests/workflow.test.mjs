@@ -191,3 +191,12 @@ test("contribution slip preview stays inside the Mini App instead of opening a b
   assert.match(members, /<img/);
   assert.doesNotMatch(members, /a\.target="_blank".*payment-slip/);
 });
+
+
+test("Telegram slip downloads normalize image MIME from file signatures", () => {
+  const telegram = read("src/telegram.ts");
+  assert.match(telegram, /detectedFileMime/);
+  assert.match(telegram, /0xff.*0xd8.*0xff/);
+  assert.match(telegram, /image\/jpeg/);
+  assert.match(telegram, /application\/octet-stream/);
+});

@@ -112,7 +112,7 @@ membersRoute.get("/:id/contributions/:contributionId/slip/file", requireFinance,
   if(!contribution.slip_file_id)return c.json({error:"No payment slip is attached to this contribution"},404);
   const file=await downloadTelegramFile(c.env,String(contribution.slip_file_id));
   if(!file)return c.json({error:"Could not retrieve the payment slip from Telegram"},502);
-  const ext=String(file.mime||"").includes("png")?"png":String(file.mime||"").includes("webp")?"webp":"jpg";
+  const ext=file.mime==="image/png"?"png":file.mime==="image/webp"?"webp":file.mime==="application/pdf"?"pdf":"jpg";
   const filename=`${String(contribution.txn_id||`contribution-${contributionId}`).replace(/[^A-Za-z0-9._-]+/g,"-")}-payment-slip.${ext}`;
   return new Response(file.bytes,{headers:{"Content-Type":file.mime,"Content-Disposition":`inline; filename="${filename}"`,"Cache-Control":"private, no-store"}});
 });
