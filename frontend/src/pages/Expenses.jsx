@@ -237,11 +237,15 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const [error, setError] = useState("");
   const [documents, setDocuments] = useState(null);
   const [docBusy, setDocBusy] = useState(false);
+  const [docPreview, setDocPreview] = useState(null);
   const [addDocumentType, setAddDocumentType] = useState("Receipt");
   const canViewDocuments = ["owner","super_admin","treasurer"].includes(String(admin?.role || ""));
 
   const loadDocuments = async () => { if (!canViewDocuments) return setDocuments([]); try { setDocuments(await api.expenses.documents(row.id)); } catch (e) { setError(e.message || "Could not load documents"); setDocuments([]); } };
   useEffect(() => { loadDocuments(); }, [row.id, canViewDocuments]);
+  useEffect(() => () => {
+    if (docPreview?.url) URL.revokeObjectURL(docPreview.url);
+  }, [docPreview]);
 
   const addDocuments = async (files) => {
     const selected = Array.from(files || []).slice(0, 10); if (!selected.length) return;
@@ -251,8 +255,27 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
   };
   const openDocument = async (doc) => {
     setDocBusy(true); setError("");
-    try { const blob=await api.expenses.downloadDocument(row.id, doc.id); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.download=doc.original_filename || "document"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); }
-    catch (e) { setError(e.message || "Could not open document"); } finally { setDocBusy(false); }
+    try {
+      const blob=await api.expenses.downloadDocument(row.id, doc.id);
+      const url=URL.createObjectURL(blob);
+      setDocPreview((previous) => {
+        if (previous?.url) URL.revokeObjectURL(previous.url);
+        return {
+          url,
+          name: doc.display_name || doc.original_filename || "Expense document",
+          mime: blob.type || doc.mime_type || "application/octet-stream",
+        };
+      });
+    }
+    catch (e) { setError(e.message || "Could not open document"); }
+    finally { setDocBusy(false); }
+  };
+
+  const closeDocumentPreview = () => {
+    setDocPreview((previous) => {
+      if (previous?.url) URL.revokeObjectURL(previous.url);
+      return null;
+    });
   };
   const sendDocument = async (doc) => {
     setDocBusy(true); setError("");
@@ -289,7 +312,8 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
     catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
-  return <Modal onClose={onClose} closeDisabled={busy || docBusy} title={row.txn_id || "Expense details"}>
+  return <>
+  <Modal onClose={onClose} closeDisabled={busy || docBusy} title={row.txn_id || "Expense details"}>
     <MessageBanner tone="error">{error}</MessageBanner>
     <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, marginBottom: 14 }}>
       <Detail label="Description" value={row.description} />
@@ -318,7 +342,7 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
           <div style={{ fontSize: 11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.display_name || doc.original_filename}</div>
           <div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{doc.document_type || "Other"} · {doc.uploaded_by_name || "Admin"} · {doc.created_at ? new Date(doc.created_at.replace(" ","T")+"Z").toLocaleString() : ""}{doc.file_size ? ` · ${(Number(doc.file_size)/1024/1024).toFixed(Number(doc.file_size)>1048576?1:2)} MB` : ""}</div>
         </div>
-        <button type="button" disabled={docBusy} title="Open document" onClick={() => openDocument(doc)} style={{ ...smallBtn("var(--primary-text)"), padding: 6 }}><Eye size={13} /></button>
+        <button type="button" disabled={docBusy} title="Preview document" onClick={() => openDocument(doc)} style={{ ...smallBtn("var(--primary-text)"), padding: 6 }}><Eye size={13} /></button>
         <button type="button" disabled={docBusy} title="Send to my Telegram" onClick={() => sendDocument(doc)} style={{ ...smallBtn("var(--primary-text)"), padding: 6 }}><Send size={13} /></button>
         <button type="button" disabled={docBusy} title="Edit document label/type" onClick={() => editDocument(doc)} style={{ ...smallBtn("var(--primary-text)"), padding: 6 }}><Tag size={13} /></button>
         <button type="button" disabled={docBusy} title="Remove document" onClick={() => removeDocument(doc)} style={{ ...smallBtn("var(--danger)"), padding: 6 }}><Trash2 size={13} /></button>
@@ -330,7 +354,31 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
       {row.status !== "reversed" && row.status !== "voided" && <button type="button" disabled={busy} onClick={() => setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13} /> Edit</button>}
       {row.status === "approved" && <button type="button" disabled={busy} onClick={reverse} style={smallBtn("var(--danger)")}><RotateCcw size={13} /> Reverse</button>}
     </div>
-  </Modal>;
+  </Modal>
+  {docPreview && (
+    <Modal onClose={closeDocumentPreview} title={docPreview.name}>
+      <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:12,padding:8,textAlign:"center"}}>
+        {String(docPreview.mime).startsWith("image/") ? (
+          <img
+            src={docPreview.url}
+            alt={docPreview.name}
+            style={{display:"block",width:"100%",maxHeight:"70vh",objectFit:"contain",borderRadius:8,background:"#fff"}}
+          />
+        ) : String(docPreview.mime).includes("pdf") ? (
+          <iframe
+            title={docPreview.name}
+            src={docPreview.url}
+            style={{display:"block",width:"100%",height:"70vh",border:0,borderRadius:8,background:"#fff"}}
+          />
+        ) : (
+          <div className="sans" style={{padding:20,fontSize:11,color:"var(--muted)"}}>
+            This document type cannot be previewed inside the Mini App. Use “Send to my Telegram” to open the original file.
+          </div>
+        )}
+      </div>
+    </Modal>
+  )}
+  </>;
 }
 
 function Detail({ label, value }) {

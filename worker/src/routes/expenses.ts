@@ -136,7 +136,10 @@ expensesRoute.get("/:id/documents/:docId/file", requireFinance, async (c) => {
   const file=await downloadTelegramFile(c.env,String(doc.telegram_file_id));
   if(!file)return c.json({error:"Could not retrieve document from Telegram"},502);
   const filename=safeExpenseFilename(doc.original_filename||"document");
-  return new Response(file.bytes,{headers:{"Content-Type":doc.mime_type||file.mime||"application/octet-stream","Content-Disposition":`inline; filename*=UTF-8''${encodeURIComponent(filename)}`,"Cache-Control":"private, no-store"}});
+  const detectedMime=String(file.mime||"").trim();
+  const storedMime=String(doc.mime_type||"").trim();
+  const responseMime=detectedMime && detectedMime!=="application/octet-stream" ? detectedMime : (storedMime || "application/octet-stream");
+  return new Response(file.bytes,{headers:{"Content-Type":responseMime,"Content-Disposition":`inline; filename*=UTF-8''${encodeURIComponent(filename)}`,"Cache-Control":"private, no-store"}});
 });
 
 expensesRoute.post("/:id/documents/:docId/send-to-telegram", requireFinance, async (c) => {
