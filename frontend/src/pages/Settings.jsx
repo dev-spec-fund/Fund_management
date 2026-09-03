@@ -443,7 +443,7 @@ export default function Settings({ admin }) {
                 </div>
               </div>
               {superAdmin
-                ? <select disabled={a.active===0} value={displayRole} onChange={e=>{
+                ? <select disabled={a.active===0} value={displayRole} onChange={async e=>{
                     const value=e.target.value;
                     const selected=value.startsWith("custom:")?customRoles.find(r=>String(r.id)===value.split(":")[1]):null;
                     const label=selected?.name || e.target.options[e.target.selectedIndex].text;
