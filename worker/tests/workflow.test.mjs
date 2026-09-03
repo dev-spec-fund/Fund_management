@@ -199,7 +199,7 @@ test("Telegram slip downloads normalize image MIME from file signatures", () => 
 
 
 test("expense documents preview inside the Mini App and prefer detected MIME", () => {
-  const expensesUi = read("../frontend/src/pages/Expenses.jsx");
+  const expensesUi = read("../frontend/src/pages/Expenses.jsx") + read("../frontend/src/pages/expenses/ExpenseDetails.jsx");
   const expensesRoute = read("src/routes/expenses.ts");
   assert.match(expensesUi, /docPreview/);
   assert.match(expensesUi, /<img/);
@@ -213,7 +213,7 @@ test("expense documents preview inside the Mini App and prefer detected MIME", (
 
 
 test("expense PDF preview uses PDF.js canvas viewer with page and zoom controls", () => {
-  const expensesUi = read("../frontend/src/pages/Expenses.jsx");
+  const expensesUi = read("../frontend/src/pages/Expenses.jsx") + read("../frontend/src/pages/expenses/ExpenseDetails.jsx");
   const pdfPreview = read("../frontend/src/components/PdfPreview.jsx");
   const packageJson = read("../frontend/package.json");
   assert.match(expensesUi, /<PdfPreview/);
