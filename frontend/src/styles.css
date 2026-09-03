@@ -1167,49 +1167,96 @@ button:not(:disabled):active {
 }
 
 
-/* v72: prevent iOS/WebView auto-zoom when focusing form controls. */
+
+
+/* v73: normalize iOS/Telegram WebView native date, time and month controls.
+   Keep the native picker, but remove WebKit's oversized internal control box. */
 @media (max-width: 768px) {
   input:not([type="checkbox"]):not([type="radio"]),
   select,
   textarea {
     font-size: 16px !important;
   }
-}
 
-/* v73: normalize native iOS date/time/month control height.
-   Keep 16px text to prevent focus zoom, but prevent WebKit from expanding
-   picker controls much taller than normal form fields. */
-@media (max-width: 768px) {
+  input.native-date-time-control,
   input[type="date"],
   input[type="time"],
   input[type="month"],
   input[type="datetime-local"] {
-    box-sizing: border-box !important;
-    width: 100%;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    display: block !important;
+    width: 100% !important;
     height: 44px !important;
     min-height: 44px !important;
     max-height: 44px !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-    line-height: 1.2 !important;
-    font-size: 16px !important;
+    padding: 0 12px !important;
+    line-height: 44px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    text-align: left !important;
+    vertical-align: middle !important;
   }
 
+  input.native-date-time-control::-webkit-date-and-time-value,
   input[type="date"]::-webkit-date-and-time-value,
   input[type="time"]::-webkit-date-and-time-value,
   input[type="month"]::-webkit-date-and-time-value,
   input[type="datetime-local"]::-webkit-date-and-time-value {
-    min-height: 0;
-    margin: 0;
-    padding: 0;
-    line-height: 1.2;
-    text-align: left;
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    height: 42px !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: normal !important;
+    text-align: left !important;
   }
 
+  input.native-date-time-control::-webkit-datetime-edit,
   input[type="date"]::-webkit-datetime-edit,
   input[type="time"]::-webkit-datetime-edit,
   input[type="month"]::-webkit-datetime-edit,
   input[type="datetime-local"]::-webkit-datetime-edit {
-    padding: 0;
+    display: flex !important;
+    align-items: center !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  input.native-date-time-control::-webkit-datetime-edit-fields-wrapper,
+  input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+  input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+  input[type="month"]::-webkit-datetime-edit-fields-wrapper,
+  input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
+    padding: 0 !important;
+  }
+
+  input.native-date-time-control::-webkit-calendar-picker-indicator,
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    display: block !important;
+    flex: 0 0 22px !important;
+    width: 22px !important;
+    height: 22px !important;
+    margin: 0 0 0 auto !important;
+    padding: 0 !important;
+    opacity: .82 !important;
+    cursor: pointer;
+  }
+
+  input.native-month-control {
+    text-align: center !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+  input.native-month-control::-webkit-date-and-time-value,
+  input.native-month-control::-webkit-datetime-edit {
+    justify-content: center !important;
+    text-align: center !important;
   }
 }

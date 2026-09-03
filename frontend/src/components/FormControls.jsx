@@ -175,7 +175,7 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
       type={type}
       inputMode={type === "number" ? "decimal" : undefined}
       placeholder={placeholder}
-      className="sans"
+      className={`sans${["date","time","month","datetime-local"].includes(type) ? " native-date-time-control" : ""}`}
       style={{
         width: "100%",
         minWidth: 0,
