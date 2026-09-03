@@ -363,10 +363,10 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
       ORDER BY COALESCE(e.voided_at,e.expense_date,e.created_at) ASC,e.id ASC
     `).bind(month).all<any>(),
     c.env.DB.prepare(`
-      SELECT d.id,d.txn_id,d.donor_name,d.amount,d.note,d.transaction_month,d.created_at,d.project_id,p.project_code,p.name project_name
+      SELECT d.id,d.txn_id,d.donor_name,d.amount,d.note,d.transaction_month,d.donation_date,d.created_at,d.project_id,p.project_code,p.name project_name
       FROM donations d JOIN projects p ON p.id=d.project_id
       WHERE COALESCE(d.status,'active')='active' AND d.transaction_month=?
-      ORDER BY d.created_at ASC,d.id ASC
+      ORDER BY COALESCE(d.donation_date,d.created_at) ASC,d.id ASC
     `).bind(month).all<any>(),
     c.env.DB.prepare(`
       WITH paid AS (
@@ -395,7 +395,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
         WHERE COALESCE(e.status,'approved')='approved'
         UNION ALL
         SELECT d.id,d.txn_id,d.donor_name,NULL,'donation',d.amount,d.transaction_month,NULL,
-               d.created_at,a.name,NULL
+               COALESCE(d.donation_date,d.created_at),a.name,NULL
         FROM donations d LEFT JOIN admins a ON a.id=d.logged_by
         WHERE COALESCE(d.status,'active')='active'
       ) ORDER BY at DESC LIMIT 4

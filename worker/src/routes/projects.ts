@@ -69,9 +69,10 @@ projectsRoute.get('/:id', requireAdmin, async c=>{
       (SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id=e.id AND d.removed_at IS NULL) document_count
     FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id LEFT JOIN admins a ON a.id=e.logged_by
     WHERE e.project_id=? ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC`).bind(id).all<any>(),
-    c.env.DB.prepare(`SELECT d.id,d.txn_id,d.donor_name,d.amount,d.note,d.transaction_month,d.created_at
+    c.env.DB.prepare(`SELECT d.id,d.txn_id,d.donor_name,d.amount,d.note,d.transaction_month,d.donation_date,d.status,d.created_at,
+      (SELECT COUNT(*) FROM donation_documents dd WHERE dd.donation_id=d.id AND dd.removed_at IS NULL) document_count
       FROM donations d WHERE d.project_id=? AND COALESCE(d.status,'active')='active'
-      ORDER BY d.transaction_month DESC,d.created_at DESC,d.id DESC`).bind(id).all<any>(),
+      ORDER BY COALESCE(d.donation_date,d.created_at) DESC,d.id DESC`).bind(id).all<any>(),
     c.env.DB.prepare(`SELECT al.id,al.action,al.created_at,al.detail,COALESCE(a.name,'System') admin_name
       FROM audit_log al LEFT JOIN admins a ON a.id=al.admin_id
       WHERE al.action LIKE 'project_%' AND json_valid(al.detail)=1

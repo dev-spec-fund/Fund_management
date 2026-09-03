@@ -6,6 +6,7 @@ import { LoadingState, EmptyState, MessageBanner, PrimaryButton, smallBtn } from
 import { fmt } from "../utils/format";
 import { todayValue } from "../utils/date";
 import Pagination, { pageSlice } from "../components/Pagination";
+import DonationDetails from "./reports/DonationDetails";
 
 const FILTERS = [["all","All"],["active","Active"],["planned","Planned"],["completed","Completed"],["cancelled","Cancelled"]];
 const isSuper = (admin) => ["owner","super_admin"].includes(admin?.role);
@@ -65,7 +66,7 @@ function ProjectForm({admin,onClose,onSaved,project=null}){
 }
 
 function ProjectDetails({project,admin,onClose,onSaved}){
-  const [data,setData]=useState(null),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
+  const [data,setData]=useState(null),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[selectedDonation,setSelectedDonation]=useState(null);
   const [showDonations,setShowDonations]=useState(true),[showExpenses,setShowExpenses]=useState(true),[showAdjustments,setShowAdjustments]=useState(false),[showHistory,setShowHistory]=useState(false);
   const load=()=>api.projects.get(project.id).then(setData).catch(e=>setError(e.message));
   useEffect(()=>{load();},[project.id]);
@@ -115,7 +116,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
     />
     {showDonations&&(donations.length===0
       ? <div className="sans project-section-empty">No project donations yet.</div>
-      : donations.map(d=><div key={d.id} className="project-transaction-row"><div className="sans project-transaction-main"><b>{d.donor_name}</b><div>{d.transaction_month} · {d.txn_id}{d.note?` · ${d.note}`:""}</div></div><b className="sans project-transaction-amount success">+ MVR {fmt(d.amount)}</b></div>))}
+      : donations.map(d=><button type="button" key={d.id} className="project-transaction-row" onClick={()=>setSelectedDonation(d)} style={{width:"100%",border:0,borderBottom:"1px solid var(--divider)",background:"transparent",color:"var(--text)",textAlign:"left",cursor:"pointer"}}><div className="sans project-transaction-main"><b>{d.donor_name}</b><div>{d.donation_date||d.transaction_month} · {d.txn_id}{d.note?` · ${d.note}`:""} · Tap to view</div></div><b className="sans project-transaction-amount success">+ MVR {fmt(d.amount)}</b></button>))}
 
     <ProjectSectionHeader
       label="Expenses"
@@ -138,6 +139,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
 
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14}}>{canEdit&&<button type="button" disabled={busy} onClick={()=>setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13}/> Edit</button>}{["planned"].includes(p.status)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Activate</button>}{p.status==="active"&&<button type="button" disabled={busy} onClick={()=>changeStatus("completed")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Complete</button>}{!["cancelled"].includes(p.status)&&p.status!=="completed"&&<button type="button" disabled={busy} onClick={()=>changeStatus("cancelled")} style={smallBtn("var(--danger)")}><X size={13}/> Cancel</button>}{["completed","cancelled"].includes(p.status)&&isSuper(admin)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--primary-text)")}><RotateCcw size={13}/> Reopen</button>}</div>
     {!canEdit&&<div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:10,textAlign:"center"}}>Completed/cancelled projects are read-only. Super Admin can reopen them.</div>}
+    {selectedDonation&&<DonationDetails admin={admin} row={selectedDonation} onClose={()=>setSelectedDonation(null)} onSaved={async(message)=>{setSelectedDonation(null);await load();await onSaved(message||"Donation updated");}}/>}
   </Modal>;
 }
 

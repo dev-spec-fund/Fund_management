@@ -26,7 +26,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 22;
+const REQUIRED_SCHEMA_VERSION = 26;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -40,10 +40,11 @@ export async function ensureOperationalSchema(env: Env) {
       ["members", ["normalized_name","normalized_phone"]],
       ["member_registration_requests", ["phone"]],
       ["contributions", ["bank_date","corrected_by","corrected_at","voided_by","voided_at","void_reason","duplicate_key"]],
-      ["donations", ["member_id","project_id","transaction_month","status","voided_by","voided_at","void_reason"]],
-      ["expenses", ["expense_date","transaction_month","status","approved_by","approved_at","voided_by","voided_at","void_reason","project_id","fund_override","fund_override_reason","fund_override_by","fund_override_at","fund_balance_before","budget_override_reason","budget_override_by"]],
+      ["donations", ["member_id","project_id","transaction_month","status","voided_by","voided_at","void_reason","donation_date","edited_by","updated_at","idempotency_key"]],
+      ["expenses", ["expense_date","transaction_month","status","approved_by","approved_at","voided_by","voided_at","void_reason","project_id","fund_override","fund_override_reason","fund_override_by","fund_override_at","fund_balance_before","budget_override_reason","budget_override_by","idempotency_key"]],
       ["projects", ["project_code","name","budget","status","responsible_member_id"]],
       ["expense_documents", ["expense_id","telegram_file_id","original_filename","display_name","document_type","uploaded_by","created_at","removed_at","removed_by","removal_reason"]],
+      ["donation_documents", ["donation_id","telegram_file_id","original_filename","display_name","document_type","uploaded_by","created_at","removed_at","removed_by","removal_reason"]],
       ["expense_categories", ["active"]],
       ["meetings", ["updated_at","last_notification_at","cancelled_at","cancelled_by","cancel_reason"]],
       ["error_log", ["status","resolved_at","resolved_by"]],
@@ -53,6 +54,7 @@ export async function ensureOperationalSchema(env: Env) {
       ["meeting_action_items", ["meeting_id","description","status"]],
       ["admin_roles", ["name","active","created_by","created_at"]],
       ["admin_role_permissions", ["role_id","permission"]],
+      ["telegram_update_receipts", ["update_id","status","claimed_at","attempts"]],
     ];
     for (const [table,required] of checks) {
       const rows=await env.DB.prepare(`PRAGMA table_info(${table})`).all<any>();

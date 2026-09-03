@@ -289,7 +289,7 @@ export default function App() {
     if (page === "profile" && memberView) return <MyProfile member={me.member} />;
     if (page === "expenses" && canFinance) return <Expenses admin={me.admin} />;
     if (page === "projects" && canFinance) return <Projects admin={me.admin} />;
-    if (page === "reports" && adminView) return <Reports setTab={openTab} />;
+    if (page === "reports" && adminView) return <Reports setTab={openTab} admin={me.admin} />;
     if (page === "meetings" && adminView) return <Meetings admin={me.admin} />;
     if (page === "settings" && adminView) return <Settings admin={me.admin} />;
     return null;

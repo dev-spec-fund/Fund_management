@@ -1,16 +1,21 @@
-import React, { useState } from "react";
-import { Plus, Download, ChevronLeft, ChevronRight, FileText, Table2 } from "lucide-react";
-import { LoadingState, MessageBanner, smallBtn, monthNavBtn } from "../components/Shared";
+import React, { useEffect, useState } from "react";
+import { Plus, Download, ChevronLeft, ChevronRight, FileText, Table2, Paperclip } from "lucide-react";
+import { LoadingState, MessageBanner, monthNavBtn } from "../components/Shared";
 import { useReportsData } from "./reports/useReportsData";
 import { MonthlyReportSections, AnnualAnalyticsSection } from "./reports/ReportSections";
 import { ExpenseModal, DonationModal } from "./reports/ReportModals";
+import DonationDetails from "./reports/DonationDetails";
+import { api, onDataChange } from "../api";
+import { fmt } from "../utils/format";
 
-export default function Reports({ setTab }) {
+export default function Reports({ setTab, admin }) {
   const [showExpense, setShowExpense] = useState(false);
   const [showDonation, setShowDonation] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [error, setError] = useState("");
+  const [donations, setDonations] = useState([]);
+  const [selectedDonation, setSelectedDonation] = useState(null);
   const {
     month,
     monthLabel,
@@ -25,6 +30,16 @@ export default function Reports({ setTab }) {
     loadMonthly,
     loadAnnual,
   } = useReportsData();
+
+  const loadDonations = () => api.donations.list({ month }).then(setDonations).catch((e) => setError(e.message || "Could not load donations"));
+  useEffect(() => { loadDonations(); }, [month]);
+  useEffect(() => onDataChange(({ path }) => { if (path?.startsWith("/api/donations")) loadDonations(); }), [month]);
+
+  const donationSaved = async (message = "Donation updated") => {
+    await Promise.all([loadMonthly(), loadDonations()]);
+    setSelectedDonation(null);
+    return message;
+  };
 
   if (!summary) return <LoadingState>Loading reports…</LoadingState>;
 
@@ -98,9 +113,20 @@ export default function Reports({ setTab }) {
 
     <MessageBanner tone="error">{error}</MessageBanner>
     <MonthlyReportSections summary={summary} trend={trend} monthLabel={monthLabel} setTab={setTab} />
+
+    <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>DONATIONS — {monthLabel.toUpperCase()}</div>
+    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "4px 12px", marginBottom: 16 }}>
+      {donations.length === 0 ? <div className="sans" style={{ fontSize: 11, color: "var(--soft)", padding: "12px 2px" }}>No donations logged for this month.</div> : donations.map((donation) => <button key={donation.id} type="button" onClick={() => setSelectedDonation(donation)} className="sans" style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left", border: 0, borderTop: "1px solid var(--divider)", background: "transparent", color: "var(--text)", padding: "10px 2px", cursor: "pointer" }}>
+        <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 11, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{donation.donor_name}</div><div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{donation.donation_date || String(donation.created_at || "").slice(0,10)} · {donation.txn_id}{donation.project_name ? ` · ${donation.project_code || ""} ${donation.project_name}` : " · General fund"}{Number(donation.document_count || 0) > 0 ? ` · ${donation.document_count} document${Number(donation.document_count) === 1 ? "" : "s"}` : ""}</div></div>
+        {Number(donation.document_count || 0) > 0 && <Paperclip size={12} style={{ color: "var(--muted)", flex: "0 0 auto" }} />}
+        <div style={{ textAlign: "right", flex: "0 0 auto" }}><b style={{ fontSize: 11, color: donation.status === "active" ? "var(--success)" : "var(--muted)" }}>{donation.status === "active" ? "+ " : ""}MVR {fmt(donation.amount)}</b><div style={{ fontSize: 8, color: "var(--soft)", marginTop: 2, textTransform: "uppercase" }}>{donation.status} · {donation.status === "active" ? "Edit" : "View"} ›</div></div>
+      </button>)}
+    </div>
+
     <AnnualAnalyticsSection annualYear={annualYear} setAnnualYear={setAnnualYear} annual={annual} analytics={analytics} annualBusy={annualBusy} loadAnnual={loadAnnual} setError={setError} />
 
     {showExpense && <ExpenseModal onClose={() => setShowExpense(false)} onSaved={loadMonthly} />}
-    {showDonation && <DonationModal onClose={() => setShowDonation(false)} onSaved={loadMonthly} />}
+    {showDonation && <DonationModal onClose={() => setShowDonation(false)} onSaved={async (message) => { await donationSaved(message); setShowDonation(false); }} />}
+    {selectedDonation && <DonationDetails admin={admin} row={selectedDonation} onClose={() => setSelectedDonation(null)} onSaved={donationSaved} />}
   </>;
 }

@@ -233,3 +233,33 @@ test('Telegram webhook claims update_id before running bot side effects', () => 
   assert.match(botSource, /datetime\('now','-5 minutes'\)/);
   assert.match(botSource, /datetime\('now','-14 days'\)/);
 });
+
+test('donation edit and document support preserve accounting locks and evidence history', () => {
+  const schemaSource = fs.readFileSync(path.join(root,'schema.sql'),'utf8');
+  const donationSource = fs.readFileSync(path.join(root,'src/routes/donations.ts'),'utf8');
+  const reportsSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Reports.jsx'),'utf8');
+  const detailSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/DonationDetails.jsx'),'utf8');
+  const modalSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/ReportModals.jsx'),'utf8');
+
+  assert.match(schemaSource, /CREATE TABLE IF NOT EXISTS donation_documents/);
+  assert.match(schemaSource, /donation_date TEXT/);
+  assert.match(donationSource, /donationsRoute\.patch\("\/:id"/);
+  assert.match(donationSource, /requireOpenMonth\(c\.env,originalMonth\)/);
+  assert.match(donationSource, /donation_document_added/);
+  assert.match(donationSource, /removed_at=datetime\('now'\)/);
+  assert.match(donationSource, /sendStoredDocument/);
+  assert.match(reportsSource, /DonationDetails/);
+  assert.match(detailSource, /Supporting documents/);
+  assert.match(modalSource, /Donation date/);
+  assert.match(modalSource, /idempotency_key/);
+});
+
+test('donation idempotency key blocks duplicate create retries in the database', () => {
+  const db = dbWithSchema();
+  db.prepare("INSERT INTO admins(id,telegram_id,name,role) VALUES(1,'100','Owner','super_admin')").run();
+  const sql=`INSERT INTO donations(txn_id,donor_name,amount,logged_by,transaction_month,status,donation_date,idempotency_key) VALUES(?,?,?,?,?,'active',?,?)`;
+  db.prepare(sql).run('D1','Donor',100,1,'2026-09','2026-09-04','donation-request-123456');
+  assert.throws(()=>db.prepare(sql).run('D2','Donor',100,1,'2026-09','2026-09-04','donation-request-123456'),/UNIQUE/);
+  assert.equal(scalar(db,"SELECT COUNT(*) FROM donations"),1);
+  db.close();
+});
