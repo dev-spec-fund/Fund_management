@@ -23,14 +23,23 @@ function activityTime(a) {
   return d ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
 }
 
-export function ActivityRow({ a, isAdmin, canFinance = false, onExpenseClick, onReverse }) {
+export function ActivityRow({ a, isAdmin, canFinance = false, onExpenseClick, onActivityClick, onReverse }) {
   const isIn = a.kind === "contribution" || a.kind === "donation";
   const type = a.kind === "contribution" ? "Contribution" : a.kind === "donation" ? "Donation" : "Expense";
   return (
-    <div onClick={() => a.kind === "expense" && canFinance && onExpenseClick?.(a)}
-      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "11px 14px", marginBottom: 7, cursor: a.kind === "expense" && canFinance ? "pointer" : "default" }}>
+    <div
+      className="activity-row-card"
+      role="button"
+      tabIndex={0}
+      onClick={() => a.kind === "expense" && canFinance ? onExpenseClick?.(a) : onActivityClick?.(a)}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        a.kind === "expense" && canFinance ? onExpenseClick?.(a) : onActivityClick?.(a);
+      }}
+      style={{ cursor: "pointer" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
-        <div style={{ width: 32, height: 32, flex: "0 0 32px", borderRadius: 10, background: isIn ? "var(--success-bg-2)" : "var(--danger-border)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className={`activity-kind-icon ${a.kind}`} style={{ background: isIn ? "var(--success-bg-2)" : "var(--danger-border)" }}>
           {isIn ? <ArrowUpRight size={16} color="var(--success)" /> : <ArrowDownRight size={16} color="var(--danger)" />}
         </div>
         <div style={{ minWidth: 0 }}>

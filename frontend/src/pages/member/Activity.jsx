@@ -22,6 +22,7 @@ export function Activity({ isAdmin, canFinance = false }) {
   const [expenseBusy, setExpenseBusy] = useState(false);
   const [expenseError, setExpenseError] = useState("");
   const [page, setPage] = useState(1);
+  const [selectedActivity, setSelectedActivity] = useState(null);
 
   const monthEnd = (month) => {
     const [year, mon] = String(month).split("-").map(Number);
@@ -210,9 +211,9 @@ export function Activity({ isAdmin, canFinance = false }) {
 
         <div className="activity-type-filters">
           {filters.map(([value, label]) => (
-            <button key={value} type="button" onClick={() => setFilter(value)} aria-pressed={filter === value} className="sans"
-              style={{ flex: "0 0 auto", background: filter === value ? "var(--primary)" : "var(--card)", color: filter === value ? "var(--on-primary)" : "var(--muted)", border: "1px solid " + (filter === value ? "var(--primary)" : "var(--border)"), borderRadius: 20, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer", touchAction: "manipulation" }}>
-              {label} <span style={{ opacity: filter === value ? .82 : .68, marginLeft: 3 }}>{counts[value]}</span>
+            <button key={value} type="button" onClick={() => { setFilter(value); setPage(1); }} aria-pressed={filter === value}
+              className={`sans activity-type-chip${filter === value ? " active" : ""} activity-type-${value}`}>
+              <span>{label}</span><span className="activity-type-count">{counts[value]}</span>
             </button>
           ))}
         </div>
@@ -225,12 +226,29 @@ export function Activity({ isAdmin, canFinance = false }) {
             <div className="sans" style={{ display: "flex", alignItems: "center", gap: 8, margin: "13px 2px 7px", fontSize: 10, fontWeight: 700, letterSpacing: 1.1, textTransform: "uppercase", color: "var(--soft)" }}>
               <span>{group.label}</span><span style={{ height: 1, flex: 1, background: "var(--border)" }} />
             </div>
-            {group.rows.map((a) => <ActivityRow key={`${filter}-${a._kind}-${a.id}`} a={a} isAdmin={isAdmin} canFinance={canFinance} onExpenseClick={openExpense} onReverse={reverseActivity} />)}
+            {group.rows.map((a) => <ActivityRow key={`${filter}-${a._kind}-${a.id}`} a={a} isAdmin={isAdmin} canFinance={canFinance} onExpenseClick={openExpense} onActivityClick={setSelectedActivity} onReverse={reverseActivity} />)}
           </div>
         ))}
         {filtered.length === 0 && <div className="sans" style={{ fontSize: 13, color: "var(--soft)" }}>Nothing here yet.</div>}
         <Pagination page={activityPage.page} total={filtered.length} onChange={setPage} />
       </div>
+
+      {selectedActivity && <Modal title="Transaction details" onClose={() => setSelectedActivity(null)}>
+        <div className={`activity-detail-hero ${selectedActivity._kind || selectedActivity.kind}`}>
+          <div className="sans activity-detail-type">{activityTypeLabel(selectedActivity._kind || selectedActivity.kind)}</div>
+          <div className="activity-detail-amount" style={{color:(selectedActivity._kind || selectedActivity.kind)==="expense"?"var(--danger)":"var(--success)"}}>
+            {(selectedActivity._kind || selectedActivity.kind)==="expense"?"−":"+"} MVR {fmt(selectedActivity.amount)}
+          </div>
+        </div>
+        <div className="activity-detail-card">
+          <ActivityDetail label="Transaction ID" value={selectedActivity.txn_id || "—"}/>
+          <ActivityDetail label="Description" value={selectedActivity.who || selectedActivity.description || activityTypeLabel(selectedActivity._kind || selectedActivity.kind)}/>
+          {selectedActivity.member_code && <ActivityDetail label="Member" value={selectedActivity.member_code}/>}
+          {selectedActivity.month && <ActivityDetail label="Month" value={selectedActivity.month}/>}
+          {selectedActivity.category && <ActivityDetail label="Category" value={selectedActivity.category}/>}
+          <ActivityDetail label="Date / time" value={formatActivityDateTime(selectedActivity.at)} last/>
+        </div>
+      </Modal>}
 
       {editingExpense && <Modal title="Edit expense" closeDisabled={expenseBusy} onClose={() => !expenseBusy && setEditingExpense(null)}>
         <div className="sans" style={{fontSize:11,color:"var(--muted)",background:"var(--success-bg)",padding:"9px 10px",borderRadius:9,marginBottom:12,lineHeight:1.45}}>
@@ -257,5 +275,24 @@ export function Activity({ isAdmin, canFinance = false }) {
       </Modal>}
     </>
   );
+}
+
+function activityTypeLabel(kind) {
+  const value=String(kind||"").toLowerCase();
+  return value==="contribution"?"Contribution":value==="donation"?"Donation":value==="expense"?"Expense":"Transaction";
+}
+
+function formatActivityDateTime(value) {
+  if(!value)return "—";
+  try {
+    const raw=String(value);
+    const d=new Date(raw.replace(" ", "T") + (raw.includes("Z") ? "" : "Z"));
+    if(Number.isNaN(d.getTime()))return raw;
+    return d.toLocaleString(undefined,{day:"numeric",month:"short",year:"numeric",hour:"numeric",minute:"2-digit"});
+  } catch { return String(value); }
+}
+
+function ActivityDetail({label,value,last=false}) {
+  return <div className="sans activity-detail-row" style={{borderBottom:last?0:undefined}}><span>{label}</span><strong>{value}</strong></div>;
 }
 /* ---------- Reports (admin) ---------- */

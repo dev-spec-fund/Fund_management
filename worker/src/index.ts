@@ -168,22 +168,29 @@ app.get("/api/me/projects", async (c) => {
   if(showProjects==="0") return c.json({enabled:false,projects:[]});
   const projects=await c.env.DB.prepare(`SELECT p.id,p.project_code,p.name,p.description,p.budget,p.start_date,p.target_end_date,p.status,
       m.name responsible_member_name,m.member_code responsible_member_code,
-      COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount ELSE 0 END),0) spent,
-      COUNT(CASE WHEN e.status='approved' THEN 1 END) expense_count
+      COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.project_id=p.id AND e.status='approved'),0) spent,
+      COALESCE((SELECT COUNT(*) FROM expenses e WHERE e.project_id=p.id AND e.status='approved'),0) expense_count,
+      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donations_received,
+      COALESCE((SELECT COUNT(*) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_count
     FROM projects p
     LEFT JOIN members m ON m.id=p.responsible_member_id
-    LEFT JOIN expenses e ON e.project_id=p.id
     WHERE p.status IN ('active','completed')
-    GROUP BY p.id
     ORDER BY CASE p.status WHEN 'active' THEN 0 ELSE 1 END,p.start_date DESC,p.id DESC`).all<any>();
   const result=[] as any[];
   for(const project of projects.results){
-    const expenses=await c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,COALESCE(cat.name,'Project expense / Uncategorised') category
-      FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id
-      WHERE e.project_id=? AND e.status='approved'
-      ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC LIMIT 100`).bind(project.id).all<any>();
+    const [expenses,donations]=await Promise.all([
+      c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,COALESCE(cat.name,'Project expense / Uncategorised') category
+        FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id
+        WHERE e.project_id=? AND e.status='approved'
+        ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC LIMIT 100`).bind(project.id).all<any>(),
+      c.env.DB.prepare(`SELECT d.id,d.txn_id,d.amount,COALESCE(d.donation_date,date(d.created_at)) donation_date
+        FROM donations d
+        WHERE d.project_id=? AND COALESCE(d.status,'active')='active'
+        ORDER BY COALESCE(d.donation_date,d.created_at) DESC,d.id DESC LIMIT 100`).bind(project.id).all<any>()
+    ]);
     const spent=Number(project.spent||0); const budget=project.budget==null?null:Number(project.budget);
-    result.push({...project,spent,remaining_budget:budget==null?null:budget-spent,budget_used_pct:budget==null?null:(spent/Math.max(budget,0.01))*100,expenses:expenses.results});
+    const donationsReceived=Number(project.donations_received||0);
+    result.push({...project,spent,donations_received:donationsReceived,remaining_budget:budget==null?null:budget-spent,budget_used_pct:budget==null?null:(spent/Math.max(budget,0.01))*100,expenses:expenses.results,donations:donations.results});
   }
   return c.json({enabled:true,projects:result});
 });
