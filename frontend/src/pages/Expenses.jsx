@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Search, Pencil, RotateCcw, X, Paperclip, FileText, Send, Eye, Trash2, Tag } from "lucide-react";
-import { api } from "../api";
+import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, MessageBanner, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
 import { currentMonthValue, shiftMonthValue, todayValue } from "../utils/date";
@@ -84,6 +84,9 @@ export default function Expenses({ admin }) {
   };
 
   useEffect(() => { setRows(null); setPage(1); load(); }, [month, filter, debouncedQuery, documentsFilter]);
+  useEffect(() => onDataChange(({ path }) => {
+    if (path?.startsWith("/api/expenses") || path?.startsWith("/api/governance/reverse") || path?.startsWith("/api/projects")) load();
+  }), [month, filter, debouncedQuery, documentsFilter]);
 
   const totals = useMemo(() => {
     const base = rows || [];

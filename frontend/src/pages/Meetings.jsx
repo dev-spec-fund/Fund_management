@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, MessageBanner, PageHeader, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
@@ -26,6 +26,9 @@ export default function Meetings({admin}){
 
   const load=()=>api.admin.meetings().then(setRows).catch(e=>setMessage(e.message));
   useEffect(()=>{load();api.members.list().then(setMemberOptions).catch(()=>{})},[]);
+  useEffect(()=>onDataChange(({path})=>{
+    if(path?.startsWith("/api/admin/meetings") || path?.startsWith("/api/governance/meetings") || path?.startsWith("/api/governance/meeting-actions") || path?.startsWith("/api/me/meetings")) load();
+  }),[]);
 
   const meetingPage=pageSlice(rows||[],page);
 

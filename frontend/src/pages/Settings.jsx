@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
-import { api } from "../api";
+import { api, onDataChange } from "../api";
 import { Center, MessageBanner, SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, todayValue, formatLocalDateTime } from "../utils/date";
 import { sendExportToTelegram } from "../utils/exports";
@@ -111,6 +111,15 @@ export default function Settings({ admin }) {
   };
 
   useEffect(()=>{ load(); },[admin?.id,role]);
+  useEffect(()=>onDataChange(({path})=>{
+    if(
+      path?.startsWith("/api/settings") ||
+      path?.startsWith("/api/expenses/categories") ||
+      path?.startsWith("/api/governance/month-close") ||
+      path?.startsWith("/api/admin/month-close") ||
+      path?.startsWith("/api/admin/errors")
+    ) load();
+  }),[admin?.id,role]);
 
   if(settingsLoading)return <Center>Loading settings…</Center>;
   if(settingsError && !Object.keys(settings||{}).length) return <div style={{...cardStyle,textAlign:"center"}}>

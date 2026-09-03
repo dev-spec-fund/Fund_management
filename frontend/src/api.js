@@ -36,23 +36,14 @@ function clearGetCache() {
 
 const DATA_CHANGED_EVENT = "fund:data-changed";
 
-function shouldBroadcastDataChange(path, method) {
-  if (method === "GET") return false;
-  const liveDataPrefixes = [
-    "/api/members",
-    "/api/expenses",
-    "/api/projects",
-    "/api/donations",
-    "/api/governance/reverse",
-    "/api/governance/month-close",
-    "/api/admin/pending/registrations",
-    "/api/admin/pending/contributions",
-  ];
-  return liveDataPrefixes.some((prefix) => path.startsWith(prefix));
+const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function shouldBroadcastDataChange(method) {
+  return MUTATION_METHODS.has(method);
 }
 
 function broadcastDataChange(path, method) {
-  if (typeof window === "undefined" || !shouldBroadcastDataChange(path, method)) return;
+  if (typeof window === "undefined" || !shouldBroadcastDataChange(method)) return;
   window.dispatchEvent(new CustomEvent(DATA_CHANGED_EVENT, { detail: { path, method, at: Date.now() } }));
 }
 
