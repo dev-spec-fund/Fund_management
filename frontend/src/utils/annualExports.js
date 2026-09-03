@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { brandingFrom, C, collectionChart, createReport, fileSlug, infoPanel, money, PDF_TYPE, sectionTitle, statusColor, summaryCards, table, addFooters, rgb } from "./exportCore";
+import { brandingFrom, C, collectionChart, createReport, fileSlug, infoPanel, money, PDF_TYPE, sectionTitle, statusColor, summaryCards, table, addFooters, reportMeta, progressBar, certificationPanel } from "./exportCore";
 import { sendExportToTelegram } from "./exportDelivery";
 
 export async function exportAnnualAgmPdf(data) {
@@ -8,6 +8,13 @@ export async function exportAnnualAgmPdf(data) {
   const brand = await brandingFrom(data);
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const ctx = createReport(doc, brand, "Annual / AGM Fund Report", year);
+  const annualRate = Number(t.due || 0) > 0 ? Number(t.collection_rate || 0) : 0;
+
+  reportMeta(ctx, [
+    { label: "Financial year", value: year },
+    { label: "Report type", value: "Annual / AGM" },
+    { label: "Currency", value: "Maldivian Rufiyaa (MVR)" },
+  ]);
 
   summaryCards(ctx, [
     { label: "Opening balance", value: money(t.opening_balance), highlight: true },
@@ -15,6 +22,7 @@ export async function exportAnnualAgmPdf(data) {
     { label: "Contributions", value: money(t.contributions), color: C.green2 },
     { label: "Expenses", value: money(t.expenses), color: C.red },
   ]);
+  if (Number(t.due || 0) > 0) progressBar(ctx, { label: "Annual contribution collection", value: annualRate, rightLabel: `${annualRate.toFixed(1)}% collected` });
 
   sectionTitle(ctx, "Executive summary");
   infoPanel(ctx, [
@@ -226,16 +234,12 @@ export async function exportAnnualAgmPdf(data) {
     );
   }
 
-  sectionTitle(ctx, "Report certification", "", 28);
-  rgb(doc, "setFillColor", C.cream);
-  rgb(doc, "setDrawColor", C.border);
-  doc.roundedRect(ctx.margin, ctx.y, ctx.pageW - ctx.margin * 2, 20, 3, 3, "FD");
-  rgb(doc, "setTextColor", C.muted);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(PDF_TYPE.body);
-  doc.text("This report was generated electronically from the Fund Manager records.", ctx.margin + 5, ctx.y + 8);
-  doc.text(`Reporting year: ${year}`, ctx.margin + 5, ctx.y + 14);
-  ctx.y += 25;
+  sectionTitle(ctx, "Report certification", "", 30);
+  certificationPanel(ctx, [
+    "This Annual / AGM report was generated electronically from Fund Manager records.",
+    `Reporting year: ${year}. Active totals exclude voided and reversed transactions.`,
+    "Detailed adjustments remain included in the report for audit transparency.",
+  ]);
 
   addFooters(ctx);
   const filename=`${fileSlug(brand.short_name)}-annual-agm-report-${year}.pdf`;

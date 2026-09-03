@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import { api } from "../api";
-import { brandingFrom, C, createReport, fileSlug, infoPanel, money, PDF_TYPE, sectionTitle, statusColor, summaryCards, table, addFooters } from "./exportCore";
+import { brandingFrom, C, createReport, fileSlug, infoPanel, money, PDF_TYPE, sectionTitle, statusColor, summaryCards, table, addFooters, reportMeta, progressBar, certificationPanel } from "./exportCore";
 import { sendExportToTelegram } from "./exportDelivery";
 
 export async function exportStatementCsv(member) {
@@ -24,7 +24,7 @@ export async function exportStatementPdf(member) {
   const st = await api.members.statement(member.id);
   const brand = await brandingFrom(st);
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
-  const ctx = createReport(doc, brand, "Member Statement", `${st.member.member_code} - ${st.member.name}`);
+  const ctx = createReport(doc, brand, "Member Statement", `${st.member.member_code} · ${st.member.name}`);
 
   const statuses = st.monthly_status || [];
   const approvedContributions = (st.contributions || []).filter(x => String(x.status).toLowerCase() === "approved");
@@ -32,6 +32,13 @@ export async function exportStatementPdf(member) {
   const totalDonations = (st.donations || []).reduce((s, x) => s + Number(x.amount || 0), 0);
   const outstanding = statuses.reduce((s, x) => s + Number(x.due || 0), 0);
   const paidMonths = statuses.filter(x => String(x.status).toLowerCase() === "paid").length;
+  const settledRate = statuses.length ? (paidMonths / statuses.length) * 100 : 0;
+
+  reportMeta(ctx, [
+    { label: "Member ID", value: st.member.member_code },
+    { label: "Account", value: Number(st.member.active ?? 1) ? "Active" : "Inactive", color: Number(st.member.active ?? 1) ? C.green2 : C.red },
+    { label: "Statement scope", value: statuses.length ? `${statuses.length} month${statuses.length === 1 ? "" : "s"}` : "No obligations" },
+  ]);
 
   infoPanel(ctx, [
     ["Member", st.member.name],
@@ -46,6 +53,7 @@ export async function exportStatementPdf(member) {
     { label: "Donations", value: money(totalDonations) },
     { label: "Paid months", value: `${paidMonths} / ${statuses.length || 0}` },
   ]);
+  if (statuses.length) progressBar(ctx, { label: "Obligation completion", value: settledRate, rightLabel: `${paidMonths} of ${statuses.length} months fully paid` });
 
   sectionTitle(ctx, "Monthly status", "Monthly obligation and payment status from the member's joining month to the current month.");
   table(ctx,
@@ -100,6 +108,12 @@ export async function exportStatementPdf(member) {
       st.balance_history || []
     );
   }
+
+  sectionTitle(ctx, "Statement note", "", 24);
+  certificationPanel(ctx, [
+    "This statement was generated electronically from the Fund Manager ledger.",
+    "Approved transactions and current member obligations are reflected at the time of generation.",
+  ]);
 
   addFooters(ctx);
   const filename=`${fileSlug(brand.short_name)}-${st.member.member_code}-statement.pdf`;

@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import { api } from "../api";
-import { C, createReport, fileSlug, infoPanel, money, sectionTitle, statusColor, summaryCards, table, addFooters } from "./exportCore";
+import { C, createReport, fileSlug, infoPanel, money, sectionTitle, statusColor, summaryCards, table, addFooters, reportMeta, progressBar, certificationPanel } from "./exportCore";
 import { sendExportToTelegram } from "./exportDelivery";
 
 export async function exportFundPdf({ month, monthLabel, summary }) {
@@ -10,13 +10,21 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
   const expected = Number(summary.collection?.expected || 0);
   const collected = Number(summary.collection?.collected || 0);
   const rate = expected > 0 ? Math.min(100, collected / expected * 100) : 100;
+  const closed = Boolean(summary?.closed || summary?.isClosed || summary?.snapshot);
+
+  reportMeta(ctx, [
+    { label: "Reporting period", value: monthLabel || month },
+    { label: "Month status", value: closed ? "Closed" : "Current / open", color: closed ? C.green2 : C.amber },
+    { label: "Currency", value: "Maldivian Rufiyaa (MVR)" },
+  ]);
 
   summaryCards(ctx, [
     { label: "Opening balance", value: money(summary.openingBalance), highlight: true },
     { label: "Closing balance", value: money(summary.closingBalance ?? summary.fundBalance), highlight: true, color: C.green },
     { label: "Net cash change", value: `${Number(summary.net || 0) >= 0 ? "+" : "-"} ${money(Math.abs(Number(summary.net || 0)))}`, color: Number(summary.net || 0) >= 0 ? C.green2 : C.red },
-    { label: "Collection rate", value: `${rate.toFixed(1)}%`, color: C.green2 },
+    { label: "Collection rate", value: `${rate.toFixed(1)}%`, color: rate >= 80 ? C.green2 : rate >= 50 ? C.amber : C.red },
   ]);
+  progressBar(ctx, { label: "Contribution collection", value: rate, rightLabel: expected > 0 ? `${money(collected)} of ${money(expected)}` : "No contribution target" });
 
   sectionTitle(ctx, "Cash movement");
   infoPanel(ctx, [
@@ -128,6 +136,13 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
       summary.outstanding.members
     );
   }
+
+  sectionTitle(ctx, "Report note", "", 24);
+  certificationPanel(ctx, [
+    `Reporting period: ${monthLabel || month}.`,
+    "This report was generated electronically from Fund Manager financial records.",
+    "Voided and reversed transactions are excluded from active totals and retained separately for audit history.",
+  ]);
 
   addFooters(ctx);
   const filename=`${fileSlug(brand.short_name)}-fund-report-${month}.pdf`;
