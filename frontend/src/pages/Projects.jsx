@@ -27,7 +27,7 @@ export default function Projects({ admin }) {
         <button type="button" onClick={()=>setShowAdd(true)} style={{...smallBtn("var(--primary-text)"),padding:"8px 11px"}}><Plus size={14}/> New project</button>
       </div>
       <div className="expense-filter-row sans">{FILTERS.map(([v,l])=><button type="button" key={v} onClick={()=>setFilter(v)} className={filter===v?"expense-filter-chip active":"expense-filter-chip"}>{l}</button>)}</div>
-      <div className="expense-search sans"><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search project name, code or responsible member"/>{query&&<button type="button" onClick={()=>setQuery("")}><X size={14}/></button>}</div>
+      <div className="expense-search sans" style={{marginBottom:14}}><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search project name, code or responsible member"/>{query&&<button type="button" onClick={()=>setQuery("")}><X size={14}/></button>}</div>
     </div>
     <MessageBanner>{message}</MessageBanner><MessageBanner tone="error">{error}</MessageBanner>
     {rows===null?<Center>Loading projects…</Center>:rows.length===0?<Center>No projects found.</Center>:rows.map(p=><button type="button" key={p.id} onClick={()=>setSelected(p)} className="expense-row" style={{alignItems:"flex-start"}}>
