@@ -154,11 +154,15 @@ CREATE TABLE IF NOT EXISTS expense_documents (
   telegram_message_id INTEGER,
   telegram_chat_id TEXT,
   original_filename TEXT NOT NULL,
+  display_name TEXT,
   mime_type TEXT,
   file_size INTEGER,
   document_type TEXT,
   uploaded_by INTEGER NOT NULL REFERENCES admins(id),
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  removed_at TEXT,
+  removed_by INTEGER REFERENCES admins(id),
+  removal_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS exemptions (
@@ -416,3 +420,6 @@ CREATE INDEX IF NOT EXISTS idx_contributions_status_approved_at ON contributions
 CREATE INDEX IF NOT EXISTS idx_expenses_status_created ON expenses(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_donations_status_created ON donations(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_registrations_status_requested ON member_registration_requests(status, requested_at);
+
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (19,'expense_document_management');
+CREATE INDEX IF NOT EXISTS idx_expense_documents_active ON expense_documents(expense_id, removed_at, created_at DESC);

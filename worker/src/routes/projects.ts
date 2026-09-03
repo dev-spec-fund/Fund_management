@@ -63,7 +63,8 @@ projectsRoute.get('/:id', requireAdmin, async c=>{
   const [expenses,audit] = await Promise.all([
     c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.void_reason,e.created_at,e.approved_at,e.voided_at,
       COALESCE(cat.name,'Uncategorised') category,COALESCE(a.name,'-') logged_by_name,
-      e.fund_override,e.fund_override_reason,e.budget_override_reason
+      e.fund_override,e.fund_override_reason,e.budget_override_reason,
+      (SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id=e.id AND d.removed_at IS NULL) document_count
     FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id LEFT JOIN admins a ON a.id=e.logged_by
     WHERE e.project_id=? ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC`).bind(id).all<any>(),
     c.env.DB.prepare(`SELECT al.id,al.action,al.created_at,al.detail,COALESCE(a.name,'System') admin_name

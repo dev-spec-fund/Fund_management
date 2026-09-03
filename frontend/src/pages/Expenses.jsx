@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Search, Pencil, RotateCcw, Check, X, Paperclip, FileText, Send, Eye } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search, Pencil, RotateCcw, Check, X, Paperclip, FileText, Send, Eye, Trash2, Tag } from "lucide-react";
 import { api } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, MessageBanner, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
@@ -55,6 +55,7 @@ async function expenseMutationWithOverrides(run, payload = {}) {
 export default function Expenses({ admin }) {
   const [month, setMonth] = useState(currentMonthValue());
   const [filter, setFilter] = useState("all");
+  const [documentsFilter, setDocumentsFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [rows, setRows] = useState(null);
@@ -71,7 +72,7 @@ export default function Expenses({ admin }) {
   const load = async () => {
     setError("");
     try {
-      const data = await api.expenses.list({ month, status: filter === "all" ? "" : filter, q: debouncedQuery });
+      const data = await api.expenses.list({ month, status: filter === "all" ? "" : filter, q: debouncedQuery, documents: documentsFilter === "all" ? "" : documentsFilter });
       setRows(data);
     } catch (e) {
       setError(e.message || "Could not load expenses");
@@ -79,7 +80,7 @@ export default function Expenses({ admin }) {
     }
   };
 
-  useEffect(() => { setRows(null); load(); }, [month, filter, debouncedQuery]);
+  useEffect(() => { setRows(null); load(); }, [month, filter, debouncedQuery, documentsFilter]);
 
   const totals = useMemo(() => {
     const base = rows || [];
@@ -114,6 +115,9 @@ export default function Expenses({ admin }) {
         <div className="expense-filter-row sans">
           {FILTERS.map(([value, label]) => <button type="button" key={value} onClick={() => setFilter(value)} className={filter === value ? "expense-filter-chip active" : "expense-filter-chip"}>{label}</button>)}
         </div>
+        <div className="expense-filter-row sans" style={{ marginTop: 6 }}>
+          {[['all','All docs'],['with','Has documents'],['without','No documents']].map(([value,label]) => <button type="button" key={value} onClick={() => setDocumentsFilter(value)} className={documentsFilter===value ? "expense-filter-chip active" : "expense-filter-chip"}>{label}</button>)}
+        </div>
 
         <div className="expense-search sans">
           <Search size={14} />
@@ -133,7 +137,7 @@ export default function Expenses({ admin }) {
             <div className="sans" style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
               <strong style={{ fontSize: 13 }}>{row.description}</strong>
               <span style={{ fontSize: 9, padding: "3px 6px", borderRadius: 999, background: tone.bg, color: tone.color, border: `1px solid ${tone.border}` }}>{statusLabel(row)}</span>
-              {Number(row.document_count||0)>0 && <span title={`${row.document_count} supporting document${Number(row.document_count)===1?"":"s"}`} style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:9, color:"var(--muted)" }}><Paperclip size={10} />{row.document_count}</span>}
+              {Number(row.document_count||0)>0 ? <span title={`${row.document_count} supporting document${Number(row.document_count)===1?"":"s"}`} style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:9, color:"var(--muted)" }}><Paperclip size={10} />{row.document_count}</span> : <span title="No supporting document" style={{ fontSize:9, color:"var(--warning)" }}>No document</span>}
             </div>
             <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 4 }}>
               {row.expense_date || row.transaction_month} · {row.category_name || (row.project_name ? "Project expense / Uncategorised" : "Uncategorised")}{row.project_name ? ` · ${row.project_name}` : ""} · {row.txn_id || `#${row.id}`}
@@ -162,6 +166,7 @@ function ExpenseForm({ admin, onClose, onSaved, row = null }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [documents, setDocuments] = useState([]);
+  const [documentType, setDocumentType] = useState("Receipt");
   useEffect(() => { api.expenses.categories().then(setCategories).catch(() => {}); api.projects.list({ status: "active" }).then(setProjects).catch(() => {}); }, []);
 
   const save = async () => {
@@ -176,7 +181,7 @@ function ExpenseForm({ admin, onClose, onSaved, row = null }) {
       const expenseId = row?.id || result?.id;
       if (documents.length && expenseId) {
         try {
-          for (const file of documents) await api.expenses.uploadDocument(expenseId, file);
+          for (const file of documents) await api.expenses.uploadDocument(expenseId, file, documentType);
         } catch (uploadError) {
           setError(`Expense saved, but a document could not be saved to Telegram: ${uploadError.message || "Upload failed"}. Open the expense and retry.`);
           return;
@@ -204,6 +209,9 @@ function ExpenseForm({ admin, onClose, onSaved, row = null }) {
     <Field label="Expense date" type="date" value={form.expense_date} onChange={(v) => setForm({ ...form, expense_date: v })} />
     <div className="sans" style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 5 }}>Supporting documents (optional)</div>
+      <select className="sans" value={documentType} onChange={(e)=>setDocumentType(e.target.value)} style={{ width:"100%", border:"1px solid var(--border-strong)", borderRadius:10, padding:"9px 10px", marginBottom:7, background:"var(--card)", color:"var(--text)" }}>
+        {['Invoice','Receipt','Payment Slip','Quotation','Other'].map(t=><option key={t} value={t}>{t}</option>)}
+      </select>
       <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, border: "1px dashed var(--border-strong)", borderRadius: 10, padding: "10px 12px", cursor: "pointer", background: "var(--card)", fontSize: 12 }}>
         <Paperclip size={14} /> {documents.length ? `${documents.length} file${documents.length===1?"":"s"} selected` : "Attach receipt, invoice, slip or PDF"}
         <input type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => setDocuments(Array.from(e.target.files || []).slice(0, 10))} />
@@ -221,6 +229,7 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const [error, setError] = useState("");
   const [documents, setDocuments] = useState(null);
   const [docBusy, setDocBusy] = useState(false);
+  const [addDocumentType, setAddDocumentType] = useState("Receipt");
   const canViewDocuments = ["owner","super_admin","treasurer"].includes(String(admin?.role || ""));
 
   const loadDocuments = async () => { if (!canViewDocuments) return setDocuments([]); try { setDocuments(await api.expenses.documents(row.id)); } catch (e) { setError(e.message || "Could not load documents"); setDocuments([]); } };
@@ -229,7 +238,7 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const addDocuments = async (files) => {
     const selected = Array.from(files || []).slice(0, 10); if (!selected.length) return;
     setDocBusy(true); setError("");
-    try { for (const file of selected) await api.expenses.uploadDocument(row.id, file); await loadDocuments(); }
+    try { for (const file of selected) await api.expenses.uploadDocument(row.id, file, addDocumentType); await loadDocuments(); }
     catch (e) { setError(e.message || "Could not save document to Telegram"); } finally { setDocBusy(false); }
   };
   const openDocument = async (doc) => {
@@ -241,6 +250,25 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
     setDocBusy(true); setError("");
     try { await api.expenses.sendDocumentToTelegram(row.id, doc.id); }
     catch (e) { setError(e.message || "Could not send document to Telegram"); } finally { setDocBusy(false); }
+  };
+  const editDocument = async (doc) => {
+    const label = prompt("Document label:", doc.display_name || doc.original_filename || "");
+    if (label === null || !label.trim()) return;
+    const type = prompt("Document type: Invoice, Receipt, Payment Slip, Quotation or Other", doc.document_type || "Other");
+    if (type === null) return;
+    const valid = ['Invoice','Receipt','Payment Slip','Quotation','Other'];
+    const normalized = valid.find(v => v.toLowerCase() === type.trim().toLowerCase());
+    if (!normalized) return setError("Choose a valid document type: Invoice, Receipt, Payment Slip, Quotation or Other.");
+    setDocBusy(true); setError("");
+    try { await api.expenses.updateDocument(row.id, doc.id, { display_name: label.trim(), document_type: normalized }); await loadDocuments(); }
+    catch (e) { setError(e.message || "Could not update document"); } finally { setDocBusy(false); }
+  };
+  const removeDocument = async (doc) => {
+    const reason = prompt("Reason for removing this document from the expense:");
+    if (!reason || reason.trim().length < 3) return;
+    setDocBusy(true); setError("");
+    try { await api.expenses.removeDocument(row.id, doc.id, reason.trim()); await loadDocuments(); }
+    catch (e) { setError(e.message || "Could not remove document"); } finally { setDocBusy(false); }
   };
 
   if (editing) return <ExpenseForm admin={admin} row={row} onClose={onClose} onSaved={onSaved} />;
@@ -273,21 +301,25 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
     {canViewDocuments && <div className="sans" style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 12, marginBottom: 14, background: "var(--card)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><Paperclip size={14} /> Supporting documents</div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}><select className="sans" value={addDocumentType} onChange={e=>setAddDocumentType(e.target.value)} disabled={docBusy} style={{border:"1px solid var(--border-strong)",borderRadius:8,padding:"6px 7px",background:"var(--card)",color:"var(--text)",fontSize:10}}>{['Invoice','Receipt','Payment Slip','Quotation','Other'].map(t=><option key={t} value={t}>{t}</option>)}</select>
         <label style={{ ...smallBtn("var(--primary-text)"), cursor: docBusy ? "wait" : "pointer", padding: "6px 9px" }}>
           <Plus size={12} /> Add
           <input disabled={docBusy} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => { addDocuments(e.target.files); e.target.value=""; }} />
-        </label>
+        </label></div>
       </div>
       {documents === null ? <div style={{ fontSize: 11, color: "var(--soft)" }}>Loading documents…</div> : documents.length === 0 ? <div style={{ fontSize: 11, color: "var(--soft)" }}>No documents attached.</div> : documents.map((doc) => <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--divider)", padding: "8px 0" }}>
         <FileText size={15} style={{ flex: "0 0 auto" }} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.original_filename}</div>
-          <div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{doc.uploaded_by_name || "Admin"} · {doc.created_at ? new Date(doc.created_at.replace(" ","T")+"Z").toLocaleString() : ""}{doc.file_size ? ` · ${(Number(doc.file_size)/1024/1024).toFixed(Number(doc.file_size)>1048576?1:2)} MB` : ""}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.display_name || doc.original_filename}</div>
+          <div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{doc.document_type || "Other"} · {doc.uploaded_by_name || "Admin"} · {doc.created_at ? new Date(doc.created_at.replace(" ","T")+"Z").toLocaleString() : ""}{doc.file_size ? ` · ${(Number(doc.file_size)/1024/1024).toFixed(Number(doc.file_size)>1048576?1:2)} MB` : ""}</div>
         </div>
         <button type="button" disabled={docBusy} title="Open document" onClick={() => openDocument(doc)} style={{ ...smallBtn("var(--primary-text)"), padding: 6 }}><Eye size={13} /></button>
         <button type="button" disabled={docBusy} title="Send to my Telegram" onClick={() => sendDocument(doc)} style={{ ...smallBtn("var(--primary-text)"), padding: 6 }}><Send size={13} /></button>
+        <button type="button" disabled={docBusy} title="Edit document label/type" onClick={() => editDocument(doc)} style={{ ...smallBtn("var(--primary-text)"), padding: 6 }}><Tag size={13} /></button>
+        <button type="button" disabled={docBusy} title="Remove document" onClick={() => removeDocument(doc)} style={{ ...smallBtn("var(--danger)"), padding: 6 }}><Trash2 size={13} /></button>
       </div>)}
     </div>}
+    {canViewDocuments && documents?.length === 0 && <div className="sans" style={{ fontSize:10, color:"var(--warning)", marginBottom:12 }}>No supporting document is attached to this expense. This is only a warning; saving/posting is still allowed.</div>}
     {!canViewDocuments && <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginBottom: 12 }}>Supporting expense documents are restricted to finance admins.</div>}
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
       {row.status !== "reversed" && row.status !== "voided" && <button type="button" disabled={busy} onClick={() => setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13} /> Edit</button>}

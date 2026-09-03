@@ -270,11 +270,12 @@ export const api = {
   },
 
   expenses: {
-    list: ({ month = "", status = "", q = "" } = {}) => {
+    list: ({ month = "", status = "", q = "", documents = "" } = {}) => {
       const params = new URLSearchParams();
       if (month) params.set("month", month);
       if (status) params.set("status", status);
       if (q) params.set("q", q);
+      if (documents) params.set("documents", documents);
       const query = params.toString();
       return request(`/api/expenses${query ? `?${query}` : ""}`);
     },
@@ -292,6 +293,8 @@ export const api = {
     },
     downloadDocument: (expenseId, documentId) => downloadBlob(`/api/expenses/${expenseId}/documents/${documentId}/file`),
     sendDocumentToTelegram: (expenseId, documentId) => request(`/api/expenses/${expenseId}/documents/${documentId}/send-to-telegram`, { method: "POST" }),
+    updateDocument: (expenseId, documentId, data) => request(`/api/expenses/${expenseId}/documents/${documentId}`, { method: "PATCH", body: JSON.stringify(data) }),
+    removeDocument: (expenseId, documentId, reason) => request(`/api/expenses/${expenseId}/documents/${documentId}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
     categories: () => request("/api/expenses/categories"),
     addCategory: (name) => request("/api/expenses/categories", { method: "POST", body: JSON.stringify({ name }) }),
     updateCategory: (id, data) => request(`/api/expenses/categories/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

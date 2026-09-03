@@ -13,17 +13,21 @@ expensesRoute.get("/", requireAdmin, async (c) => {
   const month=String(c.req.query("month")||"").trim();
   const status=String(c.req.query("status")||"").trim();
   const q=String(c.req.query("q")||"").trim().slice(0,100);
+  const documents=String(c.req.query("documents")||"").trim();
   if(month && !validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
   if(status && !["pending","approved","reversed","voided"].includes(status)) return c.json({error:"Invalid expense status"},400);
+  if(documents && !["with","without"].includes(documents)) return c.json({error:"Invalid documents filter"},400);
   const where:string[]=[]; const vals:any[]=[];
   if(month){where.push("e.transaction_month=?");vals.push(month);}
   if(status){where.push("e.status=?");vals.push(status);}
   if(q){where.push("(e.description LIKE ? OR e.txn_id LIKE ? OR c.name LIKE ? OR p.name LIKE ?)");const like=`%${q}%`;vals.push(like,like,like,like);}
+  if(documents==="with") where.push("EXISTS (SELECT 1 FROM expense_documents fd WHERE fd.expense_id=e.id AND fd.removed_at IS NULL)");
+  if(documents==="without") where.push("NOT EXISTS (SELECT 1 FROM expense_documents fd WHERE fd.expense_id=e.id AND fd.removed_at IS NULL)");
   const rows = await c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.category_id,e.amount,e.receipt_file_id,e.logged_by,e.edited_by,e.expense_date,e.transaction_month,
       e.status,e.approval_required,e.approved_by,e.approved_at,e.voided_by,e.voided_at,e.void_reason,e.created_at,e.updated_at,
       e.project_id,e.fund_override,e.fund_override_reason,e.fund_override_by,e.fund_override_at,e.fund_balance_before,e.budget_override_reason,e.budget_override_by,
       c.name category_name,p.name project_name,p.project_code,la.name logged_by_name,aa.name approved_by_name,
-      (SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id=e.id) document_count
+      (SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id=e.id AND d.removed_at IS NULL) document_count
     FROM expenses e LEFT JOIN expense_categories c ON c.id=e.category_id
     LEFT JOIN projects p ON p.id=e.project_id
     LEFT JOIN admins la ON la.id=e.logged_by LEFT JOIN admins aa ON aa.id=e.approved_by
@@ -89,10 +93,10 @@ expensesRoute.get("/:id/documents", requireFinance, async (c) => {
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param("id")); if(!Number.isInteger(id)||id<=0) return c.json({error:"Invalid expense"},400);
   const exists=await c.env.DB.prepare("SELECT id FROM expenses WHERE id=?").bind(id).first(); if(!exists)return c.json({error:"Expense not found"},404);
-  const rows=await c.env.DB.prepare(`SELECT d.id,d.expense_id,d.original_filename,d.mime_type,d.file_size,d.document_type,d.created_at,
+  const rows=await c.env.DB.prepare(`SELECT d.id,d.expense_id,d.original_filename,COALESCE(NULLIF(d.display_name,''),d.original_filename) display_name,d.mime_type,d.file_size,d.document_type,d.created_at,
       a.name uploaded_by_name
     FROM expense_documents d LEFT JOIN admins a ON a.id=d.uploaded_by
-    WHERE d.expense_id=? ORDER BY d.created_at DESC,d.id DESC`).bind(id).all();
+    WHERE d.expense_id=? AND d.removed_at IS NULL ORDER BY d.created_at DESC,d.id DESC`).bind(id).all();
   return c.json(rows.results);
 });
 
@@ -117,17 +121,17 @@ expensesRoute.post("/:id/documents", requireFinance, async (c) => {
   const messageId=Number(sent?.result?.message_id||0)||null;
   const chatId=String(sent?.result?.chat?.id ?? admin.telegram_id);
   const result=await c.env.DB.prepare(`INSERT INTO expense_documents
-    (expense_id,telegram_file_id,telegram_file_unique_id,telegram_message_id,telegram_chat_id,original_filename,mime_type,file_size,document_type,uploaded_by)
-    VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(id,fileId,tgDoc?.file_unique_id||null,messageId,chatId,filename,mime,Number(tgDoc?.file_size||value.size||0),documentType,admin.id).run();
+    (expense_id,telegram_file_id,telegram_file_unique_id,telegram_message_id,telegram_chat_id,original_filename,display_name,mime_type,file_size,document_type,uploaded_by)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?)`).bind(id,fileId,tgDoc?.file_unique_id||null,messageId,chatId,filename,filename,mime,Number(tgDoc?.file_size||value.size||0),documentType,admin.id).run();
   const docId=Number(result.meta.last_row_id);
   await auditEntity(c.env,admin.id,"expense_document_added","expense_document",docId,null,{expense_id:id,txn_id:expense.txn_id,filename,mime_type:mime,file_size:Number(value.size||0),document_type:documentType});
-  return c.json({id:docId,expense_id:id,original_filename:filename,mime_type:mime,file_size:Number(tgDoc?.file_size||value.size||0),document_type:documentType,created_at:new Date().toISOString()},201);
+  return c.json({id:docId,expense_id:id,original_filename:filename,display_name:filename,mime_type:mime,file_size:Number(tgDoc?.file_size||value.size||0),document_type:documentType,created_at:new Date().toISOString()},201);
 });
 
 expensesRoute.get("/:id/documents/:docId/file", requireFinance, async (c) => {
   await ensureOperationalSchema(c.env);
   const expenseId=Number(c.req.param("id")); const docId=Number(c.req.param("docId"));
-  const doc=await c.env.DB.prepare("SELECT * FROM expense_documents WHERE id=? AND expense_id=?").bind(docId,expenseId).first<any>();
+  const doc=await c.env.DB.prepare("SELECT * FROM expense_documents WHERE id=? AND expense_id=? AND removed_at IS NULL").bind(docId,expenseId).first<any>();
   if(!doc)return c.json({error:"Document not found"},404);
   const file=await downloadTelegramFile(c.env,String(doc.telegram_file_id));
   if(!file)return c.json({error:"Could not retrieve document from Telegram"},502);
@@ -138,11 +142,39 @@ expensesRoute.get("/:id/documents/:docId/file", requireFinance, async (c) => {
 expensesRoute.post("/:id/documents/:docId/send-to-telegram", requireFinance, async (c) => {
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!; const expenseId=Number(c.req.param("id")); const docId=Number(c.req.param("docId"));
-  const doc=await c.env.DB.prepare(`SELECT d.*,e.txn_id,e.description FROM expense_documents d JOIN expenses e ON e.id=d.expense_id WHERE d.id=? AND d.expense_id=?`).bind(docId,expenseId).first<any>();
+  const doc=await c.env.DB.prepare(`SELECT d.*,e.txn_id,e.description FROM expense_documents d JOIN expenses e ON e.id=d.expense_id WHERE d.id=? AND d.expense_id=? AND d.removed_at IS NULL`).bind(docId,expenseId).first<any>();
   if(!doc)return c.json({error:"Document not found"},404);
   const sent=await sendStoredDocument(c.env,admin.telegram_id,String(doc.telegram_file_id),`Expense document · ${doc.txn_id || `#${expenseId}`}\n${String(doc.description||"").slice(0,180)}`);
   if(!sent) return c.json({error:"Could not send document to Telegram"},502);
   await auditEntity(c.env,admin.id,"expense_document_sent_to_telegram","expense_document",docId,null,{expense_id:expenseId,filename:doc.original_filename});
+  return c.json({ok:true});
+});
+
+expensesRoute.patch("/:id/documents/:docId", requireFinance, async (c) => {
+  await ensureOperationalSchema(c.env);
+  const admin=c.get("admin")!; const expenseId=Number(c.req.param("id")); const docId=Number(c.req.param("docId"));
+  const before=await c.env.DB.prepare("SELECT * FROM expense_documents WHERE id=? AND expense_id=? AND removed_at IS NULL").bind(docId,expenseId).first<any>();
+  if(!before)return c.json({error:"Document not found"},404);
+  const body=await c.req.json<any>();
+  const displayName=body.display_name===undefined ? (before.display_name||before.original_filename) : boundedText(body.display_name,180,true);
+  const allowedTypes=new Set(["Invoice","Receipt","Payment Slip","Quotation","Other"]);
+  const documentType=body.document_type===undefined ? (before.document_type||"Other") : boundedText(body.document_type,60,true);
+  if(!displayName)return c.json({error:"Document label is required"},400);
+  if(!allowedTypes.has(String(documentType)))return c.json({error:"Invalid document type"},400);
+  await c.env.DB.prepare("UPDATE expense_documents SET display_name=?,document_type=? WHERE id=? AND expense_id=?").bind(displayName,documentType,docId,expenseId).run();
+  await auditEntity(c.env,admin.id,"expense_document_updated","expense_document",docId,{expense_id:expenseId,display_name:before.display_name||before.original_filename,document_type:before.document_type||null},{expense_id:expenseId,display_name:displayName,document_type:documentType});
+  return c.json({ok:true,id:docId,display_name:displayName,document_type:documentType});
+});
+
+expensesRoute.delete("/:id/documents/:docId", requireFinance, async (c) => {
+  await ensureOperationalSchema(c.env);
+  const admin=c.get("admin")!; const expenseId=Number(c.req.param("id")); const docId=Number(c.req.param("docId"));
+  const doc=await c.env.DB.prepare("SELECT * FROM expense_documents WHERE id=? AND expense_id=? AND removed_at IS NULL").bind(docId,expenseId).first<any>();
+  if(!doc)return c.json({error:"Document not found"},404);
+  const body=await c.req.json<any>().catch(()=>({})); const reason=boundedText(body.reason,500,true);
+  if(!reason || reason.length<3)return c.json({error:"Removal reason is required"},400);
+  await c.env.DB.prepare("UPDATE expense_documents SET removed_at=datetime('now'),removed_by=?,removal_reason=? WHERE id=? AND expense_id=? AND removed_at IS NULL").bind(admin.id,reason,docId,expenseId).run();
+  await auditEntity(c.env,admin.id,"expense_document_removed","expense_document",docId,{expense_id:expenseId,filename:doc.original_filename,display_name:doc.display_name||doc.original_filename,document_type:doc.document_type,mime_type:doc.mime_type,file_size:doc.file_size,telegram_file_id:doc.telegram_file_id},{expense_id:expenseId,removed:true,reason});
   return c.json({ok:true});
 });
 
