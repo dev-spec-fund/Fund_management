@@ -17,11 +17,11 @@ test("member activity has privacy-safe branch", () => {
 });
 
 test("backup contains contribution allocations and meetings", () => {
-  const admin=read("src/routes/admin.ts");
-  assert.match(admin,/contribution_allocations/);
-  assert.match(admin,/expense_documents/);
-  assert.match(admin,/meeting_rsvps/);
-  assert.match(admin,/schema_migrations/);
+  const system=read("src/routes/admin/system.ts");
+  assert.match(system,/contribution_allocations/);
+  assert.match(system,/expense_documents/);
+  assert.match(system,/meeting_rsvps/);
+  assert.match(system,/schema_migrations/);
 });
 
 test("allocation planner prefetches future state", () => {
