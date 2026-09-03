@@ -127,10 +127,19 @@ governanceRoute.post('/reverse', requireFinance, async c=>{
   const existing=await c.env.DB.prepare("SELECT reversal_id FROM financial_reversals WHERE entity_type=? AND entity_id=?").bind(type,id).first<any>();
   if(existing) return c.json({error:`Already reversed as ${existing.reversal_id}`},409);
   const reversalId=await nextReversalId(c.env);
-  await c.env.DB.batch([
-    c.env.DB.prepare(`UPDATE ${cfg.table} SET status='reversed' WHERE id=?`).bind(id),
-    c.env.DB.prepare("INSERT INTO financial_reversals(reversal_id,entity_type,entity_id,original_txn_id,amount,month,reason,reversed_by) VALUES(?,?,?,?,?,?,?,?)").bind(reversalId,type,id,row.txn_id||null,n(row.amount),month||null,reason,admin.id)
-  ]);
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE ${cfg.table} SET status='reversed' WHERE id=?`).bind(id),
+      c.env.DB.prepare("INSERT INTO financial_reversals(reversal_id,entity_type,entity_id,original_txn_id,amount,month,reason,reversed_by) VALUES(?,?,?,?,?,?,?,?)").bind(reversalId,type,id,row.txn_id||null,n(row.amount),month||null,reason,admin.id)
+    ]);
+  } catch (error:any) {
+    // The unique (entity_type, entity_id) index is the final guard for two
+    // near-simultaneous reversal requests. Return a stable conflict instead of
+    // exposing a D1 constraint error to the Mini App.
+    const duplicate=await c.env.DB.prepare("SELECT reversal_id FROM financial_reversals WHERE entity_type=? AND entity_id=?").bind(type,id).first<any>();
+    if(duplicate) return c.json({error:`Already reversed as ${duplicate.reversal_id}`},409);
+    throw error;
+  }
   await auditEntity(c.env,admin.id,'financial_transaction_reversed',type,id,row,{...row,status:'reversed',reversal_id:reversalId,reason});
   return c.json({ok:true,reversal_id:reversalId});
 });
