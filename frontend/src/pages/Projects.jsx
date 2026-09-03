@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Pencil, CheckCircle2, RotateCcw, X, History, WalletCards, Paperclip } from "lucide-react";
+import { Plus, Search, Pencil, CheckCircle2, RotateCcw, X, History, WalletCards, Paperclip, ChevronDown } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { LoadingState, EmptyState, MessageBanner, PrimaryButton, smallBtn } from "../components/Shared";
@@ -66,40 +66,84 @@ function ProjectForm({admin,onClose,onSaved,project=null}){
 
 function ProjectDetails({project,admin,onClose,onSaved}){
   const [data,setData]=useState(null),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
+  const [showDonations,setShowDonations]=useState(true),[showExpenses,setShowExpenses]=useState(true),[showAdjustments,setShowAdjustments]=useState(false),[showHistory,setShowHistory]=useState(false);
   const load=()=>api.projects.get(project.id).then(setData).catch(e=>setError(e.message));
   useEffect(()=>{load();},[project.id]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses")||path?.startsWith("/api/donations"))load();}),[project.id]);
   if(editing)return <ProjectForm admin={admin} project={data||project} onClose={()=>setEditing(false)} onSaved={onSaved}/>;
   const p=data||project;
   const expenses=p.expenses||[];
-  const approved=expenses.filter(e=>e.status==="approved");
+  const currentExpenses=expenses.filter(e=>!adjustmentStatuses.has(String(e.status)));
   const adjustments=expenses.filter(e=>adjustmentStatuses.has(String(e.status)));
+  const donations=p.donations||[];
+  const donationTotal=donations.reduce((sum,d)=>sum+Number(d.amount||0),0);
+  const expenseTotal=currentExpenses.reduce((sum,e)=>sum+Number(e.amount||0),0);
   const canEdit=!["completed","cancelled"].includes(p.status)||isSuper(admin);
   const changeStatus=async(status)=>{let cancel_reason=null;if(status==="cancelled"){cancel_reason=prompt("Reason for cancelling this project:")||"";if(cancel_reason.trim().length<3)return;}setBusy(true);setError("");try{await api.projects.update(p.id,{status,cancel_reason});await onSaved(status==="active"?"Project reopened/activated":status==="completed"?"Project completed":"Project cancelled");}catch(e){setError(e.message);}finally{setBusy(false);}};
   return <Modal onClose={onClose} closeDisabled={busy} title={`${p.project_code} · ${p.name}`}><MessageBanner tone="error">{error}</MessageBanner>
-    <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:12}}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-        <Metric label="Status" value={String(p.status||"").toUpperCase()} color={tone(p.status)}/><Metric label="Total spent" value={`MVR ${fmt(p.spent)}`}/>
-        <Metric label="Donations received" value={`MVR ${fmt(p.donation_received||0)}`} color="var(--success)"/><Metric label="Expenses" value={String(p.expense_count||approved.length)}/>
+    <div className="project-detail-summary">
+      <div className="project-detail-topline sans">
+        <span className="project-status-pill" style={{color:tone(p.status)}}>{String(p.status||"").toUpperCase()}</span>
+        {p.responsible_member_name&&<span>{p.responsible_member_name}</span>}
       </div>
-      {p.budget==null?<div className="sans" style={{fontSize:11,color:"var(--muted)",padding:"8px 0"}}><WalletCards size={13} style={{verticalAlign:"-2px",marginRight:5}}/>Open-cost project — no budget limit set.</div>:<><Detail label="Budget" value={`MVR ${fmt(p.budget)}`}/><Detail label="Remaining" value={`MVR ${fmt(p.remaining_budget)}`}/><Detail label="Budget used" value={`${Number(p.budget_used_pct||0).toFixed(1)}%`}/><Progress value={Number(p.budget_used_pct||0)} large/></>}
-      <Detail label="Responsible" value={p.responsible_member_name||"Not assigned"}/><Detail label="Start" value={p.start_date||"—"}/><Detail label="Target end" value={p.target_end_date||"—"}/>{p.cancel_reason&&<Detail label="Cancellation reason" value={p.cancel_reason}/>} {p.description&&<div className="sans" style={{fontSize:11,color:"var(--muted)",lineHeight:1.5,marginTop:10}}>{p.description}</div>}
+
+      {p.budget==null
+        ? <div className="project-open-cost sans"><WalletCards size={14}/> Open-cost project — no budget limit set.</div>
+        : <>
+            <div className="project-finance-grid">
+              <ProjectFinanceMetric label="Budget" value={`MVR ${fmt(p.budget)}`}/>
+              <ProjectFinanceMetric label="Spent" value={`MVR ${fmt(p.spent)}`} tone="danger"/>
+              <ProjectFinanceMetric label="Remaining" value={`MVR ${fmt(p.remaining_budget)}`} tone={Number(p.remaining_budget)<0?"danger":"success"}/>
+            </div>
+            <div className="project-budget-progress sans"><span>{Number(p.budget_used_pct||0).toFixed(1)}% used</span>{Number(p.remaining_budget)<0&&<strong>Over budget MVR {fmt(Math.abs(Number(p.remaining_budget)))}</strong>}</div>
+            <Progress value={Number(p.budget_used_pct||0)} large/>
+          </>}
+
+      <div className="project-detail-meta">
+        <Detail label="Start" value={p.start_date||"—"}/><Detail label="Target end" value={p.target_end_date||"—"}/>
+      </div>
+      {p.cancel_reason&&<Detail label="Cancellation reason" value={p.cancel_reason}/>}
+      {p.description&&<div className="sans project-description">{p.description}</div>}
     </div>
 
-    {(p.donations||[]).length>0&&<><div className="sans" style={{fontSize:11,fontWeight:700,color:"var(--muted)",margin:"12px 0 7px"}}>PROJECT DONATIONS ({p.donations.length})</div>{p.donations.map(d=><div key={d.id} style={{display:"flex",justifyContent:"space-between",gap:10,borderTop:"1px solid var(--divider)",padding:"8px 0"}}><div className="sans" style={{fontSize:11,minWidth:0}}><b>{d.donor_name}</b><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{d.transaction_month} · {d.txn_id}{d.note?` · ${d.note}`:""}</div></div><b className="sans" style={{fontSize:11,whiteSpace:"nowrap",color:"var(--success)"}}>+ MVR {fmt(d.amount)}</b></div>)}</>}
+    <ProjectSectionHeader
+      label="Donations"
+      count={donations.length}
+      total={`MVR ${fmt(donationTotal)}`}
+      open={showDonations}
+      onClick={()=>setShowDonations(v=>!v)}
+    />
+    {showDonations&&(donations.length===0
+      ? <div className="sans project-section-empty">No project donations yet.</div>
+      : donations.map(d=><div key={d.id} className="project-transaction-row"><div className="sans project-transaction-main"><b>{d.donor_name}</b><div>{d.transaction_month} · {d.txn_id}{d.note?` · ${d.note}`:""}</div></div><b className="sans project-transaction-amount success">+ MVR {fmt(d.amount)}</b></div>))}
 
-    <ExpenseSection title={`PROJECT EXPENSES — APPROVED (${approved.length})`} rows={approved} empty="No approved project expenses yet."/>
-    {adjustments.length>0&&<ExpenseSection title="REVERSED / VOIDED ADJUSTMENTS" rows={adjustments} empty="" adjustment/>}
+    <ProjectSectionHeader
+      label="Expenses"
+      count={currentExpenses.length}
+      total={`MVR ${fmt(expenseTotal)}`}
+      open={showExpenses}
+      onClick={()=>setShowExpenses(v=>!v)}
+    />
+    {showExpenses&&<ExpenseSection rows={currentExpenses} empty="No project expenses yet."/>}
 
-    {(p.audit_history||[]).length>0&&<><div className="sans" style={{fontSize:11,fontWeight:700,color:"var(--muted)",margin:"15px 0 7px",display:"flex",alignItems:"center",gap:5}}><History size={13}/> PROJECT HISTORY</div>{p.audit_history.map(a=><div key={a.id} style={{borderTop:"1px solid var(--divider)",padding:"8px 0"}}><div className="sans" style={{fontSize:10,fontWeight:600}}>{auditLabel(a.action)}</div><div className="sans" style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{String(a.created_at||"").replace("T"," ").slice(0,16)} · {a.admin_name}{a.before_status&&a.after_status&&a.before_status!==a.after_status?` · ${a.before_status} → ${a.after_status}`:""}</div></div>)}</>}
+    {adjustments.length>0&&<>
+      <ProjectSectionHeader label="Reversed / voided" count={adjustments.length} open={showAdjustments} onClick={()=>setShowAdjustments(v=>!v)}/>
+      {showAdjustments&&<ExpenseSection rows={adjustments} empty="" adjustment/>}
+    </>}
+
+    {(p.audit_history||[]).length>0&&<>
+      <ProjectSectionHeader icon={<History size={13}/>} label="Project history" count={p.audit_history.length} open={showHistory} onClick={()=>setShowHistory(v=>!v)}/>
+      {showHistory&&p.audit_history.map(a=><div key={a.id} className="project-history-row"><div className="sans">{auditLabel(a.action)}</div><div className="sans">{String(a.created_at||"").replace("T"," ").slice(0,16)} · {a.admin_name}{a.before_status&&a.after_status&&a.before_status!==a.after_status?` · ${a.before_status} → ${a.after_status}`:""}</div></div>)}
+    </>}
 
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14}}>{canEdit&&<button type="button" disabled={busy} onClick={()=>setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13}/> Edit</button>}{["planned"].includes(p.status)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Activate</button>}{p.status==="active"&&<button type="button" disabled={busy} onClick={()=>changeStatus("completed")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Complete</button>}{!["cancelled"].includes(p.status)&&p.status!=="completed"&&<button type="button" disabled={busy} onClick={()=>changeStatus("cancelled")} style={smallBtn("var(--danger)")}><X size={13}/> Cancel</button>}{["completed","cancelled"].includes(p.status)&&isSuper(admin)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--primary-text)")}><RotateCcw size={13}/> Reopen</button>}</div>
     {!canEdit&&<div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:10,textAlign:"center"}}>Completed/cancelled projects are read-only. Super Admin can reopen them.</div>}
   </Modal>;
 }
 
-function ExpenseSection({title,rows,empty,adjustment=false}){return <><div className="sans" style={{fontSize:11,fontWeight:700,color:"var(--muted)",margin:"12px 0 7px"}}>{title}</div>{rows.length===0?<div className="sans" style={{fontSize:11,color:"var(--soft)",marginBottom:12}}>{empty}</div>:rows.map(e=><div key={e.id} style={{display:"flex",justifyContent:"space-between",gap:10,borderTop:"1px solid var(--divider)",padding:"8px 0"}}><div className="sans" style={{fontSize:11,minWidth:0}}><b>{e.description}</b><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{e.expense_date||e.transaction_month} · {e.category} · {String(e.status).toUpperCase()}{Number(e.document_count||0)>0&&<> · <Paperclip size={9} style={{verticalAlign:"-1px"}}/> {e.document_count}</>}</div>{adjustment&&e.void_reason&&<div style={{fontSize:9,color:"var(--muted)",marginTop:2}}>Reason: {e.void_reason}</div>}{e.fund_override&&<div style={{fontSize:9,color:"var(--warning)",marginTop:2}}>Fund override recorded</div>}{e.budget_override_reason&&<div style={{fontSize:9,color:"var(--warning)",marginTop:2}}>Budget override recorded</div>}</div><b className="sans" style={{fontSize:11,whiteSpace:"nowrap",color:adjustment?"var(--muted)":"var(--danger)"}}>MVR {fmt(e.amount)}</b></div>)}</>}
-function Metric({label,value,color}){return <div className="sans" style={{border:"1px solid var(--divider)",borderRadius:10,padding:"9px 10px"}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>{label}</div><strong style={{display:"block",fontSize:12,marginTop:3,color:color||"var(--text)"}}>{value}</strong></div>}
+function ProjectSectionHeader({label,count,total,open,onClick,icon=null}){return <button type="button" className="project-section-header sans" onClick={onClick}><span className="project-section-label">{icon}{label} <small>{count}</small></span><span className="project-section-right">{total&&<strong>{total}</strong>}<ChevronDown size={15} className={open?"open":""}/></span></button>}
+function ExpenseSection({rows,empty,adjustment=false}){return <>{rows.length===0?<div className="sans project-section-empty">{empty}</div>:rows.map(e=><div key={e.id} className="project-transaction-row"><div className="sans project-transaction-main"><b>{e.description}</b><div>{e.expense_date||e.transaction_month} · {e.category}{Number(e.document_count||0)>0&&<> · <Paperclip size={9} style={{verticalAlign:"-1px"}}/> {e.document_count}</>}</div>{adjustment&&e.void_reason&&<div>Reason: {e.void_reason}</div>}{e.fund_override&&<div className="warning">Fund override recorded</div>}{e.budget_override_reason&&<div className="warning">Budget override recorded</div>}</div><b className={`sans project-transaction-amount${adjustment?" muted":" danger"}`}>MVR {fmt(e.amount)}</b></div>)}</>}
+function ProjectFinanceMetric({label,value,tone=""}){return <div className={`sans project-finance-metric ${tone}`}><span>{label}</span><strong>{value}</strong></div>}
 function Progress({value,large=false}){const pct=Math.max(0,Math.min(100,Number(value||0)));const over=Number(value||0)>100;return <div style={{height:large?7:4,borderRadius:99,background:"var(--divider)",overflow:"hidden",marginTop:large?7:5,marginBottom:large?10:0}}><div style={{height:"100%",width:`${pct}%`,background:over?"var(--danger)":pct>=90?"var(--warning)":"var(--success-strong)",borderRadius:99}}/></div>}
 function auditLabel(action){return ({project_created:"Project created",project_updated:"Project details updated",project_completed:"Project completed",project_cancelled:"Project cancelled",project_reopened:"Project reopened"}[action]||String(action||"").replaceAll("_"," "))}
 function Detail({label,value}){return <div className="sans" style={{display:"flex",justifyContent:"space-between",gap:12,padding:"6px 0",borderBottom:"1px solid var(--divider)",fontSize:12}}><span style={{color:"var(--muted)"}}>{label}</span><strong style={{textAlign:"right"}}>{value}</strong></div>}
