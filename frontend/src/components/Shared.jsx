@@ -4,7 +4,7 @@ export function MessageBanner({ children, tone = "success" }) {
   const error = tone === "error";
   return (
     <div className="sans" style={{
-      fontSize: 11, padding: 10, borderRadius: 9, marginBottom: 12,
+      fontSize: 11, lineHeight: 1.45, padding: "9px 10px", borderRadius: 9, marginBottom: 10,
       background: error ? "var(--danger-bg)" : "var(--success-bg)",
       color: error ? "var(--danger)" : "var(--success-strong)",
       border: `1px solid ${error ? "var(--danger-border)" : "var(--success-border)"}`
@@ -14,10 +14,10 @@ export function MessageBanner({ children, tone = "success" }) {
 
 export function PageHeader({ title, subtitle, action }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 }}>
       <div style={{ minWidth: 0 }}>
-        <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "var(--primary-text)" }}>{title}</div>
-        {subtitle && <div className="sans" style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{subtitle}</div>}
+        <div className="sans" style={{ fontSize: 14, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .1 }}>{title}</div>
+        {subtitle && <div className="sans" style={{ fontSize: 10, lineHeight: 1.4, color: "var(--soft)", marginTop: 2 }}>{subtitle}</div>}
       </div>
       {action}
     </div>
@@ -34,7 +34,7 @@ export function PageState({ kind = "empty", title, message, action, compact = fa
   const resolvedTitle = title || (isLoading ? "Loading…" : isError ? "Something went wrong" : "Nothing to show");
   return (
     <div className="sans" role={isError ? "alert" : "status"} aria-live={isError ? "assertive" : "polite"} style={{
-      padding: compact ? "22px 14px" : "48px 18px", textAlign: "center", color: "var(--muted)"
+      padding: compact ? "20px 14px" : "38px 18px", textAlign: "center", color: "var(--muted)"
     }}>
       <div style={{fontSize:13,fontWeight:700,color:isError?"var(--danger)":"var(--primary-text)"}}>{resolvedTitle}</div>
       {message && <div style={{fontSize:11,lineHeight:1.5,margin:"6px auto 0",maxWidth:320,color:"var(--soft)"}}>{message}</div>}
@@ -55,7 +55,7 @@ export function ErrorState({ children = "Could not load this view.", onRetry, co
 
 export const buttonBase = {
   display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-  minHeight: 38, borderRadius: 9, padding: "8px 12px", fontSize: 12, fontWeight: 600,
+  minHeight: 38, borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 600,
   lineHeight: 1.2, cursor: "pointer", boxSizing: "border-box", whiteSpace: "nowrap",
 };
 
@@ -84,15 +84,15 @@ export const rejectBtn = {
 export function PrimaryButton({ onClick, children, disabled = false, type = "button" }) {
   return (
     <button type={type} onClick={onClick} disabled={disabled} className="sans"
-      style={{ ...primaryBtn, width: "100%", minHeight: 44, borderRadius: 10, padding: "11px 14px", fontSize: 13, fontWeight: 700 }}>
+      style={{ ...primaryBtn, width: "100%", minHeight: 42, borderRadius: 10, padding: "10px 14px", fontSize: 12, fontWeight: 700 }}>
       {children}
     </button>
   );
 }
 
-export function SectionTitle({children}) { return <div className="sans" style={{fontSize:12,color:"var(--muted)",fontWeight:700,letterSpacing:.7,margin:"18px 0 8px"}}>{children}</div>; }
+export function SectionTitle({children}) { return <div className="sans" style={{fontSize:11,color:"var(--muted)",fontWeight:700,letterSpacing:.65,margin:"16px 0 7px"}}>{children}</div>; }
 export function EmptyLine({children}) { return <div className="sans" style={{fontSize:12,color:"var(--soft)",padding:"8px 2px 14px"}}>{children}</div>; }
-export const cardStyle={background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:8};
+export const cardStyle={background:"var(--card)",border:"1px solid var(--border)",borderRadius:11,padding:12,marginBottom:8};
 
 export function monthNavBtn() {
   return { ...compactBtn, width: 36, minWidth: 36, height: 36, minHeight: 36, padding: 0, background: "var(--card)" };

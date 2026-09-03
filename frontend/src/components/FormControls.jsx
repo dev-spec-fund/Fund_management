@@ -73,7 +73,7 @@ export function Modal({ title, onClose, action, children, closeDisabled = false 
     >
       <div className="app-modal-sheet" role="dialog" aria-modal="true" aria-label={title || "Dialog"} style={{
         background: "var(--bg)",
-        borderRadius: "18px 18px 0 0",
+        borderRadius: "16px 16px 0 0",
         width: "100%",
         maxWidth: 480,
         height: `min(92dvh, ${Math.max(320, viewport.height - 10)}px)`,
@@ -88,12 +88,12 @@ export function Modal({ title, onClose, action, children, closeDisabled = false 
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          minHeight: 62,
-          padding: "6px 22px 0",
+          minHeight: 56,
+          padding: "5px 14px 0 18px",
           background: "var(--bg)",
           borderBottom: "1px solid var(--divider-2)"
         }}>
-          <div style={{ fontSize: 18, fontWeight: 600 }}>{title}</div>
+          <div style={{ fontSize: 16, lineHeight: 1.2, fontWeight: 600 }}>{title}</div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {action}
             <button type="button" onClick={onClose} disabled={closeDisabled} aria-label="Close" style={{ background: "none", border: "none", cursor: closeDisabled ? "not-allowed" : "pointer", opacity: closeDisabled ? .45 : 1, padding: 8 }}><X size={20} /></button>
@@ -105,7 +105,7 @@ export function Modal({ title, onClose, action, children, closeDisabled = false 
           overflowX: "hidden",
           overflowY: "auto",
           boxSizing: "border-box",
-          padding: "14px 22px calc(22px + env(safe-area-inset-bottom))"
+          padding: "12px 18px calc(20px + env(safe-area-inset-bottom))"
         }}>
           {children}
         </div>
