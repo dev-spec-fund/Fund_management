@@ -1261,24 +1261,33 @@ button:not(:disabled):active {
   }
 }
 
-
-/* v74: compact all-icon navigation.
-   Every destination remains visible; only the active item expands to reveal its label. */
+/* v75: native-style bottom icon navigation.
+   All destinations remain visible; only the active item expands to show its label. */
 .admin-tab-strip.app-icon-nav {
-  flex-shrink: 0;
+  position: fixed;
+  left: 50%;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 45;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 2px;
-  width: calc(100% - 24px);
+
+  width: calc(100% - 20px);
   max-width: 456px;
-  margin: 10px auto 0;
-  padding: 4px 5px;
+  min-height: 48px;
+  margin: 0;
+  padding: 6px 6px;
+
   overflow: visible;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
-  background: var(--card);
-  box-shadow: 0 4px 14px -12px var(--shadow);
+  background: color-mix(in srgb, var(--card) 96%, transparent);
+  box-shadow: 0 8px 28px rgba(0,0,0,.16);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   scrollbar-width: none;
 }
 
@@ -1288,22 +1297,26 @@ button:not(:disabled):active {
 }
 
 .app-nav-item {
-  flex: 0 1 32px;
-  min-width: 28px;
-  height: 32px;
-  min-height: 32px;
+  flex: 0 1 33px;
+  min-width: 29px;
+  height: 36px;
+  min-height: 36px;
   padding: 0 7px;
   border: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--muted-2);
+
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0;
+
   cursor: pointer;
   overflow: hidden;
   white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+
   transition:
     flex-basis .16s ease,
     min-width .16s ease,
@@ -1314,7 +1327,9 @@ button:not(:disabled):active {
 }
 
 .app-nav-item > svg {
-  flex: 0 0 16px;
+  flex: 0 0 17px;
+  width: 17px;
+  height: 17px;
 }
 
 .app-nav-label {
@@ -1329,16 +1344,16 @@ button:not(:disabled):active {
 
 .app-nav-item.active {
   flex: 1 1 auto;
-  min-width: 72px;
-  max-width: 104px;
-  padding: 0 10px;
+  min-width: 74px;
+  max-width: 108px;
+  padding: 0 11px;
   gap: 5px;
   background: var(--primary);
   color: var(--on-primary);
 }
 
 .app-nav-item.active .app-nav-label {
-  max-width: 72px;
+  max-width: 76px;
   opacity: 1;
 }
 
@@ -1352,29 +1367,43 @@ button:not(:disabled):active {
   outline-offset: 2px;
 }
 
+/* The fixed bottom bar must never cover page content. */
+.app-page-content {
+  padding-bottom: calc(82px + env(safe-area-inset-bottom)) !important;
+}
+
+/* Keep sticky page controls below the top shell; bottom navigation is independent. */
+.page-panel {
+  padding-bottom: 2px;
+}
+
 :root[data-theme="dark"] .admin-tab-strip.app-icon-nav {
-  background: var(--card);
+  background: color-mix(in srgb, var(--card) 94%, transparent);
   border-color: var(--border-strong);
+  box-shadow: 0 8px 28px rgba(0,0,0,.34);
 }
 
 @media (max-width: 390px) {
   .admin-tab-strip.app-icon-nav {
-    width: calc(100% - 16px);
+    width: calc(100% - 14px);
     gap: 0;
-    padding-left: 3px;
-    padding-right: 3px;
+    padding-left: 4px;
+    padding-right: 4px;
   }
+
   .app-nav-item {
     min-width: 27px;
     padding-left: 6px;
     padding-right: 6px;
   }
+
   .app-nav-item.active {
     min-width: 68px;
-    max-width: 94px;
+    max-width: 96px;
     padding-left: 8px;
     padding-right: 8px;
   }
+
   .app-nav-label {
     font-size: 9px;
   }
@@ -1386,10 +1415,12 @@ button:not(:disabled):active {
     padding-left: 5px;
     padding-right: 5px;
   }
+
   .app-nav-item.active {
     min-width: 62px;
-    max-width: 86px;
+    max-width: 88px;
   }
+
   .app-nav-item > svg {
     flex-basis: 15px;
     width: 15px;
