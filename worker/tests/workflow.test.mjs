@@ -64,7 +64,7 @@ test("bulk Telegram sender has bounded concurrency", () => {
 
 
 test("Telegram registration captures the requesting user phone before approval", () => {
-  const bot=[read("src/bot.ts"),read("src/botSupport.ts")].join("\n");
+  const bot=[read("src/bot.ts"),read("src/bot/message.ts"),read("src/bot/slips.ts"),read("src/bot/callbacks.ts"),read("src/botSupport.ts")].join("\n");
   const schema=read("migrations/0012_registration_phone_capture.sql");
   assert.match(bot,/request_contact:\s*true/);
   assert.match(bot,/message\.contact/);
@@ -100,7 +100,7 @@ test('member app v15 adds rate history and self-service endpoints', () => {
   const migration = read('migrations/0015_member_contribution_rates.sql');
   const index = read('src/index.ts');
   const members = read('src/routes/members.ts');
-  const bot = read('src/bot.ts');
+  const bot = [read('src/bot.ts'),read('src/bot/message.ts'),read('src/bot/slips.ts'),read('src/bot/callbacks.ts')].join('\n');
   assert.match(migration,/member_contribution_rates/);
   assert.match(index,/\/api\/me\/dashboard/);
   assert.match(index,/\/api\/me\/meetings/);

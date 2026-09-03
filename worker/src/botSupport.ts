@@ -20,27 +20,6 @@ export function esc(value: unknown) {
     .replace(/>/g, "&gt;");
 }
 
-export function parseCaption(caption: string): {
-  amount: number | null;
-  ref: string | null;
-  month: string | null;
-  note: string | null;
-} {
-  const parts = caption.trim().split(/\s+/).filter(Boolean);
-  let amount: number | null = null;
-  if (parts[0] && Number.isFinite(Number(parts[0]))) amount = Number(parts.shift());
-
-  let month: string | null = null;
-  const monthIndex = parts.findIndex((p) => /^\d{4}-(0[1-9]|1[0-2])$/.test(p));
-  if (monthIndex >= 0) month = parts.splice(monthIndex, 1)[0];
-
-  let ref: string | null = null;
-  if (parts[0]) ref = parts.shift() || null;
-
-  const note = parts.length ? parts.join(" ") : null;
-  return { amount, ref, month, note };
-}
-
 export async function notifyAdmins(env: Env, text: string, extra: Record<string, unknown> = {}) {
   const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
   await Promise.allSettled(admins.results.map((a) => sendMessage(env, a.telegram_id, text, extra)));
