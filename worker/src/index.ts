@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { AppEnv, Env } from "./types";
 import { telegramAuth } from "./auth";
-import { handleUpdate } from "./bot";
+import { claimTelegramUpdate, completeTelegramUpdate, failTelegramUpdate, handleUpdate } from "./bot";
 import { runScheduled } from "./scheduled";
 import { membersRoute } from "./routes/members";
 import { expensesRoute } from "./routes/expenses";
@@ -35,8 +35,34 @@ app.onError(async (err, c) => {
 app.post("/telegram/webhook", async (c) => {
   const secret = c.req.header("X-Telegram-Bot-Api-Secret-Token");
   if (secret !== c.env.TELEGRAM_WEBHOOK_SECRET) return c.text("Forbidden", 403);
-  const update = await c.req.json();
-  c.executionCtx.waitUntil(handleUpdate(c.env, update).catch((e) => safeLogError(c.env, "telegram.update", e, { update_id: update?.update_id })));
+
+  const update = await c.req.json<any>();
+  const updateId = Number(update?.update_id);
+
+  // Telegram may redeliver an update when delivery is retried. Claim the
+  // update in D1 before starting side effects so the same update cannot send
+  // duplicate messages, slips or callbacks from concurrent webhook delivery.
+  if (Number.isSafeInteger(updateId) && updateId >= 0) {
+    const claimed = await claimTelegramUpdate(c.env, updateId);
+    if (!claimed) return c.text("ok");
+
+    c.executionCtx.waitUntil(
+      handleUpdate(c.env, update)
+        .then(() => completeTelegramUpdate(c.env, updateId))
+        .catch(async (e) => {
+          await failTelegramUpdate(c.env, updateId, e).catch(() => {});
+          await safeLogError(c.env, "telegram.update", e, { update_id: updateId });
+        })
+    );
+    return c.text("ok");
+  }
+
+  // Defensive fallback for malformed/non-standard updates without update_id.
+  c.executionCtx.waitUntil(
+    handleUpdate(c.env, update).catch((e) =>
+      safeLogError(c.env, "telegram.update", e, { update_id: update?.update_id })
+    )
+  );
   return c.text("ok");
 });
 

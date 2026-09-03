@@ -187,3 +187,49 @@ test('critical financial workflow guards remain wired after stability hardening'
   assert.match(projectsSource, /donation_received/);
   assert.match(projectsSource, /status='approved'/);
 });
+
+
+test('Telegram update receipts prevent duplicate webhook processing and allow failed retry', () => {
+  const db = dbWithSchema();
+
+  const claim = (updateId) => db.prepare(`
+    INSERT INTO telegram_update_receipts(update_id,status,claimed_at,attempts,last_error)
+    VALUES(?,'processing',datetime('now'),1,NULL)
+    ON CONFLICT(update_id) DO UPDATE SET
+      status='processing',
+      claimed_at=datetime('now'),
+      completed_at=NULL,
+      attempts=telegram_update_receipts.attempts+1,
+      last_error=NULL
+    WHERE telegram_update_receipts.status='failed'
+       OR (
+         telegram_update_receipts.status='processing'
+         AND telegram_update_receipts.claimed_at < datetime('now','-5 minutes')
+       )
+    RETURNING update_id
+  `).get(updateId);
+
+  assert.equal(Number(claim(9001).update_id),9001);
+  assert.equal(claim(9001),undefined);
+
+  db.prepare("UPDATE telegram_update_receipts SET status='completed',completed_at=datetime('now') WHERE update_id=9001").run();
+  assert.equal(claim(9001),undefined);
+
+  db.prepare("INSERT INTO telegram_update_receipts(update_id,status,claimed_at,attempts,last_error) VALUES(9002,'failed',datetime('now'),1,'temporary')").run();
+  assert.equal(Number(claim(9002).update_id),9002);
+  assert.equal(db.prepare("SELECT status FROM telegram_update_receipts WHERE update_id=9002").get().status,'processing');
+
+  db.close();
+});
+
+test('Telegram webhook claims update_id before running bot side effects', () => {
+  const indexSource = fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
+  const botSource = fs.readFileSync(path.join(root,'src/bot.ts'),'utf8');
+
+  assert.match(indexSource, /claimTelegramUpdate\(c\.env, updateId\)/);
+  assert.match(indexSource, /completeTelegramUpdate\(c\.env, updateId\)/);
+  assert.match(indexSource, /failTelegramUpdate\(c\.env, updateId, e\)/);
+  assert.match(botSource, /telegram_update_receipts/);
+  assert.match(botSource, /datetime\('now','-5 minutes'\)/);
+  assert.match(botSource, /datetime\('now','-14 days'\)/);
+});
