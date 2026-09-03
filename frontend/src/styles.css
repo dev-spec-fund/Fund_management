@@ -1951,3 +1951,288 @@ button:not(:disabled):active {
   .activity-type-chip,
   .activity-row-card {transition:none!important;}
 }
+
+
+/* v33: Member UI polish stage 4 — final consistency pass. */
+.member-page-heading {
+  margin-bottom:13px;
+}
+.member-page-heading > div {
+  font-size:15px;
+  font-weight:700;
+  color:var(--primary-text);
+}
+.member-page-heading > span {
+  display:block;
+  font-size:11px;
+  color:var(--soft);
+  margin-top:3px;
+}
+.member-section-title {
+  font-size:11px;
+  font-weight:800;
+  color:var(--muted);
+  letter-spacing:.65px;
+  margin-bottom:8px;
+}
+.member-section-head {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin:16px 0 9px;
+}
+.member-section-head > b {
+  font-size:11px;
+  color:var(--muted);
+  letter-spacing:.65px;
+}
+.member-inline-error {
+  font-size:11px;
+  color:var(--danger);
+  background:var(--danger-bg);
+  border:1px solid var(--danger-border);
+  border-radius:10px;
+  padding:9px 10px;
+  margin-bottom:10px;
+}
+
+/* History */
+.member-history-status-row {
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 0;
+  border-bottom:1px solid var(--divider);
+  font-size:12px;
+}
+.member-status-badge {
+  display:inline-block;
+  border:1px solid currentColor;
+  border-radius:999px;
+  padding:3px 7px;
+  font-size:9px;
+  line-height:1;
+  font-weight:800;
+  text-transform:capitalize;
+  margin-bottom:4px;
+}
+.member-history-transaction {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:13px 15px;
+  margin-bottom:8px;
+  transition:transform 90ms ease-out,border-color 150ms ease-out;
+}
+.member-history-transaction:active {transform:scale(.992);}
+
+/* Fund */
+.member-fund-category {
+  width:100%;
+  text-align:left;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px 14px;
+  margin-bottom:8px;
+  cursor:pointer;
+  color:inherit;
+  transition:transform 90ms ease-out,border-color 150ms ease-out,background-color 150ms ease-out;
+}
+.member-fund-category:active {transform:scale(.992);background:var(--button-soft);}
+.member-fund-category-head {
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:center;
+}
+.member-fund-category-head > span:first-child {font-size:13px;font-weight:650;}
+.member-fund-category-head > span:last-child {display:flex;align-items:center;gap:7px;}
+.member-fund-category-head strong {font-size:13px;color:var(--danger);}
+.member-fund-category-head b {font-size:16px;color:var(--soft-2);font-weight:500;}
+.member-fund-category-progress {
+  height:5px;
+  border-radius:999px;
+  background:var(--divider);
+  overflow:hidden;
+  margin-top:9px;
+}
+.member-fund-category-progress > div {
+  height:100%;
+  border-radius:999px;
+  background:var(--danger);
+  transition:width 250ms cubic-bezier(.4,0,.2,1);
+}
+.member-fund-category-meta {font-size:9px;color:var(--soft-2);margin-top:5px;}
+
+/* Meetings */
+.member-meeting-card {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:14px;
+  margin-bottom:9px;
+}
+.member-meeting-card.upcoming {border-color:var(--border-strong);}
+.member-meeting-card.cancelled {opacity:.78;}
+.member-meeting-top {
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  align-items:flex-start;
+}
+.member-meeting-title {font-size:16px;font-weight:650;}
+.member-meeting-datetime,
+.member-meeting-venue {
+  display:flex;
+  align-items:center;
+  gap:5px;
+  font-size:10px;
+  color:var(--muted);
+  margin-top:5px;
+  flex-wrap:wrap;
+}
+.member-meeting-datetime svg,
+.member-meeting-venue svg {color:var(--soft);}
+.member-meeting-status {
+  flex:0 0 auto;
+  border-radius:999px;
+  padding:5px 8px;
+  font-size:9px;
+  font-weight:800;
+}
+.member-meeting-status.upcoming {background:var(--success-bg);color:var(--success-strong);}
+.member-meeting-status.cancelled {background:var(--danger-bg);color:var(--danger);}
+.member-meeting-status.past {background:var(--button-soft);color:var(--muted);}
+.member-meeting-agenda {
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  font-size:11px;
+  color:var(--muted);
+  line-height:1.45;
+  margin-top:11px;
+}
+.member-meeting-agenda b {font-size:9px;letter-spacing:.45px;color:var(--soft);}
+.member-meeting-cancel {
+  font-size:11px;
+  color:var(--danger);
+  background:var(--danger-bg);
+  border-radius:8px;
+  padding:8px 9px;
+  margin-top:10px;
+}
+.member-rsvp-wrap {margin-top:13px;}
+.member-rsvp-label {font-size:9px;color:var(--soft);font-weight:800;letter-spacing:.55px;margin-bottom:6px;}
+.member-rsvp-grid {display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.member-rsvp {
+  min-height:37px;
+  border:1px solid var(--border-strong);
+  border-radius:9px;
+  background:var(--button-soft);
+  color:var(--primary-text);
+  font-family:var(--sans);
+  font-size:10px;
+  font-weight:700;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  cursor:pointer;
+}
+.member-rsvp.active {background:var(--primary);border-color:var(--primary);color:var(--on-primary);}
+.member-rsvp:disabled {opacity:.55;cursor:wait;}
+.member-meeting-notes {
+  margin-top:12px;
+  padding-top:10px;
+  border-top:1px solid var(--divider-2);
+}
+.member-meeting-notes > div {
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  font-size:11px;
+  line-height:1.5;
+  color:var(--muted);
+  margin-bottom:8px;
+}
+.member-meeting-notes > div:last-child {margin-bottom:0;}
+.member-meeting-notes b {font-size:9px;letter-spacing:.45px;color:var(--soft);}
+
+/* Actions */
+.member-actions-all-done {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  background:var(--success-bg);
+  border:1px solid var(--success-border);
+  border-radius:11px;
+  padding:12px 13px;
+  color:var(--success-strong);
+  font-size:11px;
+  margin-bottom:14px;
+}
+.member-action-card {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:14px;
+  margin-bottom:8px;
+  transition:opacity 180ms ease-out,transform 90ms ease-out,border-color 160ms ease-out;
+}
+.member-action-card.open {border-color:var(--border-strong);}
+.member-action-card.done {opacity:.76;}
+.member-action-card:active {transform:scale(.993);}
+.member-action-top {display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}
+.member-action-title {font-size:13px;font-weight:700;color:var(--text);line-height:1.4;}
+.member-action-meeting {font-size:10px;color:var(--soft);margin-top:4px;}
+.member-action-status {
+  flex:0 0 auto;
+  border-radius:999px;
+  padding:4px 7px;
+  font-size:9px;
+  font-weight:800;
+}
+.member-action-status.open {background:var(--warning-bg);color:var(--warning);}
+.member-action-status.done {background:var(--success-bg);color:var(--success);}
+.member-action-due {
+  display:flex;
+  align-items:center;
+  gap:5px;
+  width:max-content;
+  max-width:100%;
+  margin-top:9px;
+  border-radius:8px;
+  padding:5px 7px;
+  background:var(--button-soft);
+  color:var(--muted);
+  font-size:10px;
+}
+.member-action-due.soon {background:var(--warning-bg);color:var(--warning);}
+.member-action-due.overdue {background:var(--danger-bg);color:var(--danger);}
+.member-action-complete {
+  width:100%;
+  min-height:39px;
+  margin-top:11px;
+  border:1px solid var(--success-border);
+  border-radius:9px;
+  background:var(--success-bg);
+  color:var(--success-strong);
+  font-family:var(--sans);
+  font-size:11px;
+  font-weight:800;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  cursor:pointer;
+}
+.member-action-complete:disabled {opacity:.55;cursor:wait;}
+
+@media (prefers-reduced-motion:reduce){
+  .member-history-transaction,
+  .member-fund-category,
+  .member-fund-category-progress > div,
+  .member-action-card {transition:none!important;}
+}

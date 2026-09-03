@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, onDataChange } from "../../api";
-import { LoadingState, ErrorState, compactBtn } from "../../components/Shared";
+import { EmptyState, ErrorState, compactBtn } from "../../components/Shared";
 import { fmt } from "../../utils/format";
 
 export function MyHistory({ member }) {
@@ -16,7 +16,7 @@ export function MyHistory({ member }) {
     api.members.statement(member.id).then(setStatement).catch(() => {});
   }), [member?.id]);
   if (error) return <ErrorState>{error}</ErrorState>;
-  if (!statement) return <LoadingState>Loading your statement…</LoadingState>;
+  if (!statement) return <HistorySkeleton/>;
   const rows=statement.contributions||[];
   const approved=rows.filter(r=>String(r.status).toLowerCase()==="approved");
   const total=approved.reduce((sum,r)=>sum+Number(r.amount||0),0);
@@ -38,15 +38,17 @@ export function MyHistory({ member }) {
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"var(--soft)"}}>APPROVED PAYMENTS</div><b className="sans">{approved.length}</b></div>
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"var(--soft)"}}>ADVANCE</div><b className="sans" style={{color:advance>0?"var(--success)":"inherit"}}>MVR {fmt(advance)}</b></div>
     </div>
-    <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"16px 0 9px"}}><b style={{fontSize:13,color:"var(--muted)"}}>MONTHLY STATUS</b><div style={{display:"flex",gap:6}}><button type="button" onClick={async()=>{const {exportStatementPdf}=await import("../../utils/exports");return exportStatementPdf(member)}} style={compactBtn}>PDF</button><button type="button" onClick={async()=>{const {exportStatementCsv}=await import("../../utils/exports");return exportStatementCsv(member)}} style={compactBtn}>CSV</button></div></div>
+    <div className="sans member-section-head"><b>MONTHLY STATUS</b><div style={{display:"flex",gap:6}}><button type="button" onClick={async()=>{const {exportStatementPdf}=await import("../../utils/exports");return exportStatementPdf(member)}} style={compactBtn}>PDF</button><button type="button" onClick={async()=>{const {exportStatementCsv}=await import("../../utils/exports");return exportStatementCsv(member)}} style={compactBtn}>CSV</button></div></div>
     <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"4px 14px",marginBottom:16}}>
-      {recentStatuses.map(x=><div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",gap:10,padding:"9px 0",borderBottom:"1px solid var(--divider)",fontSize:12}}><span>{monthLabel(x.month)}</span><span style={{textAlign:"right"}}><b style={{color:statusColor(x.status),textTransform:"capitalize"}}>{x.status}</b><div style={{fontSize:10,color:"var(--soft)"}}>Paid MVR {fmt(x.paid)}{Number(x.due)>0?` · Due MVR ${fmt(x.due)}`:""}</div></span></div>)}
+      {recentStatuses.map(x=><div key={x.month} className="sans member-history-status-row"><span>{monthLabel(x.month)}</span><span style={{textAlign:"right"}}><b className="member-status-badge" style={{color:statusColor(x.status),borderColor:statusColor(x.status)}}>{x.status}</b><div style={{fontSize:10,color:"var(--soft)"}}>Paid MVR {fmt(x.paid)}{Number(x.due)>0?` · Due MVR ${fmt(x.due)}`:""}</div></span></div>)}
     </div>
-    <div className="sans" style={{fontSize:13,fontWeight:700,color:"var(--muted)",marginBottom:9}}>CONTRIBUTION TRANSACTIONS</div>
-    {rows.map((h)=><div key={h.id} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"13px 16px",marginBottom:8}}>
+    <div className="sans member-section-title">CONTRIBUTION TRANSACTIONS</div>
+    {rows.map((h)=><div key={h.id} className="member-history-transaction">
       <div style={{display:"flex",justifyContent:"space-between",gap:10}}><div><div className="sans" style={{fontSize:14,fontWeight:600}}>{monthLabel(h.month)}</div><div className="sans" style={{fontSize:11,color:"var(--soft)",marginTop:3}}>{h.txn_id}{h.ref_number?` · Bank ref: ${h.ref_number}`:""}</div></div><div style={{textAlign:"right"}}><div className="sans" style={{fontSize:14,fontWeight:600}}>MVR {fmt(h.amount)}</div><span className="sans" style={{color:h.status==="approved"?"var(--success)":h.status==="reversed"?"var(--warning)":"var(--muted)",fontSize:10,fontWeight:600,textTransform:"capitalize"}}>{h.status||"pending"}</span></div></div>
     </div>)}
-    {rows.length===0&&<div className="sans" style={{fontSize:13,color:"var(--soft)"}}>No contributions yet — send a slip photo to the bot to get started.</div>}
+    {rows.length===0&&<EmptyState>No contributions yet — send a slip photo to the bot to get started.</EmptyState>}
   </>;
 }
+
+function HistorySkeleton(){return <div aria-label="Loading statement" aria-busy="true"><div className="skeleton-block" style={{height:105,borderRadius:16,marginBottom:12}}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>{[1,2,3,4].map(i=><div key={i} className="skeleton-block" style={{height:70,borderRadius:12}}/>)}</div><div className="skeleton-block" style={{height:220,borderRadius:12,marginBottom:14}}/><div className="skeleton-block" style={{height:80,borderRadius:12}}/></div>;}
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Eye } from "lucide-react";
 import { api, onDataChange } from "../../api";
 import { Modal } from "../../components/FormControls";
-import { LoadingState, compactBtn } from "../../components/Shared";
+import { EmptyState, ErrorState, compactBtn } from "../../components/Shared";
 import { currentMonthValue, formatLocalDateTime } from "../../utils/date";
 import { fmt } from "../../utils/format";
 
@@ -58,14 +58,8 @@ export function FundView() {
     } catch { return month; }
   })();
 
-  if (summaryError) return (
-    <div className="sans" style={{background:"var(--danger-bg-4)",border:"1px solid var(--danger-border-3)",borderRadius:12,padding:16,color:"var(--danger-strong)"}}>
-      <div style={{fontWeight:700,marginBottom:5}}>Fund information unavailable</div>
-      <div style={{fontSize:12,marginBottom:12}}>{summaryError}</div>
-      <button type="button" onClick={loadSummary} style={compactBtn}>Try again</button>
-    </div>
-  );
-  if (!summary) return <LoadingState>Loading fund information…</LoadingState>;
+  if (summaryError) return <ErrorState onRetry={loadSummary}>{summaryError}</ErrorState>;
+  if (!summary) return <FundSkeleton/>;
 
   const categories = summary.byCategory || [];
   const visibleCategories = showAllCategories ? categories : categories.filter(c => Number(c.spent || 0) > 0);
@@ -111,24 +105,17 @@ export function FundView() {
       {visibleCategories.map((c, i) => {
         const spent = Number(c.spent || 0);
         const pct = monthSpent > 0 ? Math.round((spent / monthSpent) * 100) : 0;
-        return <button type="button" key={i} onClick={()=>openExpenseCategory(c)}
-          style={{width:"100%",textAlign:"left",background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"12px 14px",marginBottom:8,cursor:"pointer",color:"inherit"}}>
-          <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
-            <span className="sans" style={{fontSize:14,fontWeight:500}}>{c.category}</span>
-            <span style={{display:"flex",alignItems:"center",gap:7}}>
-              <span className="sans" style={{fontSize:14,fontWeight:700,color:"var(--danger)"}}>MVR {fmt(spent)}</span>
-              <span className="sans" style={{fontSize:16,color:"var(--soft-2)"}}>›</span>
-            </span>
+        return <button type="button" key={i} onClick={()=>openExpenseCategory(c)} className="member-fund-category">
+          <div className="member-fund-category-head">
+            <span className="sans">{c.category}</span>
+            <span className="sans"><strong>MVR {fmt(spent)}</strong><b>›</b></span>
           </div>
-          {spent > 0 && <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:4}}>{pct}% of this month's expenses · Tap for details</div>}
-          {spent === 0 && <div className="sans" style={{fontSize:10,color:"var(--soft-4)",marginTop:4}}>No expenses · Tap for details</div>}
+          <div className="member-fund-category-progress"><div style={{width:`${pct}%`}}/></div>
+          <div className="sans member-fund-category-meta">{spent>0?`${pct}% of this month's expenses · Tap for details`:"No expenses · Tap for details"}</div>
         </button>;
       })}
 
-      {visibleCategories.length === 0 &&
-        <div className="sans" style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,color:"var(--soft)",fontSize:12,marginBottom:8}}>
-          No spending recorded for {monthLabel}.
-        </div>}
+      {visibleCategories.length === 0 && <EmptyState>No spending recorded for {monthLabel}.</EmptyState>}
 
       {categories.some(c => Number(c.spent || 0) === 0) &&
         <button type="button" onClick={()=>setShowAllCategories(!showAllCategories)} className="sans"
@@ -186,3 +173,5 @@ export function FundView() {
   );
 }
 
+
+function FundSkeleton(){return <div aria-label="Loading fund information" aria-busy="true"><div className="skeleton-block" style={{height:42,borderRadius:10,marginBottom:14}}/><div className="skeleton-block" style={{height:105,borderRadius:16,marginBottom:10}}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:18}}><div className="skeleton-block" style={{height:72,borderRadius:12}}/><div className="skeleton-block" style={{height:72,borderRadius:12}}/></div><div className="skeleton-block" style={{height:46,borderRadius:10,marginBottom:10}}/>{[1,2,3].map(i=><div key={i} className="skeleton-block" style={{height:68,borderRadius:12,marginBottom:8}}/>)}</div>;}
