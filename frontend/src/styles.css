@@ -1429,21 +1429,20 @@ button:not(:disabled):active {
 }
 
 
-/* v78: stable active-button pill navigation.
-   The active background belongs to the button itself, so it cannot drift over adjacent icons. */
+/* v79: smoother, calmer bottom-navigation motion. */
 .app-nav-item {
   position: relative;
   z-index: 1;
   background: transparent;
   transition:
-    flex-basis 160ms cubic-bezier(.22,.72,.2,1),
-    min-width 160ms cubic-bezier(.22,.72,.2,1),
-    max-width 160ms cubic-bezier(.22,.72,.2,1),
-    padding 160ms cubic-bezier(.22,.72,.2,1),
-    gap 140ms ease-out,
-    color 130ms ease-out,
-    background-color 150ms ease-out,
-    transform 90ms ease-out;
+    flex-basis 195ms cubic-bezier(.2,.72,.2,1),
+    min-width 195ms cubic-bezier(.2,.72,.2,1),
+    max-width 195ms cubic-bezier(.2,.72,.2,1),
+    padding 195ms cubic-bezier(.2,.72,.2,1),
+    gap 165ms ease-out,
+    color 145ms ease-out,
+    background-color 175ms ease-out,
+    transform 95ms ease-out;
 }
 
 .app-nav-item.active {
@@ -1453,15 +1452,15 @@ button:not(:disabled):active {
 
 .app-nav-item > svg {
   transform: scale(1);
-  opacity: .82;
+  opacity: .84;
   transition:
-    transform 140ms ease-out,
-    opacity 140ms ease-out,
-    color 140ms ease-out;
+    transform 150ms ease-out,
+    opacity 145ms ease-out,
+    color 145ms ease-out;
 }
 
 .app-nav-item.active > svg {
-  transform: scale(1.07);
+  transform: scale(1.05);
   opacity: 1;
 }
 
@@ -1469,11 +1468,11 @@ button:not(:disabled):active {
   max-width: 0 !important;
   opacity: 0 !important;
   overflow: hidden;
-  transform: translateX(-2px);
+  transform: translateX(-1px);
   transition:
-    max-width 110ms ease-out,
-    opacity 85ms ease-out,
-    transform 100ms ease-out;
+    max-width 125ms ease-out,
+    opacity 100ms ease-out,
+    transform 115ms ease-out;
 }
 
 .app-nav-item.active .app-nav-label {
@@ -1486,23 +1485,24 @@ button:not(:disabled):active {
   opacity: 1 !important;
   transform: translateX(0);
   transition:
-    max-width 130ms ease-out,
-    opacity 105ms ease-out 35ms,
-    transform 115ms ease-out 25ms;
+    max-width 150ms ease-out,
+    opacity 125ms ease-out 35ms,
+    transform 130ms ease-out 25ms;
 }
 
 .app-nav-item:active {
-  transform: scale(.96) !important;
+  transform: scale(.97) !important;
 }
 
+/* Keep page changes understated so the navigation feels like the main motion. */
 .page-panel--active {
-  animation: page-enter-soft 130ms ease-out both;
+  animation: page-enter-calm 115ms ease-out both;
 }
 
-@keyframes page-enter-soft {
+@keyframes page-enter-calm {
   from {
-    opacity: .84;
-    transform: translateY(4px);
+    opacity: .90;
+    transform: translateY(2px);
   }
   to {
     opacity: 1;
@@ -1510,19 +1510,20 @@ button:not(:disabled):active {
   }
 }
 
-@keyframes app-nav-enter {
+/* The bar only enters once when the shell first appears. */
+.admin-tab-strip.app-icon-nav {
+  animation: app-nav-enter-calm 190ms ease-out both;
+}
+
+@keyframes app-nav-enter-calm {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(8px);
+    transform: translateX(-50%) translateY(5px);
   }
   to {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
-}
-
-.admin-tab-strip.app-icon-nav {
-  animation: app-nav-enter 180ms ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
