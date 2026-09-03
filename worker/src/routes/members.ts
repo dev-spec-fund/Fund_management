@@ -6,6 +6,7 @@ import { auditEntity, ensureOperationalSchema, findDuplicateMembers, normalizeNa
 import { boundedText, flag, money, telegramId, validMonth } from "../validation";
 import { paidForMonth } from "../allocations";
 import { contributionRateForMonth, rateForMonthFromRows, setContributionRate, ensureInitialContributionRate } from "../contributionRates";
+import { downloadTelegramFile, sendPhoto } from "../telegram";
 
 export const membersRoute = new Hono<AppEnv>();
 
@@ -63,7 +64,7 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
     ? "SELECT id,member_code,name,NULL phone,monthly_amount,active,joined_at,created_at,NULL telegram_id FROM members WHERE id=?"
     : "SELECT id,member_code,name,phone,monthly_amount,active,joined_at,created_at,telegram_id FROM members WHERE id=?").bind(id).first<any>();
   if (!member) return c.json({error:"Not found"},404);
-  const contributions = await c.env.DB.prepare(`SELECT id,txn_id,amount,month,${viewer?"NULL":"ref_number"} ref_number,status,submitted_at,approved_at FROM contributions WHERE member_id=? ORDER BY submitted_at`).bind(id).all<any>();
+  const contributions = await c.env.DB.prepare(`SELECT id,txn_id,amount,month,${viewer?"NULL":"ref_number"} ref_number,status,submitted_at,approved_at,${viewer?"0":"CASE WHEN slip_file_id IS NOT NULL AND trim(slip_file_id)<>'' THEN 1 ELSE 0 END"} has_slip FROM contributions WHERE member_id=? ORDER BY submitted_at`).bind(id).all<any>();
   const allocations = await c.env.DB.prepare(`
     SELECT ca.contribution_id,ca.month,ca.amount
     FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id
@@ -100,6 +101,32 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
   });
   const organization=await getBranding(c.env);
   return c.json({organization,member,contributions:contributions.results,allocations:allocations.results,donations:donations.results,monthly_status:statuses,balance_history:balanceHistory,contribution_rates:rates.results});
+});
+
+membersRoute.get("/:id/contributions/:contributionId/slip/file", requireFinance, async (c) => {
+  await ensureOperationalSchema(c.env);
+  const memberId=Number(c.req.param("id")); const contributionId=Number(c.req.param("contributionId"));
+  if(!Number.isInteger(memberId)||memberId<=0||!Number.isInteger(contributionId)||contributionId<=0) return c.json({error:"Invalid contribution"},400);
+  const contribution=await c.env.DB.prepare("SELECT id,txn_id,slip_file_id FROM contributions WHERE id=? AND member_id=?").bind(contributionId,memberId).first<any>();
+  if(!contribution)return c.json({error:"Contribution not found"},404);
+  if(!contribution.slip_file_id)return c.json({error:"No payment slip is attached to this contribution"},404);
+  const file=await downloadTelegramFile(c.env,String(contribution.slip_file_id));
+  if(!file)return c.json({error:"Could not retrieve the payment slip from Telegram"},502);
+  const ext=String(file.mime||"").includes("png")?"png":String(file.mime||"").includes("webp")?"webp":"jpg";
+  const filename=`${String(contribution.txn_id||`contribution-${contributionId}`).replace(/[^A-Za-z0-9._-]+/g,"-")}-payment-slip.${ext}`;
+  return new Response(file.bytes,{headers:{"Content-Type":file.mime,"Content-Disposition":`inline; filename="${filename}"`,"Cache-Control":"private, no-store"}});
+});
+
+membersRoute.post("/:id/contributions/:contributionId/slip/send-to-telegram", requireFinance, async (c) => {
+  await ensureOperationalSchema(c.env);
+  const admin=c.get("admin")!; const memberId=Number(c.req.param("id")); const contributionId=Number(c.req.param("contributionId"));
+  const contribution=await c.env.DB.prepare(`SELECT c.id,c.txn_id,c.amount,c.slip_file_id,m.name member_name FROM contributions c JOIN members m ON m.id=c.member_id WHERE c.id=? AND c.member_id=?`).bind(contributionId,memberId).first<any>();
+  if(!contribution)return c.json({error:"Contribution not found"},404);
+  if(!contribution.slip_file_id)return c.json({error:"No payment slip is attached to this contribution"},404);
+  const sent=await sendPhoto(c.env,admin.telegram_id,String(contribution.slip_file_id),`Payment slip · ${contribution.txn_id} · ${contribution.member_name} · MVR ${Number(contribution.amount||0).toFixed(2)}`);
+  if(!sent)return c.json({error:"Could not send the payment slip to Telegram"},502);
+  await auditEntity(c.env,admin.id,"contribution_slip_sent_to_telegram","contribution",contributionId,null,{member_id:memberId,txn_id:contribution.txn_id});
+  return c.json({ok:true});
 });
 
 membersRoute.post("/", requireFinance, async (c) => {

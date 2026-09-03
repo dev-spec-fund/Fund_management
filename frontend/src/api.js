@@ -257,6 +257,8 @@ export const api = {
     exempt: (id, month, reason) =>
       request(`/api/members/${id}/exempt`, { method: "POST", body: JSON.stringify({ month, reason }) }),
     statement: (id) => request(`/api/members/${id}/statement`),
+    contributionSlip: (memberId, contributionId) => downloadBlob(`/api/members/${memberId}/contributions/${contributionId}/slip/file`),
+    sendContributionSlipToTelegram: (memberId, contributionId) => request(`/api/members/${memberId}/contributions/${contributionId}/slip/send-to-telegram`, { method: "POST" }),
     monthlyStatus: (id, month) => request(`/api/members/${id}/monthly-status${month ? `?month=${month}` : ""}`),
   },
 

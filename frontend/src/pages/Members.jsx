@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, X, Bell, ChevronLeft, ChevronRight, Pencil, Search } from "lucide-react";
+import { Plus, X, Bell, ChevronLeft, ChevronRight, Pencil, Search, Paperclip, Eye, Send } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, PrimaryButton, smallBtn, monthNavBtn, primaryBtn, approveBtn, rejectBtn } from "../components/Shared";
@@ -213,6 +213,20 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
     onClose();
   };
 
+  const openContributionSlip = async (contribution) => {
+    try {
+      const blob=await api.members.contributionSlip(member.id,contribution.id);
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a"); a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.download=`${contribution.txn_id || "contribution"}-payment-slip`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000);
+    } catch (e) { alert(e.message || "Could not open payment slip"); }
+  };
+
+  const sendContributionSlip = async (contribution) => {
+    try { await api.members.sendContributionSlipToTelegram(member.id,contribution.id); alert("Payment slip sent to your Telegram."); }
+    catch (e) { alert(e.message || "Could not send payment slip to Telegram"); }
+  };
+
   const toggleActive = async () => {
     const action = member.active ? "deactivate" : "reactivate";
     if (!confirm(`${action === "deactivate" ? "Deactivate" : "Reactivate"} ${member.name}?`)) return;
@@ -278,6 +292,13 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
         <div className="sans" style={{fontSize:10,color:refValid?"var(--muted)":"var(--warning-3)",marginTop:8}}>
           {refValid ? <>Bank ref: <b style={{color:"var(--primary-text)"}}>{h.ref_number}</b></> : <>⚠ Reference needs review: <b>{h.ref_number || "not detected"}</b></>}
         </div>
+
+        {Boolean(h.has_slip) && canRemind && <div className="sans" style={{display:"flex",alignItems:"center",gap:7,background:"var(--surface-cool)",border:"1px solid var(--border)",borderRadius:9,padding:"7px 8px",marginTop:8}}>
+          <Paperclip size={13} color="var(--muted)"/>
+          <div style={{flex:1,minWidth:0,fontSize:10,fontWeight:700,color:"var(--primary-text)"}}>Payment slip attached</div>
+          <button type="button" title="Open payment slip" onClick={()=>openContributionSlip(h)} style={{...smallBtn("var(--primary-text)"),padding:6}}><Eye size={13}/></button>
+          <button type="button" title="Send payment slip to my Telegram" onClick={()=>sendContributionSlip(h)} style={{...smallBtn("var(--primary-text)"),padding:6}}><Send size={13}/></button>
+        </div>}
 
         {applied.length > 0 && (
           <div style={{background:"var(--bg)",borderRadius:9,padding:"8px 9px",marginTop:8}}>

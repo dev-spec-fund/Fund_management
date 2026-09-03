@@ -162,3 +162,15 @@ test("expense documents use Telegram file references", () => {
   assert.match(expenses, /downloadTelegramFile/);
   assert.match(expenses, /sendStoredDocument/);
 });
+
+test("approved contributions retain and expose the original Telegram payment slip", () => {
+  const allocations = read("src/allocations.ts");
+  const members = read("src/routes/members.ts");
+  assert.match(allocations, /UPDATE contributions SET status='approved'.*ocr_raw=NULL/s);
+  assert.doesNotMatch(allocations, /slip_file_id\s*=\s*NULL/);
+  assert.match(members, /has_slip/);
+  assert.match(members, /\/contributions\/:contributionId\/slip\/file/);
+  assert.match(members, /downloadTelegramFile/);
+  assert.match(members, /\/contributions\/:contributionId\/slip\/send-to-telegram/);
+  assert.match(members, /sendPhoto/);
+});
