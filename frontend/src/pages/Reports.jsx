@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Download, ChevronLeft, ChevronRight, FileText, Table2 } from "lucide-react";
 import { LoadingState, MessageBanner, smallBtn, monthNavBtn } from "../components/Shared";
 import { useReportsData } from "./reports/useReportsData";
 import { MonthlyReportSections, AnnualAnalyticsSection } from "./reports/ReportSections";
@@ -9,6 +9,7 @@ export default function Reports({ setTab }) {
   const [showExpense, setShowExpense] = useState(false);
   const [showDonation, setShowDonation] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [error, setError] = useState("");
   const {
     month,
@@ -71,14 +72,21 @@ export default function Reports({ setTab }) {
     <div className="reports-filter-sticky page-sticky-controls">
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>REPORTS</div>
-        <div style={{ display: "flex", gap: 6, position: "relative" }}>
-          <button type="button" onClick={async () => { try { const { exportFundPdf } = await import("../utils/exports"); await exportFundPdf({ month, monthLabel, summary }); } catch (e) { setError(e.message || "Could not export PDF"); } }} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
-          <button type="button" onClick={exportCsv} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>
-          <button type="button" onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Log</button>
-          {showAdd && <div style={{ position: "absolute", right: 0, top: 38, zIndex: 8, width: 160, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 5, boxShadow: "0 8px 24px var(--shadow)" }}>
-            <button type="button" onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "var(--success)", cursor: "pointer" }}>+ Log donation</button>
-            <button type="button" onClick={() => { setShowExpense(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "var(--danger)", cursor: "pointer" }}>+ Log expense</button>
-          </div>}
+        <div className="report-header-actions">
+          <div className="report-action-menu-wrap">
+            <button type="button" onClick={() => { setShowExport(!showExport); setShowAdd(false); }} className="report-header-action sans"><Download size={13} /> Export</button>
+            {showExport && <div className="report-action-menu">
+              <button type="button" onClick={async () => { setShowExport(false); try { const { exportFundPdf } = await import("../utils/exports"); await exportFundPdf({ month, monthLabel, summary }); } catch (e) { setError(e.message || "Could not export PDF"); } }} className="sans"><FileText size={14} /><span><b>PDF report</b><small>Formatted monthly report</small></span></button>
+              <button type="button" onClick={async () => { setShowExport(false); try { await exportCsv(); } catch (e) { setError(e.message || "Could not export CSV"); } }} className="sans"><Table2 size={14} /><span><b>CSV data</b><small>Spreadsheet-friendly export</small></span></button>
+            </div>}
+          </div>
+          <div className="report-action-menu-wrap">
+            <button type="button" onClick={() => { setShowAdd(!showAdd); setShowExport(false); }} className="report-header-action sans"><Plus size={13} /> Log</button>
+            {showAdd && <div className="report-action-menu compact">
+              <button type="button" onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans"><Plus size={14}/><span><b>Donation</b><small>Record incoming funds</small></span></button>
+              <button type="button" onClick={() => { setShowExpense(true); setShowAdd(false); }} className="sans danger"><Plus size={14}/><span><b>Expense</b><small>Record fund spending</small></span></button>
+            </div>}
+          </div>
         </div>
       </div>
       <div className="reports-month-selector">

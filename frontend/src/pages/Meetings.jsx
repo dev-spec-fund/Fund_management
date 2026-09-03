@@ -5,6 +5,7 @@ import { LoadingState, EmptyState, MessageBanner, PageHeader, compactBtn, approv
 import { formatLocalDateTime } from "../utils/date";
 import Pagination, { pageSlice } from "../components/Pagination";
 import { adminCan } from "../utils/permissions";
+import { MoreHorizontal, Bell, Pencil, XCircle } from "lucide-react";
 
 export default function Meetings({admin}){
   const emptyForm={title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:""};
@@ -22,6 +23,7 @@ export default function Meetings({admin}){
   const [actionDraft,setActionDraft]=useState({description:"",assigned_member_id:"",due_date:""});
   const [memberOptions,setMemberOptions]=useState([]);
   const [page,setPage]=useState(1);
+  const [showMeetingActions,setShowMeetingActions]=useState(false);
   const canFinance=adminCan(admin, "finance");
   const { confirm, confirmationDialog } = useConfirmDialog();
 
@@ -53,7 +55,7 @@ export default function Meetings({admin}){
   };
 
   const openDetails=async(m)=>{
-    setSelected(m);setDetails(null);setMinutesData(null);setEditing(false);setMessage("");
+    setSelected(m);setDetails(null);setMinutesData(null);setEditing(false);setShowMeetingActions(false);setMessage("");
     try{
       const [detail,minutes]=await Promise.all([api.admin.meeting(m.id),api.governance.meetingMinutes(m.id)]);
       setDetails(detail);setMinutesData(minutes);setMinutesDraft({minutes:minutes?.minutes?.minutes||"",decisions:minutes?.minutes?.decisions||""});
@@ -314,19 +316,16 @@ export default function Meetings({admin}){
             {group("no","DECLINED",no,"var(--danger)")}
             {group("pending","AWAITING RESPONSE",pending,"var(--muted)")}
 
-            {details.status!=="cancelled"&&<>
-              {pending.length>0&&<button type="button" disabled={busy} onClick={remindPending} style={{...approveBtn,width:"100%",padding:10,marginTop:14}}>
-                Remind awaiting members
-              </button>}
-              <button type="button" disabled={busy} onClick={beginEdit} style={{...compactBtn,width:"100%",padding:10,marginTop:8}}>Edit / reschedule</button>
-              {details.sent_at&&<button type="button" disabled={busy} onClick={async()=>{
-                setBusy(true);setMessage("");
-                try{
-                  setMessage("Edit the meeting first. Member notifications are offered automatically after a real change.");
-                }catch(e){setMessage(e.message)}finally{setBusy(false)}
-              }} style={{...compactBtn,width:"100%",padding:10,marginTop:8}}>Changes notify after saving</button>}
-              <button type="button" disabled={busy} onClick={cancelMeeting} style={{...rejectBtn,width:"100%",padding:10,marginTop:8}}>Cancel meeting</button>
-            </>}
+            {details.status!=="cancelled"&&<div className="meeting-actions-wrap">
+              <button type="button" disabled={busy} onClick={()=>setShowMeetingActions(v=>!v)} className="meeting-actions-trigger sans" aria-expanded={showMeetingActions}>
+                <span>Meeting actions</span><MoreHorizontal size={16}/>
+              </button>
+              {showMeetingActions&&<div className="meeting-actions-menu">
+                {pending.length>0&&<button type="button" disabled={busy} onClick={async()=>{setShowMeetingActions(false);await remindPending();}} className="sans"><Bell size={14}/><span><b>Remind awaiting members</b><small>{pending.length} response{pending.length===1?"":"s"} pending</small></span></button>}
+                <button type="button" disabled={busy} onClick={()=>{setShowMeetingActions(false);beginEdit();}} className="sans"><Pencil size={14}/><span><b>Edit / reschedule</b><small>Changes can notify members after saving</small></span></button>
+                <button type="button" disabled={busy} onClick={async()=>{setShowMeetingActions(false);await cancelMeeting();}} className="sans danger"><XCircle size={14}/><span><b>Cancel meeting</b><small>Linked members will be notified</small></span></button>
+              </div>}
+            </div>}
           </>;
         })()}
       </>}
