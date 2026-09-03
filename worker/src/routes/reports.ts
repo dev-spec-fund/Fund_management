@@ -208,11 +208,14 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
       ORDER BY spent DESC,category ASC
     `).bind(month).all(),
     c.env.DB.prepare(`
-      SELECT p.id project_id,p.project_code,p.name project_name,p.budget,COALESCE(SUM(e.amount),0) spent
-      FROM expenses e JOIN projects p ON p.id=e.project_id
-      WHERE e.status='approved' AND e.transaction_month=?
-      GROUP BY p.id,p.project_code,p.name,p.budget ORDER BY spent DESC,p.name
-    `).bind(month).all<any>(),
+      SELECT p.id project_id,p.project_code,p.name project_name,p.budget,
+        COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.project_id=p.id AND e.status='approved' AND e.transaction_month=?),0) spent,
+        COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active' AND d.transaction_month=?),0) donations_received
+      FROM projects p
+      WHERE EXISTS(SELECT 1 FROM expenses e WHERE e.project_id=p.id AND e.status='approved' AND e.transaction_month=?)
+         OR EXISTS(SELECT 1 FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active' AND d.transaction_month=?)
+      ORDER BY (spent+donations_received) DESC,p.name
+    `).bind(month,month,month,month).all<any>(),
     c.env.DB.prepare(`
       SELECT
         (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved') +
@@ -318,7 +321,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
 
-  const [income,allocatedContributions,advanceAllocated,donationTotal,expenseTotal,byCategory,byProject,expenseDetails,expenseAdjustments,outstanding,recentActivity] = await Promise.all([
+  const [income,allocatedContributions,advanceAllocated,donationTotal,expenseTotal,byCategory,byProject,expenseDetails,expenseAdjustments,projectDonationDetails,outstanding,recentActivity] = await Promise.all([
     c.env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month=?").bind(month).first<{total:number}>(),
     allocatedTotalForMonth(c.env,month),
     advanceAllocatedForMonth(c.env,month),
@@ -333,11 +336,14 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
       ORDER BY spent DESC,category ASC
     `).bind(month).all(),
     c.env.DB.prepare(`
-      SELECT p.id project_id,p.project_code,p.name project_name,p.budget,COALESCE(SUM(e.amount),0) spent
-      FROM expenses e JOIN projects p ON p.id=e.project_id
-      WHERE e.status='approved' AND e.transaction_month=?
-      GROUP BY p.id,p.project_code,p.name,p.budget ORDER BY spent DESC,p.name
-    `).bind(month).all<any>(),
+      SELECT p.id project_id,p.project_code,p.name project_name,p.budget,
+        COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.project_id=p.id AND e.status='approved' AND e.transaction_month=?),0) spent,
+        COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active' AND d.transaction_month=?),0) donations_received
+      FROM projects p
+      WHERE EXISTS(SELECT 1 FROM expenses e WHERE e.project_id=p.id AND e.status='approved' AND e.transaction_month=?)
+         OR EXISTS(SELECT 1 FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active' AND d.transaction_month=?)
+      ORDER BY (spent+donations_received) DESC,p.name
+    `).bind(month,month,month,month).all<any>(),
     c.env.DB.prepare(`
       SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.created_at,e.approved_at,
              COALESCE(cat.name,'Uncategorised') category,e.project_id,p.project_code,p.name project_name,COALESCE(a.name,'-') logged_by_name
@@ -356,6 +362,12 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
       LEFT JOIN projects p ON p.id=e.project_id
       WHERE e.status IN ('reversed','voided') AND e.transaction_month=?
       ORDER BY COALESCE(e.voided_at,e.expense_date,e.created_at) ASC,e.id ASC
+    `).bind(month).all<any>(),
+    c.env.DB.prepare(`
+      SELECT d.id,d.txn_id,d.donor_name,d.amount,d.note,d.transaction_month,d.created_at,d.project_id,p.project_code,p.name project_name
+      FROM donations d JOIN projects p ON p.id=d.project_id
+      WHERE COALESCE(d.status,'active')='active' AND d.transaction_month=?
+      ORDER BY d.created_at ASC,d.id ASC
     `).bind(month).all<any>(),
     c.env.DB.prepare(`
       WITH paid AS (
@@ -404,6 +416,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
     net: monthNet,
     byCategory: byCategory.results,
     byProject: byProject.results,
+    projectDonations: projectDonationDetails.results,
     expenseDetails: expenseDetails.results,
     expenseAdjustments: expenseAdjustments.results,
     outstanding: {

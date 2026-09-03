@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS donations (
   txn_id TEXT UNIQUE,
   donor_name TEXT NOT NULL,
   member_id INTEGER REFERENCES members(id),
+  project_id INTEGER REFERENCES projects(id),
   amount REAL NOT NULL,
   note TEXT,
   slip_file_id TEXT,
@@ -407,6 +408,7 @@ CREATE INDEX IF NOT EXISTS idx_expense_documents_telegram_file ON expense_docume
 CREATE INDEX IF NOT EXISTS idx_expenses_project_status ON expenses(project_id,status,transaction_month);
 CREATE INDEX IF NOT EXISTS idx_expenses_expense_date ON expenses(expense_date);
 CREATE INDEX IF NOT EXISTS idx_donations_status_transaction_month ON donations(status,transaction_month);
+CREATE INDEX IF NOT EXISTS idx_donations_project_status_month ON donations(project_id,status,transaction_month);
 CREATE INDEX IF NOT EXISTS idx_meeting_rsvps_meeting_member ON meeting_rsvps(meeting_id,member_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_status_date ON meetings(status,meeting_date);
 
@@ -422,4 +424,5 @@ CREATE INDEX IF NOT EXISTS idx_donations_status_created ON donations(status, cre
 CREATE INDEX IF NOT EXISTS idx_registrations_status_requested ON member_registration_requests(status, requested_at);
 
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (19,'expense_document_management');
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (20,'project_linked_donations');
 CREATE INDEX IF NOT EXISTS idx_expense_documents_active ON expense_documents(expense_id, removed_at, created_at DESC);

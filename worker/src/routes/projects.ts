@@ -22,7 +22,9 @@ async function projectRow(c:any,id:number){
   return c.env.DB.prepare(`SELECT p.*,m.member_code responsible_member_code,m.name responsible_member_name,
       COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount ELSE 0 END),0) spent,
       COALESCE(SUM(CASE WHEN e.status='pending' THEN e.amount ELSE 0 END),0) pending_spend,
-      COUNT(CASE WHEN e.status='approved' THEN 1 END) expense_count
+      COUNT(DISTINCT CASE WHEN e.status='approved' THEN e.id END) expense_count,
+      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_received,
+      COALESCE((SELECT COUNT(*) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_count
     FROM projects p
     LEFT JOIN members m ON m.id=p.responsible_member_id
     LEFT JOIN expenses e ON e.project_id=p.id
@@ -47,7 +49,9 @@ projectsRoute.get('/', requireAdmin, async c=>{
   const rows=await c.env.DB.prepare(`SELECT p.*,m.member_code responsible_member_code,m.name responsible_member_name,
       COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount ELSE 0 END),0) spent,
       COALESCE(SUM(CASE WHEN e.status='pending' THEN e.amount ELSE 0 END),0) pending_spend,
-      COUNT(CASE WHEN e.status='approved' THEN 1 END) expense_count
+      COUNT(DISTINCT CASE WHEN e.status='approved' THEN e.id END) expense_count,
+      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_received,
+      COALESCE((SELECT COUNT(*) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_count
     FROM projects p
     LEFT JOIN members m ON m.id=p.responsible_member_id
     LEFT JOIN expenses e ON e.project_id=p.id
@@ -60,13 +64,16 @@ projectsRoute.get('/:id', requireAdmin, async c=>{
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param('id')); const project=await projectRow(c,id);
   if(!project)return c.json({error:'Project not found'},404);
-  const [expenses,audit] = await Promise.all([
+  const [expenses,donations,audit] = await Promise.all([
     c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.status,e.void_reason,e.created_at,e.approved_at,e.voided_at,
       COALESCE(cat.name,'Uncategorised') category,COALESCE(a.name,'-') logged_by_name,
       e.fund_override,e.fund_override_reason,e.budget_override_reason,
       (SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id=e.id AND d.removed_at IS NULL) document_count
     FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id LEFT JOIN admins a ON a.id=e.logged_by
     WHERE e.project_id=? ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC`).bind(id).all<any>(),
+    c.env.DB.prepare(`SELECT d.id,d.txn_id,d.donor_name,d.amount,d.note,d.transaction_month,d.created_at
+      FROM donations d WHERE d.project_id=? AND COALESCE(d.status,'active')='active'
+      ORDER BY d.transaction_month DESC,d.created_at DESC,d.id DESC`).bind(id).all<any>(),
     c.env.DB.prepare(`SELECT al.id,al.action,al.created_at,al.detail,COALESCE(a.name,'System') admin_name
       FROM audit_log al LEFT JOIN admins a ON a.id=al.admin_id
       WHERE al.action LIKE 'project_%' AND json_valid(al.detail)=1
@@ -79,7 +86,7 @@ projectsRoute.get('/:id', requireAdmin, async c=>{
     const before=detail?.before||null, after=detail?.after||null;
     return {id:row.id,action:row.action,created_at:row.created_at,admin_name:row.admin_name,before_status:before?.status||null,after_status:after?.status||null};
   });
-  return c.json({...withProjectMetrics(project),expenses:expenses.results,audit_history:auditHistory});
+  return c.json({...withProjectMetrics(project),expenses:expenses.results,donations:donations.results,audit_history:auditHistory});
 });
 
 projectsRoute.post('/', requireFinance, async c=>{

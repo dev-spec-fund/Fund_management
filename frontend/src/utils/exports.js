@@ -460,11 +460,23 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
   const monthlyProjectGroups = (summary.byProject || []).map(project => ({
     ...project,
     rows: monthlyExpenseRows.filter(row => String(row.project_id || "") === String(project.project_id || "") || (!row.project_id && row.project_code && row.project_code === project.project_code)),
+    donations: (summary.projectDonations || []).filter(row => String(row.project_id || "") === String(project.project_id || "")),
   }));
   if (monthlyProjectGroups.length) {
-    sectionTitle(ctx, "Project spending & expenses", "Each project is shown together with its approved expenses for the selected month.");
+    sectionTitle(ctx, "Project activity", "Each project shows donations received for it and its approved expenses for the selected month.");
     monthlyProjectGroups.forEach(project => {
-      sectionTitle(ctx, `${project.project_code} · ${project.project_name}`, `${project.budget == null ? "Open-cost project" : `Budget ${money(project.budget)}`} · Month spend ${money(project.spent)}`, 15);
+      sectionTitle(ctx, `${project.project_code} · ${project.project_name}`, `${project.budget == null ? "Open-cost project" : `Budget ${money(project.budget)}`} · Donations ${money(project.donations_received||0)} · Spent ${money(project.spent)}`, 15);
+      if (project.donations.length) {
+        sectionTitle(ctx, "Donations received", "Donations linked to this project in the selected month.", 14);
+        table(ctx,
+          [
+            { key: "created_at", label: "Date", width: 27, format: v => String(v || "").slice(0,10) },
+            { key: "txn_id", label: "Donation ID", width: 30, bold: true },
+            { key: "donor_name", label: "Donor", width: 75 },
+            { key: "amount", label: "Amount", width: 35, align: "right", bold: true, color: C.green, format: v => money(v) },
+          ], project.donations, { fontSize: 7.0 }
+        );
+      }
       if (project.rows.length) table(ctx,
         [
           { key: "expense_date", label: "Date", width: 25, format: (v,r) => String(v || r.created_at || "").slice(0,10) },
@@ -663,7 +675,7 @@ export async function exportAnnualAgmPdf(data) {
 
   const annualExpenseRows = data?.expenses || [];
   if ((data?.projects || []).length) {
-    const activeProjects = data.projects.filter((p) => Number(p.annual_spend || 0) > 0 || ["active","completed"].includes(String(p.status || "")));
+    const activeProjects = data.projects.filter((p) => Number(p.annual_spend || 0) > 0 || Number(p.annual_donations || 0) > 0 || ["active","completed"].includes(String(p.status || "")));
     if (activeProjects.length) {
       sectionTitle(ctx, "Community projects", "Each project is shown with its approved expenses for the reporting year. Project spending is already included in total fund expenses.", 16);
       table(ctx,
@@ -672,13 +684,28 @@ export async function exportAnnualAgmPdf(data) {
           { key: "name", label: "Project", width: 58 },
           { key: "status", label: "Status", width: 24, bold: true, format: v => String(v || "").toUpperCase() },
           { key: "budget", label: "Budget", width: 32, align: "right", format: v => v == null ? "Open cost" : money(v) },
-          { key: "annual_spend", label: "Year spend", width: 34, align: "right", bold: true, color: C.red, format: v => money(v) },
+          { key: "annual_donations", label: "Donations", width: 30, align: "right", bold: true, color: C.green, format: v => money(v) },
+          { key: "annual_spend", label: "Year spend", width: 30, align: "right", bold: true, color: C.red, format: v => money(v) },
         ], activeProjects, { fontSize: PDF_TYPE.table }
       );
       activeProjects.forEach(project => {
         const rows = annualExpenseRows.filter(row => String(row.project_id || "") === String(project.id || "") || (!row.project_id && row.project_code && row.project_code === project.project_code));
+        const projectDonations = (data.donations || []).filter(row => String(row.project_id || "") === String(project.id || ""));
+        if (!rows.length && !projectDonations.length) return;
+        sectionTitle(ctx, `${project.project_code} · ${project.name}`, `${project.budget == null ? "Open-cost project" : `Budget ${money(project.budget)}`} · Donations ${money(project.annual_donations||0)} · Year spend ${money(project.annual_spend)}`, 16);
+        if (projectDonations.length) {
+          sectionTitle(ctx, "Project donations", "Donations linked to this project during the reporting year.", 14);
+          table(ctx,
+            [
+              { key: "transaction_month", label: "Month", width: 24, bold: true },
+              { key: "txn_id", label: "Donation ID", width: 28, bold: true },
+              { key: "donor_name", label: "Donor", width: 72 },
+              { key: "amount", label: "Amount", width: 35, align: "right", bold: true, color: C.green, format: v => money(v) },
+            ], projectDonations, { fontSize: PDF_TYPE.table }
+          );
+        }
         if (!rows.length) return;
-        sectionTitle(ctx, `${project.project_code} · ${project.name} — expenses`, `${project.budget == null ? "Open-cost project" : `Budget ${money(project.budget)}`} · Year spend ${money(project.annual_spend)}`, 16);
+        sectionTitle(ctx, "Project expenses", "Approved expenses linked to this project during the reporting year.", 14);
         table(ctx,
           [
             { key: "transaction_month", label: "Month", width: 22, bold: true },

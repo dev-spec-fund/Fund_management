@@ -16,7 +16,7 @@ export default function Projects({ admin }) {
   const [selected,setSelected]=useState(null), [showAdd,setShowAdd]=useState(false), [message,setMessage]=useState(""), [error,setError]=useState("");
   const load=async()=>{setError("");try{setRows(await api.projects.list({status:filter==="all"?"":filter,q:query.trim()}));}catch(e){setError(e.message);setRows([]);}};
   useEffect(()=>{const t=setTimeout(load,220);return()=>clearTimeout(t);},[filter,query]);
-  useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses"))load();}),[filter,query]);
+  useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses")||path?.startsWith("/api/donations"))load();}),[filter,query]);
   const totalSpent=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.spent||0),0),[rows]);
   const pendingSpend=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.pending_spend||0),0),[rows]);
   const saved=async(text)=>{setSelected(null);setShowAdd(false);setMessage(text);await load();};
@@ -35,7 +35,7 @@ export default function Projects({ admin }) {
         <div className="sans" style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}><strong style={{fontSize:13}}>{p.name}</strong><span style={{fontSize:9,fontWeight:700,color:tone(p.status),textTransform:"uppercase"}}>{p.status}</span></div>
         <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:4}}>{p.project_code}{p.responsible_member_name?` · ${p.responsible_member_name}`:""}</div>
         {p.budget!=null?<><div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5}}>Budget MVR {fmt(p.budget)} · {Math.max(0,Number(p.budget_used_pct||0)).toFixed(0)}% used</div><Progress value={Number(p.budget_used_pct||0)}/></>:<div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5}}>Open-cost project</div>}
-        <div className="sans" style={{fontSize:9,color:"var(--primary-text)",marginTop:6,fontWeight:600}}>{Number(p.expense_count||0)} approved expense{Number(p.expense_count||0)===1?"":"s"} · Tap to view all</div>
+        <div className="sans" style={{fontSize:9,color:"var(--primary-text)",marginTop:6,fontWeight:600}}>{Number(p.expense_count||0)} expense{Number(p.expense_count||0)===1?"":"s"} · {Number(p.donation_count||0)} donation{Number(p.donation_count||0)===1?"":"s"} · Tap to view</div>
       </div>
       <div className="sans" style={{textAlign:"right",whiteSpace:"nowrap"}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>Spent</div><strong style={{fontSize:13}}>MVR {fmt(p.spent)}</strong>{Number(p.pending_spend||0)>0&&<div style={{fontSize:9,color:"var(--warning)",marginTop:3}}>MVR {fmt(p.pending_spend)} pending</div>}{p.budget!=null&&<div style={{fontSize:9,color:Number(p.remaining_budget)<0?"var(--danger)":"var(--soft)",marginTop:3}}>{Number(p.remaining_budget)<0?`Over MVR ${fmt(Math.abs(p.remaining_budget))}`:`MVR ${fmt(p.remaining_budget)} left`}</div>}</div>
     </button>)}
@@ -65,7 +65,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
   const [data,setData]=useState(null),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
   const load=()=>api.projects.get(project.id).then(setData).catch(e=>setError(e.message));
   useEffect(()=>{load();},[project.id]);
-  useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses"))load();}),[project.id]);
+  useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses")||path?.startsWith("/api/donations"))load();}),[project.id]);
   if(editing)return <ProjectForm admin={admin} project={data||project} onClose={()=>setEditing(false)} onSaved={onSaved}/>;
   const p=data||project;
   const expenses=p.expenses||[];
@@ -78,11 +78,13 @@ function ProjectDetails({project,admin,onClose,onSaved}){
     <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:12}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
         <Metric label="Status" value={String(p.status||"").toUpperCase()} color={tone(p.status)}/><Metric label="Total spent" value={`MVR ${fmt(p.spent)}`}/>
-        <Metric label="Pending" value={`MVR ${fmt(p.pending_spend||0)}`} color={Number(p.pending_spend||0)>0?"var(--warning)":undefined}/><Metric label="Expenses" value={String(p.expense_count||approved.length)}/>
+        <Metric label="Donations received" value={`MVR ${fmt(p.donation_received||0)}`} color="var(--success)"/><Metric label="Expenses" value={String(p.expense_count||approved.length)}/>{Number(p.pending_spend||0)>0&&<Metric label="Pending expenses" value={`MVR ${fmt(p.pending_spend||0)}`} color="var(--warning)"/>}
       </div>
       {p.budget==null?<div className="sans" style={{fontSize:11,color:"var(--muted)",padding:"8px 0"}}><WalletCards size={13} style={{verticalAlign:"-2px",marginRight:5}}/>Open-cost project — no budget limit set.</div>:<><Detail label="Budget" value={`MVR ${fmt(p.budget)}`}/><Detail label="Remaining" value={`MVR ${fmt(p.remaining_budget)}`}/><Detail label="Budget used" value={`${Number(p.budget_used_pct||0).toFixed(1)}%`}/><Progress value={Number(p.budget_used_pct||0)} large/></>}
       <Detail label="Responsible" value={p.responsible_member_name||"Not assigned"}/><Detail label="Start" value={p.start_date||"—"}/><Detail label="Target end" value={p.target_end_date||"—"}/>{p.cancel_reason&&<Detail label="Cancellation reason" value={p.cancel_reason}/>} {p.description&&<div className="sans" style={{fontSize:11,color:"var(--muted)",lineHeight:1.5,marginTop:10}}>{p.description}</div>}
     </div>
+
+    {(p.donations||[]).length>0&&<><div className="sans" style={{fontSize:11,fontWeight:700,color:"var(--muted)",margin:"12px 0 7px"}}>PROJECT DONATIONS ({p.donations.length})</div>{p.donations.map(d=><div key={d.id} style={{display:"flex",justifyContent:"space-between",gap:10,borderTop:"1px solid var(--divider)",padding:"8px 0"}}><div className="sans" style={{fontSize:11,minWidth:0}}><b>{d.donor_name}</b><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{d.transaction_month} · {d.txn_id}{d.note?` · ${d.note}`:""}</div></div><b className="sans" style={{fontSize:11,whiteSpace:"nowrap",color:"var(--success)"}}>+ MVR {fmt(d.amount)}</b></div>)}</>}
 
     <ExpenseSection title={`PROJECT EXPENSES — APPROVED (${approved.length})`} rows={approved} empty="No approved project expenses yet."/>
     {pending.length>0&&<ExpenseSection title="PENDING EXPENSES" rows={pending} empty="" pending/>}

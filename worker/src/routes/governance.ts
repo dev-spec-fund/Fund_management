@@ -239,18 +239,20 @@ async function yearData(env:any, year:string){
     `).bind(`${year}-%`).all<any>(),
     env.DB.prepare(`
       SELECT d.id,d.txn_id,d.donor_name,d.member_id,d.amount,d.note,d.transaction_month,d.status,d.created_at,
-             m.member_code,m.name member_name,COALESCE(a.name,'-') logged_by_name
+             m.member_code,m.name member_name,d.project_id,p.project_code,p.name project_name,COALESCE(a.name,'-') logged_by_name
       FROM donations d
       LEFT JOIN members m ON m.id=d.member_id
+      LEFT JOIN projects p ON p.id=d.project_id
       LEFT JOIN admins a ON a.id=d.logged_by
       WHERE COALESCE(d.status,'active')='active' AND d.transaction_month LIKE ?
       ORDER BY d.transaction_month ASC,d.created_at ASC,d.id ASC
     `).bind(`${year}-%`).all<any>(),
     env.DB.prepare(`
       SELECT d.id,d.txn_id,d.donor_name,d.member_id,d.amount,d.note,d.transaction_month,d.status,d.created_at,d.voided_at,d.void_reason,
-             m.member_code,m.name member_name
+             m.member_code,m.name member_name,d.project_id,p.project_code,p.name project_name
       FROM donations d
       LEFT JOIN members m ON m.id=d.member_id
+      LEFT JOIN projects p ON p.id=d.project_id
       WHERE d.status IN ('reversed','voided') AND d.transaction_month LIKE ?
       ORDER BY d.transaction_month ASC,COALESCE(d.voided_at,d.created_at) ASC,d.id ASC
     `).bind(`${year}-%`).all<any>(),
@@ -299,12 +301,14 @@ async function yearData(env:any, year:string){
     `).bind(`${year}-%`).all<any>(),
     env.DB.prepare(`
       SELECT p.id,p.project_code,p.name,p.description,p.budget,p.start_date,p.target_end_date,p.status,
-             COALESCE(SUM(CASE WHEN e.status='approved' AND e.transaction_month LIKE ? THEN e.amount ELSE 0 END),0) annual_spend,
-             COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount ELSE 0 END),0) lifetime_spend
-      FROM projects p LEFT JOIN expenses e ON e.project_id=p.id
+             COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.project_id=p.id AND e.status='approved' AND e.transaction_month LIKE ?),0) annual_spend,
+             COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.project_id=p.id AND e.status='approved'),0) lifetime_spend,
+             COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active' AND d.transaction_month LIKE ?),0) annual_donations,
+             COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) lifetime_donations
+      FROM projects p
       WHERE p.start_date IS NULL OR substr(p.start_date,1,4)<=?
-      GROUP BY p.id ORDER BY annual_spend DESC,p.name
-    `).bind(`${year}-%`,year).all<any>()
+      ORDER BY (annual_spend+annual_donations) DESC,p.name
+    `).bind(`${year}-%`,`${year}-%`,year).all<any>()
   ]);
 
   const memberContributions=await Promise.all(memberRows.results.map(async(r:any)=>{
