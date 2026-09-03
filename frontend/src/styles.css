@@ -523,3 +523,84 @@ input:focus, textarea:focus, select:focus {
 .admin-tab-strip::-webkit-scrollbar { display: none; }
 .admin-tab-strip > button:first-child { margin-left: 2px; }
 .admin-tab-strip > button:last-child { margin-right: 2px; }
+
+
+/* v68: compact mobile shell/navigation.
+   Keeps the existing visual identity while giving page content more vertical room. */
+.app-brand-header {
+  padding: 13px 20px 9px;
+}
+.app-brand-kicker {
+  font-size: 9px;
+  line-height: 1.1;
+  letter-spacing: 1.8px;
+  opacity: .68;
+  text-transform: uppercase;
+}
+.app-brand-title {
+  font-size: 23px;
+  line-height: 1.05;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.app-brand-name {
+  font-size: 9px;
+  line-height: 1.15;
+  opacity: .68;
+  margin-top: 2px;
+}
+
+.app-mode-wrap {
+  flex-shrink: 0;
+  padding: 9px 16px 0;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+.app-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--border);
+  border-radius: 11px;
+  padding: 3px;
+}
+.app-mode-switch > button {
+  min-height: 34px;
+}
+
+.admin-tab-strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  padding: 0 18px;
+  margin-top: 11px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-padding-inline: 18px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+.admin-tab-strip > button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  scroll-snap-align: center;
+}
+
+.app-page-content {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 15px 18px max(20px, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 380px) {
+  .app-brand-header { padding: 11px 16px 8px; }
+  .app-brand-title { font-size: 21px; }
+  .app-mode-wrap { padding-left: 14px; padding-right: 14px; }
+  .admin-tab-strip { padding-left: 14px; padding-right: 14px; gap: 16px; scroll-padding-inline: 14px; }
+  .app-page-content { padding-left: 15px; padding-right: 15px; }
+}

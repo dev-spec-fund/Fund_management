@@ -217,8 +217,8 @@ export default function App() {
   return (
     <Shell branding={me?.branding}>
       {isAdmin && isMember && (
-        <div style={{ flexShrink: 0, padding: "14px 20px 0", maxWidth: 480, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
-          <div className="sans" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "var(--border)", borderRadius: 12, padding: 3 }}>
+        <div className="app-mode-wrap">
+          <div className="sans app-mode-switch">
             <button type="button" onClick={() => changeMode("admin")} style={modeButton(mode === "admin")}>Admin View</button>
             <button type="button" onClick={() => changeMode("member")} style={modeButton(mode === "member")}>My Account</button>
           </div>
@@ -229,12 +229,12 @@ export default function App() {
           You are an admin but not yet linked to a member account. Send /start to the bot and choose “Register Myself as Member”.
         </div>
       )}
-      <div className="sans admin-tab-strip" style={{ flexShrink: 0, display: "flex", gap: 18, padding: "0 28px", marginTop: 18, overflowX: "auto", scrollPaddingInline: 28 }}>
+      <div className="sans admin-tab-strip">
         {tabs.map((t) => (
           <button type="button" key={t} onPointerDown={() => warmTab(t)} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "var(--primary-text)" : "var(--muted-2)", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
         ))}
       </div>
-      <main ref={contentScrollRef} className="app-page-content" style={{ padding: 20, width: "100%", maxWidth: 480, margin: "0 auto", boxSizing: "border-box" }}>
+      <main ref={contentScrollRef} className="app-page-content">
         {tabs.filter((page) => mountedTabs.has(page)).map((page) => (
           <div
             key={`${mode}:${page}`}
@@ -321,10 +321,10 @@ function modeButton(active) {
 function Shell({ children, branding }) {
   return (
     <div className="app-scroll-root" style={{ fontFamily: "'Fraunces','Georgia',serif", background: "var(--bg)", color: "var(--text)" }}>
-      <div className="theme-brand-surface" style={{ flexShrink: 0, background: "var(--primary)", padding: "24px 24px 6px", color: "var(--on-primary)" }}>
-        <div className="sans" style={{ fontSize: 11, letterSpacing: 2, opacity: 0.72, textTransform: "uppercase" }}>{branding?.short_name || "Fund"}</div>
-        <div style={{ fontSize: 28, fontWeight: 600, marginTop: 2 }}>Ledger</div>
-        {branding?.fund_name && <div className="sans" style={{ fontSize: 10, opacity: 0.7, marginTop: 1 }}>{branding.fund_name}</div>}
+      <div className="theme-brand-surface app-brand-header" style={{ flexShrink: 0, background: "var(--primary)", color: "var(--on-primary)" }}>
+        <div className="sans app-brand-kicker">{branding?.short_name || "Fund"}</div>
+        <div className="app-brand-title">Ledger</div>
+        {branding?.fund_name && <div className="sans app-brand-name">{branding.fund_name}</div>}
       </div>
       {children}
     </div>
