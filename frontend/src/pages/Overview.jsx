@@ -6,10 +6,12 @@ import { fmt } from "../utils/format";
 import { LoadingState } from "../components/Shared";
 import { ActivityRow } from "../components/ActivityRow";
 
-export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null }) {
+export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null, member = null }) {
   const [summary, setSummary] = useState(bootstrapSummary);
   const [activity, setActivity] = useState([]);
   const [pendingCount, setPendingCount] = useState(null);
+  const [memberStatus, setMemberStatus] = useState(null);
+  const [memberStatusLoading, setMemberStatusLoading] = useState(false);
 
   useEffect(() => {
     if (!bootstrapSummary) return;
@@ -40,7 +42,27 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
   useEffect(() => onDataChange(() => refreshOverview()), [isAdmin, canFinance]);
 
-  if (!summary) return <LoadingState>Loading overview…</LoadingState>;
+  const refreshMemberStatus = () => {
+    if (isAdmin || !member?.id) return;
+    setMemberStatusLoading(true);
+    api.members.statement(member.id)
+      .then((statement) => {
+        const statuses = statement?.monthly_status || [];
+        const month = currentMonthValue();
+        const current = statuses.find((row) => row.month === month) || statuses[statuses.length - 1] || null;
+        setMemberStatus(current);
+      })
+      .catch(() => setMemberStatus(null))
+      .finally(() => setMemberStatusLoading(false));
+  };
+
+  useEffect(() => {
+    refreshMemberStatus();
+  }, [isAdmin, member?.id]);
+
+  useEffect(() => onDataChange(() => refreshMemberStatus()), [isAdmin, member?.id]);
+
+  if (!summary) return <OverviewSkeleton memberView={!isAdmin} />;
 
   const contributions = Number(summary.memberIncome || 0);
   const allocatedContributions = Number(summary.allocatedContributions ?? summary.memberIncome ?? 0);
@@ -61,11 +83,43 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
     }
   })();
 
+  const memberPaid = Number(memberStatus?.paid || 0);
+  const memberDue = Number(memberStatus?.due || 0);
+  const memberRate = Number(memberStatus?.monthly_amount || member?.monthly_amount || 0);
+  const memberState = String(memberStatus?.status || "unpaid").toLowerCase();
+  const memberStateLabel = memberState === "paid" ? "Paid" : memberState === "partial" ? "Partial" : memberState === "exempt" ? "Exempt" : "Unpaid";
+  const memberStateColor = memberState === "paid" ? "var(--success)" : memberState === "partial" ? "var(--warning)" : memberState === "exempt" ? "var(--muted)" : "var(--danger)";
+
   return (
     <>
-      <div className="theme-brand-surface" style={{ background: "var(--primary)", borderRadius: 16, padding: "23px 22px", color: "var(--on-primary)" }}>
+      {!isAdmin && (
+        <button type="button" onClick={() => setTab?.("history")} className="member-contribution-hero" aria-label="Open my contribution history">
+          {memberStatusLoading && !memberStatus ? (
+            <div className="member-contribution-hero-loading">
+              <span className="skeleton-block" style={{width:"42%",height:12}} />
+              <span className="skeleton-block" style={{width:"58%",height:30,marginTop:10}} />
+              <span className="skeleton-block" style={{width:"70%",height:11,marginTop:10}} />
+            </div>
+          ) : (
+            <>
+              <div className="sans member-contribution-hero-top">
+                <span>MY CONTRIBUTION · {monthLabel.toUpperCase()}</span>
+                <strong style={{color:memberStateColor}}>{memberState === "paid" ? "✓ " : ""}{memberStateLabel}</strong>
+              </div>
+              <div className="member-contribution-hero-amount">MVR {fmt(memberPaid)} <span>/ {fmt(memberRate)}</span></div>
+              <div className="sans member-contribution-hero-bottom">
+                <span>{memberState === "exempt" ? "No contribution due this month" : memberDue > 0 ? `MVR ${fmt(memberDue)} outstanding` : "Contribution complete for this month"}</span>
+                <strong>View history ›</strong>
+              </div>
+            </>
+          )}
+        </button>
+      )}
+
+      <div className={`theme-brand-surface${!isAdmin ? " member-fund-card" : ""}`} style={{ background: "var(--primary)", borderRadius: 16, padding: !isAdmin ? "17px 19px" : "23px 22px", color: "var(--on-primary)", marginTop: !isAdmin ? 10 : 0 }}>
+        <div className="sans" style={{ fontSize: 11, opacity: 0.62, letterSpacing: 1.1 }}>{isAdmin ? "FUND BALANCE" : "TOTAL FUND BALANCE"}</div>
         <div className="sans" style={{ fontSize: 11, opacity: 0.62, letterSpacing: 1.1 }}>FUND BALANCE</div>
-        <div style={{ fontSize: 39, fontWeight: 600, marginTop: 4 }}>MVR {fmt(summary.fundBalance)}</div>
+        <div style={{ fontSize: isAdmin ? 39 : 30, fontWeight: 600, marginTop: 4 }}>MVR {fmt(summary.fundBalance)}</div>
         <div className="sans" style={{ fontSize: 11, opacity: 0.7, marginTop: 5 }}>
           {netMonth >= 0 ? "+" : "−"} MVR {fmt(Math.abs(netMonth))} this month
         </div>
@@ -131,6 +185,20 @@ function normalizeRecentActivity(rows) {
     who: row.who ?? row.label ?? "Fund activity",
     at: row.at ?? row.event_at ?? null,
   }));
+}
+
+function OverviewSkeleton({ memberView = false }) {
+  return (
+    <div className="member-overview-skeleton" aria-label="Loading overview" aria-busy="true">
+      {memberView && <div className="skeleton-block" style={{height:118,borderRadius:16,marginBottom:10}} />}
+      <div className="skeleton-block" style={{height:memberView?92:128,borderRadius:16,marginBottom:12}} />
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div className="skeleton-block" style={{height:88,borderRadius:13}} />
+        <div className="skeleton-block" style={{height:88,borderRadius:13}} />
+      </div>
+      <div className="skeleton-block" style={{height:52,borderRadius:13,marginTop:10}} />
+    </div>
+  );
 }
 
 function StatCard({ icon, label, value }) {

@@ -1498,3 +1498,74 @@ button:not(:disabled):active {
 @media (prefers-reduced-motion: reduce) {
   .preview-loading-spinner { animation-duration: 1600ms; }
 }
+
+
+/* v28: Member UI polish stage 1. */
+.member-contribution-hero {
+  width: 100%;
+  display: block;
+  text-align: left;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  padding: 17px 18px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms ease-out, border-color 180ms ease-out, background-color 180ms ease-out;
+}
+.member-contribution-hero:active { transform: scale(.985); }
+.member-contribution-hero:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.member-contribution-hero-top,
+.member-contribution-hero-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.member-contribution-hero-top {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: .7px;
+  font-weight: 700;
+}
+.member-contribution-hero-top strong { letter-spacing: 0; font-size: 11px; }
+.member-contribution-hero-amount {
+  margin-top: 8px;
+  font-size: 29px;
+  line-height: 1.05;
+  font-weight: 600;
+  color: var(--text);
+}
+.member-contribution-hero-amount span {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--soft-2);
+}
+.member-contribution-hero-bottom {
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.member-contribution-hero-bottom strong { color: var(--primary-text); white-space: nowrap; }
+.member-contribution-hero-loading { min-height: 84px; display: flex; flex-direction: column; justify-content: center; }
+.member-fund-card { transition: opacity 160ms ease-out; }
+.member-overview-skeleton { animation: member-content-in 150ms ease-out both; }
+.page-panel--active > * { animation: member-content-in 150ms ease-out both; }
+@keyframes member-content-in {
+  from { opacity: .72; }
+  to { opacity: 1; }
+}
+
+/* Inactive navigation remains secondary but readable in Telegram dark mode. */
+.app-nav-item:not(.active) {
+  color: color-mix(in srgb, var(--muted-2) 82%, var(--text) 18%);
+}
+.app-nav-item:not(.active) > svg { opacity: .9; }
+
+@media (prefers-reduced-motion: reduce) {
+  .member-contribution-hero,
+  .member-overview-skeleton,
+  .page-panel--active > * { animation: none !important; transition: none !important; }
+}

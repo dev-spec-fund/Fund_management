@@ -277,7 +277,7 @@ export default function App() {
   };
 
   const renderPage = (page) => {
-    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} />;
+    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} />;
     if (page === "pending" && canFinance) return <PendingApprovals />;
     if (page === "members" && adminView) return <Members isAdmin admin={me.admin} />;
     if (page === "history" && memberView) return <MyHistory member={me.member} />;
