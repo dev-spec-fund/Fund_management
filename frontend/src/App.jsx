@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
@@ -109,8 +109,6 @@ export default function App() {
   const [mode, setMode] = useState("member");
   const [mountedTabs, setMountedTabs] = useState(() => new Set(["overview"]));
   const contentScrollRef = useRef(null);
-  const navRef = useRef(null);
-  const [navIndicator, setNavIndicator] = useState({ left: 0, width: 0, ready: false });
   const [navLabelTab, setNavLabelTab] = useState(tab);
   const bootStartedAt = useRef(typeof performance !== "undefined" ? performance.now() : 0);
 
@@ -124,34 +122,6 @@ export default function App() {
     ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "projects", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
     : ["overview", "history", "fund", "activity", ...(memberProjectsEnabled ? ["projects"] : []), "meetings", "actions", "profile"], [adminView, canFinance, memberProjectsEnabled]);
 
-  useLayoutEffect(() => {
-    const nav = navRef.current;
-    if (!nav) return undefined;
-
-    const updateIndicator = () => {
-      const active = nav.querySelector(".app-nav-item.active");
-      if (!active) return;
-      const navRect = nav.getBoundingClientRect();
-      const activeRect = active.getBoundingClientRect();
-      setNavIndicator({
-        left: Math.round(activeRect.left - navRect.left),
-        width: Math.round(activeRect.width),
-        ready: true,
-      });
-    };
-
-    updateIndicator();
-    const raf = requestAnimationFrame(updateIndicator);
-    const resize = new ResizeObserver(updateIndicator);
-    resize.observe(nav);
-    window.addEventListener("resize", updateIndicator);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      resize.disconnect();
-      window.removeEventListener("resize", updateIndicator);
-    };
-  }, [tab, tabs, mode]);
 
   useEffect(() => {
     // Hide the outgoing label immediately, then reveal the new label after the
@@ -309,12 +279,7 @@ export default function App() {
           You are an admin but not yet linked to a member account. Send /start to the bot and choose “Register Myself as Member”.
         </div>
       )}
-      <nav ref={navRef} className="sans admin-tab-strip app-icon-nav" aria-label={adminView ? "Admin navigation" : "My Account navigation"}>
-        <span
-          className={`app-nav-indicator${navIndicator.ready ? " ready" : ""}`}
-          aria-hidden="true"
-          style={{ transform: `translateX(${navIndicator.left}px)`, width: navIndicator.width }}
-        />
+      <nav className="sans admin-tab-strip app-icon-nav" aria-label={adminView ? "Admin navigation" : "My Account navigation"}>
         {tabs.map((t) => (
           <NavItem
             key={t}

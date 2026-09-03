@@ -1429,73 +1429,66 @@ button:not(:disabled):active {
 }
 
 
-/* v76: subtle navigation micro-interactions. */
-.admin-tab-strip.app-icon-nav {
-  isolation: isolate;
-  animation: app-nav-enter 180ms ease-out both;
-}
-
-.app-nav-indicator {
-  position: absolute;
-  left: 0;
-  top: 6px;
-  height: 36px;
-  border-radius: 999px;
-  background: var(--primary);
-  z-index: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    transform 180ms cubic-bezier(.22,.72,.2,1),
-    width 180ms cubic-bezier(.22,.72,.2,1),
-    opacity 120ms ease-out;
-}
-
-.app-nav-indicator.ready {
-  opacity: 1;
-}
-
+/* v78: stable active-button pill navigation.
+   The active background belongs to the button itself, so it cannot drift over adjacent icons. */
 .app-nav-item {
   position: relative;
   z-index: 1;
+  background: transparent;
   transition:
-    flex-basis 180ms cubic-bezier(.22,.72,.2,1),
-    min-width 180ms cubic-bezier(.22,.72,.2,1),
-    padding 180ms cubic-bezier(.22,.72,.2,1),
-    color 140ms ease-out,
-    gap 160ms ease-out,
+    flex-basis 160ms cubic-bezier(.22,.72,.2,1),
+    min-width 160ms cubic-bezier(.22,.72,.2,1),
+    max-width 160ms cubic-bezier(.22,.72,.2,1),
+    padding 160ms cubic-bezier(.22,.72,.2,1),
+    gap 140ms ease-out,
+    color 130ms ease-out,
+    background-color 150ms ease-out,
     transform 90ms ease-out;
 }
 
-/* Background now comes from the single sliding indicator. */
 .app-nav-item.active {
-  background: transparent !important;
+  background: var(--primary) !important;
+  color: var(--on-primary);
 }
 
 .app-nav-item > svg {
+  transform: scale(1);
+  opacity: .82;
   transition:
     transform 140ms ease-out,
     opacity 140ms ease-out,
     color 140ms ease-out;
-  transform: scale(1);
-  opacity: .82;
 }
 
 .app-nav-item.active > svg {
-  transform: scale(1.08);
+  transform: scale(1.07);
   opacity: 1;
 }
 
 .app-nav-label {
-  transform: translateX(-3px);
+  max-width: 0 !important;
+  opacity: 0 !important;
+  overflow: hidden;
+  transform: translateX(-2px);
   transition:
-    max-width 170ms cubic-bezier(.22,.72,.2,1),
-    opacity 130ms ease-out,
-    transform 150ms ease-out;
+    max-width 110ms ease-out,
+    opacity 85ms ease-out,
+    transform 100ms ease-out;
 }
 
 .app-nav-item.active .app-nav-label {
+  max-width: 0 !important;
+  opacity: 0 !important;
+}
+
+.app-nav-item.active .app-nav-label.visible {
+  max-width: 76px !important;
+  opacity: 1 !important;
   transform: translateX(0);
+  transition:
+    max-width 130ms ease-out,
+    opacity 105ms ease-out 35ms,
+    transform 115ms ease-out 25ms;
 }
 
 .app-nav-item:active {
@@ -1508,8 +1501,8 @@ button:not(:disabled):active {
 
 @keyframes page-enter-soft {
   from {
-    opacity: .82;
-    transform: translateY(5px);
+    opacity: .84;
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -1528,13 +1521,16 @@ button:not(:disabled):active {
   }
 }
 
+.admin-tab-strip.app-icon-nav {
+  animation: app-nav-enter 180ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .admin-tab-strip.app-icon-nav,
   .page-panel--active {
     animation: none !important;
   }
 
-  .app-nav-indicator,
   .app-nav-item,
   .app-nav-item > svg,
   .app-nav-label {
@@ -1543,50 +1539,5 @@ button:not(:disabled):active {
 
   .app-nav-item:active {
     transform: none !important;
-  }
-}
-
-
-/* v77: sequence nav label timing so outgoing/incoming labels never overlap. */
-.app-nav-label {
-  max-width: 0 !important;
-  opacity: 0 !important;
-  transform: translateX(-2px) !important;
-  transition:
-    max-width 120ms ease-out,
-    opacity 90ms ease-out,
-    transform 110ms ease-out !important;
-}
-
-.app-nav-item.active .app-nav-label {
-  max-width: 0 !important;
-  opacity: 0 !important;
-}
-
-.app-nav-item.active .app-nav-label.visible {
-  max-width: 76px !important;
-  opacity: 1 !important;
-  transform: translateX(0) !important;
-  transition:
-    max-width 135ms ease-out,
-    opacity 110ms ease-out,
-    transform 120ms ease-out !important;
-}
-
-/* Keep icon movement calmer while the pill changes width. */
-.app-nav-item {
-  transition:
-    flex-basis 155ms cubic-bezier(.22,.72,.2,1),
-    min-width 155ms cubic-bezier(.22,.72,.2,1),
-    padding 155ms cubic-bezier(.22,.72,.2,1),
-    color 130ms ease-out,
-    gap 135ms ease-out,
-    transform 90ms ease-out !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-nav-label,
-  .app-nav-item {
-    transition: none !important;
   }
 }
