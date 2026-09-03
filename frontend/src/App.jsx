@@ -81,7 +81,7 @@ const NAV_ITEMS = {
   profile: { label: "Profile", icon: UserRound },
 };
 
-function NavItem({ name, active, onWarm, onOpen }) {
+function NavItem({ name, active, labelVisible, onWarm, onOpen }) {
   const meta = NAV_ITEMS[name] || { label: name, icon: Home };
   const Icon = meta.icon;
   return (
@@ -95,7 +95,7 @@ function NavItem({ name, active, onWarm, onOpen }) {
       title={meta.label}
     >
       <Icon size={16} strokeWidth={active ? 2.25 : 1.9} aria-hidden="true" />
-      <span className="app-nav-label">{meta.label}</span>
+      <span className={`app-nav-label${labelVisible ? " visible" : ""}`}>{meta.label}</span>
     </button>
   );
 }
@@ -111,6 +111,7 @@ export default function App() {
   const contentScrollRef = useRef(null);
   const navRef = useRef(null);
   const [navIndicator, setNavIndicator] = useState({ left: 0, width: 0, ready: false });
+  const [navLabelTab, setNavLabelTab] = useState(tab);
   const bootStartedAt = useRef(typeof performance !== "undefined" ? performance.now() : 0);
 
   const isAdmin = !!me?.admin;
@@ -151,6 +152,14 @@ export default function App() {
       window.removeEventListener("resize", updateIndicator);
     };
   }, [tab, tabs, mode]);
+
+  useEffect(() => {
+    // Hide the outgoing label immediately, then reveal the new label after the
+    // active pill has begun its slide. This prevents two labels overlapping.
+    setNavLabelTab("");
+    const timer = setTimeout(() => setNavLabelTab(tab), 105);
+    return () => clearTimeout(timer);
+  }, [tab]);
 
   useEffect(() => {
     const telegram = window.Telegram?.WebApp;
@@ -311,6 +320,7 @@ export default function App() {
             key={t}
             name={t}
             active={tab === t}
+            labelVisible={navLabelTab === t}
             onWarm={() => warmTab(t)}
             onOpen={() => openTab(t)}
           />

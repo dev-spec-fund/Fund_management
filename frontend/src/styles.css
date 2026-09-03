@@ -1545,3 +1545,48 @@ button:not(:disabled):active {
     transform: none !important;
   }
 }
+
+
+/* v77: sequence nav label timing so outgoing/incoming labels never overlap. */
+.app-nav-label {
+  max-width: 0 !important;
+  opacity: 0 !important;
+  transform: translateX(-2px) !important;
+  transition:
+    max-width 120ms ease-out,
+    opacity 90ms ease-out,
+    transform 110ms ease-out !important;
+}
+
+.app-nav-item.active .app-nav-label {
+  max-width: 0 !important;
+  opacity: 0 !important;
+}
+
+.app-nav-item.active .app-nav-label.visible {
+  max-width: 76px !important;
+  opacity: 1 !important;
+  transform: translateX(0) !important;
+  transition:
+    max-width 135ms ease-out,
+    opacity 110ms ease-out,
+    transform 120ms ease-out !important;
+}
+
+/* Keep icon movement calmer while the pill changes width. */
+.app-nav-item {
+  transition:
+    flex-basis 155ms cubic-bezier(.22,.72,.2,1),
+    min-width 155ms cubic-bezier(.22,.72,.2,1),
+    padding 155ms cubic-bezier(.22,.72,.2,1),
+    color 130ms ease-out,
+    gap 135ms ease-out,
+    transform 90ms ease-out !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-nav-label,
+  .app-nav-item {
+    transition: none !important;
+  }
+}
