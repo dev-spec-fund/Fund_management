@@ -145,7 +145,7 @@ export async function exportAnnualAgmPdf(data) {
   if ((data?.projects || []).length) {
     const activeProjects = data.projects.filter((p) => Number(p.annual_spend || 0) > 0 || Number(p.annual_donations || 0) > 0 || ["active","completed"].includes(String(p.status || "")));
     if (activeProjects.length) {
-      sectionTitle(ctx, "Community projects", "Each project is shown with its approved expenses for the reporting year. Project spending is already included in total fund expenses.", 16);
+      sectionTitle(ctx, "Community projects", "Each project is shown with its expenses for the reporting year. Project spending is already included in total fund expenses.", 16);
       table(ctx,
         [
           { key: "project_code", label: "Project ID", width: 22, bold: true },
@@ -173,7 +173,7 @@ export async function exportAnnualAgmPdf(data) {
           );
         }
         if (!rows.length) return;
-        sectionTitle(ctx, "Project expenses", "Approved expenses linked to this project during the reporting year.", 14);
+        sectionTitle(ctx, "Project expenses", "Expenses linked to this project during the reporting year.", 14);
         table(ctx,
           [
             { key: "transaction_month", label: "Month", width: 22, bold: true },

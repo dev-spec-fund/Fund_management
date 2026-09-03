@@ -85,7 +85,7 @@ export function MemberProjects() {
           <Detail label="Target end" value={p.target_end_date || "—"}/>
 
           <div className="sans" style={{fontSize:11,fontWeight:700,color:"var(--muted)",margin:"14px 0 7px"}}>APPROVED PROJECT EXPENSES</div>
-          {expenses.length === 0 ? <div className="sans" style={{fontSize:11,color:"var(--soft)"}}>No approved expenses yet.</div> : expenses.map((e)=><div key={e.id} style={{display:"flex",justifyContent:"space-between",gap:10,borderTop:"1px solid var(--divider)",padding:"9px 0"}}>
+          {expenses.length === 0 ? <div className="sans" style={{fontSize:11,color:"var(--soft)"}}>No expenses yet.</div> : expenses.map((e)=><div key={e.id} style={{display:"flex",justifyContent:"space-between",gap:10,borderTop:"1px solid var(--divider)",padding:"9px 0"}}>
             <div className="sans" style={{fontSize:11,minWidth:0}}><b>{e.description}</b><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{e.expense_date || "—"} · {e.category || "Uncategorised"}</div></div>
             <b className="sans" style={{fontSize:11,whiteSpace:"nowrap",color:"var(--danger)"}}>MVR {fmt(e.amount)}</b>
           </div>)}

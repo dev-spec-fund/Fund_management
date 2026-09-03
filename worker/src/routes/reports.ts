@@ -3,7 +3,6 @@ import type { AppEnv } from "../types";
 import { requireAdmin, requireMemberOrAdmin } from "../auth";
 import { currentMonth, getBranding } from "../db";
 import { validMonth } from "../validation";
-import { allocatedPaidSql } from "../allocations";
 import { sendDocument } from "../telegram";
 import { safeLogError } from "../ops";
 

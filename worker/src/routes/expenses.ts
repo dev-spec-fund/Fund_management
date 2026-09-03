@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance } from "../auth";
-import { currentDate, generateTxnId, getSetting } from "../db";
+import { currentDate, generateTxnId } from "../db";
 import { adminCan, auditEntity, availableFundBalance, ensureOperationalSchema, requireOpenMonth } from "../ops";
 import { boundedText, money, validDate, validMonth } from "../validation";
 import { sendDocument, sendStoredDocument, downloadTelegramFile } from "../telegram";

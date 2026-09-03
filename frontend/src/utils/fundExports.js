@@ -63,7 +63,7 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
     donations: (summary.projectDonations || []).filter(row => String(row.project_id || "") === String(project.project_id || "")),
   }));
   if (monthlyProjectGroups.length) {
-    sectionTitle(ctx, "Project activity", "Each project shows donations received for it and its approved expenses for the selected month.");
+    sectionTitle(ctx, "Project activity", "Each project shows donations received for it and its expenses for the selected month.");
     monthlyProjectGroups.forEach(project => {
       sectionTitle(ctx, `${project.project_code} · ${project.project_name}`, `${project.budget == null ? "Open-cost project" : `Budget ${money(project.budget)}`} · Donations ${money(project.donations_received||0)} · Spent ${money(project.spent)}`, 15);
       if (project.donations.length) {
@@ -91,7 +91,7 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
 
   const monthlyGeneralExpenses = monthlyExpenseRows.filter(row => !row.project_id && !row.project_code);
   if (monthlyGeneralExpenses.length) {
-    sectionTitle(ctx, "General expenses", "Approved expenses that are not linked to a community project.", 16);
+    sectionTitle(ctx, "General expenses", "Expenses that are not linked to a community project.", 16);
     table(ctx,
       [
         { key: "expense_date", label: "Date", width: 25, format: (v,r) => String(v || r.created_at || "").slice(0,10) },

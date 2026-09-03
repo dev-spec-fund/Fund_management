@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Plus, Download, ChevronLeft, ChevronRight } from "lucide-react";
-import { LoadingState, smallBtn, monthNavBtn } from "../components/Shared";
-import { fmt } from "../utils/format";
+import { LoadingState, MessageBanner, smallBtn, monthNavBtn } from "../components/Shared";
 import { useReportsData } from "./reports/useReportsData";
 import { MonthlyReportSections, AnnualAnalyticsSection } from "./reports/ReportSections";
 import { ExpenseModal, DonationModal } from "./reports/ReportModals";
@@ -10,6 +9,7 @@ export default function Reports({ setTab }) {
   const [showExpense, setShowExpense] = useState(false);
   const [showDonation, setShowDonation] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [error, setError] = useState("");
   const {
     month,
     monthLabel,
@@ -72,7 +72,7 @@ export default function Reports({ setTab }) {
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>REPORTS</div>
         <div style={{ display: "flex", gap: 6, position: "relative" }}>
-          <button type="button" onClick={async () => { try { const { exportFundPdf } = await import("../utils/exports"); await exportFundPdf({ month, monthLabel, summary }); } catch (e) { alert(e.message); } }} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
+          <button type="button" onClick={async () => { try { const { exportFundPdf } = await import("../utils/exports"); await exportFundPdf({ month, monthLabel, summary }); } catch (e) { setError(e.message || "Could not export PDF"); } }} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
           <button type="button" onClick={exportCsv} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>
           <button type="button" onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Log</button>
           {showAdd && <div style={{ position: "absolute", right: 0, top: 38, zIndex: 8, width: 160, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 5, boxShadow: "0 8px 24px var(--shadow)" }}>
@@ -88,8 +88,9 @@ export default function Reports({ setTab }) {
       </div>
     </div>
 
+    <MessageBanner tone="error">{error}</MessageBanner>
     <MonthlyReportSections summary={summary} trend={trend} monthLabel={monthLabel} setTab={setTab} />
-    <AnnualAnalyticsSection annualYear={annualYear} setAnnualYear={setAnnualYear} annual={annual} analytics={analytics} annualBusy={annualBusy} loadAnnual={loadAnnual} />
+    <AnnualAnalyticsSection annualYear={annualYear} setAnnualYear={setAnnualYear} annual={annual} analytics={analytics} annualBusy={annualBusy} loadAnnual={loadAnnual} setError={setError} />
 
     {showExpense && <ExpenseModal onClose={() => setShowExpense(false)} onSaved={loadMonthly} />}
     {showDonation && <DonationModal onClose={() => setShowDonation(false)} onSaved={loadMonthly} />}

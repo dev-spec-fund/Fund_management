@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { Check, X } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { LoadingState, ErrorState, SectionTitle, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";

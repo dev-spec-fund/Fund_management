@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireFinance, requireSuperAdmin, requireCloseMonth } from "../auth";
+import { requireAdmin, requireFinance, requireCloseMonth } from "../auth";
 import { auditEntity, ensureOperationalSchema, isMonthClosed, requireOpenMonth } from "../ops";
 import { validMonth } from "../validation";
 import { currentMonth, getBranding } from "../db";
