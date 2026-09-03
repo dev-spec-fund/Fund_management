@@ -4,8 +4,8 @@ import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
 import { adminCan } from "./utils/permissions";
 import {
-  House, Clock3, Users, Activity as ActivityIcon, ReceiptText, FolderKanban,
-  ChartNoAxesCombined, CalendarDays, Settings as SettingsIcon, History,
+  Home, Clock3, Users, Activity as ActivityIcon, ReceiptText, FolderKanban,
+  BarChart3, CalendarDays, Settings as SettingsIcon, History,
   WalletCards, ListChecks, UserRound
 } from "lucide-react";
 
@@ -66,13 +66,13 @@ const loaderForTab = (tab, adminView = false) => {
 };
 
 const NAV_ITEMS = {
-  overview: { label: "Overview", icon: House },
+  overview: { label: "Overview", icon: Home },
   pending: { label: "Pending", icon: Clock3 },
   members: { label: "Members", icon: Users },
   activity: { label: "Activity", icon: ActivityIcon },
   expenses: { label: "Expenses", icon: ReceiptText },
   projects: { label: "Projects", icon: FolderKanban },
-  reports: { label: "Reports", icon: ChartNoAxesCombined },
+  reports: { label: "Reports", icon: BarChart3 },
   meetings: { label: "Meetings", icon: CalendarDays },
   settings: { label: "Settings", icon: SettingsIcon },
   history: { label: "History", icon: History },
@@ -82,7 +82,7 @@ const NAV_ITEMS = {
 };
 
 function NavItem({ name, active, onWarm, onOpen }) {
-  const meta = NAV_ITEMS[name] || { label: name, icon: House };
+  const meta = NAV_ITEMS[name] || { label: name, icon: Home };
   const Icon = meta.icon;
   return (
     <button
