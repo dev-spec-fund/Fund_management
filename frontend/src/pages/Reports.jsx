@@ -92,6 +92,7 @@ export default function Reports({ setTab }) {
   const exportCsv = async () => {
     const rows = [
       ["Fund report", monthLabel],
+      ["Opening balance", summary.openingBalance ?? 0],
       ["Contribution cash received", summary.memberIncome],
       ["Allocated to contribution month", allocatedContributions],
       ["Paid in advance", advanceAllocated],
@@ -140,6 +141,7 @@ export default function Reports({ setTab }) {
 
       <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>MONTHLY SUMMARY</div>
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 14 }}>
+        <Row label="Opening balance" value={`MVR ${fmt(summary.openingBalance ?? 0)}`} />
         <Row label="Contribution cash received" value={`+ MVR ${fmt(summary.memberIncome)}`} color="var(--success)" />
         <Row label="Donations" value={`+ MVR ${fmt(summary.donationIncome)}`} color="var(--success)" />
         <Row label="Expenses" value={`− MVR ${fmt(summary.expenses)}`} color="var(--danger)" />
