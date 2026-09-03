@@ -1175,3 +1175,41 @@ button:not(:disabled):active {
     font-size: 16px !important;
   }
 }
+
+/* v73: normalize native iOS date/time/month control height.
+   Keep 16px text to prevent focus zoom, but prevent WebKit from expanding
+   picker controls much taller than normal form fields. */
+@media (max-width: 768px) {
+  input[type="date"],
+  input[type="time"],
+  input[type="month"],
+  input[type="datetime-local"] {
+    box-sizing: border-box !important;
+    width: 100%;
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 1.2 !important;
+    font-size: 16px !important;
+  }
+
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="time"]::-webkit-date-and-time-value,
+  input[type="month"]::-webkit-date-and-time-value,
+  input[type="datetime-local"]::-webkit-date-and-time-value {
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    line-height: 1.2;
+    text-align: left;
+  }
+
+  input[type="date"]::-webkit-datetime-edit,
+  input[type="time"]::-webkit-datetime-edit,
+  input[type="month"]::-webkit-datetime-edit,
+  input[type="datetime-local"]::-webkit-datetime-edit {
+    padding: 0;
+  }
+}
