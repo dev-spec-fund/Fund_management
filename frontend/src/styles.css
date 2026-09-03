@@ -759,3 +759,184 @@ input:focus, textarea:focus, select:focus {
   .admin-tab-strip { padding-left: 14px; padding-right: 14px; gap: 16px; scroll-padding-inline: 14px; }
   .app-page-content { padding-left: 15px; padding-right: 15px; }
 }
+
+
+/* v69: Projects detail hierarchy and collapsible transaction sections. */
+.project-detail-summary {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px;
+  margin-bottom:10px;
+}
+.project-detail-topline {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  color:var(--soft);
+  font-size:10px;
+  margin-bottom:9px;
+}
+.project-status-pill {
+  font-size:9px;
+  font-weight:750;
+  letter-spacing:.5px;
+}
+.project-open-cost {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  color:var(--muted);
+  padding:3px 0 10px;
+}
+.project-finance-grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:6px;
+}
+.project-finance-metric {
+  min-width:0;
+  border:1px solid var(--divider);
+  border-radius:9px;
+  padding:8px 7px;
+}
+.project-finance-metric > span {
+  display:block;
+  font-size:8px;
+  color:var(--soft);
+  text-transform:uppercase;
+  letter-spacing:.5px;
+}
+.project-finance-metric > strong {
+  display:block;
+  font-size:11px;
+  margin-top:3px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.project-finance-metric.danger > strong { color:var(--danger); }
+.project-finance-metric.success > strong { color:var(--success-strong); }
+.project-budget-progress {
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  margin-top:7px;
+  color:var(--muted);
+  font-size:9px;
+}
+.project-budget-progress strong { color:var(--danger); }
+.project-detail-meta {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.project-description {
+  font-size:10px;
+  color:var(--muted);
+  line-height:1.5;
+  margin-top:9px;
+}
+
+.project-section-header {
+  width:100%;
+  border:0;
+  border-top:1px solid var(--divider);
+  background:transparent;
+  color:var(--text);
+  padding:10px 1px 8px;
+  margin-top:4px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  cursor:pointer;
+  text-align:left;
+}
+.project-section-label {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  font-size:10px;
+  font-weight:750;
+  text-transform:uppercase;
+  letter-spacing:.45px;
+  color:var(--muted);
+}
+.project-section-label small {
+  min-width:18px;
+  height:18px;
+  padding:0 5px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--button-soft);
+  color:var(--primary-text);
+  font-size:9px;
+}
+.project-section-right {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  color:var(--muted);
+  font-size:10px;
+}
+.project-section-right strong {
+  color:var(--text);
+  font-size:10px;
+}
+.project-section-right svg {
+  transition:transform .16s ease;
+}
+.project-section-right svg.open { transform:rotate(180deg); }
+.project-section-empty {
+  font-size:10px;
+  color:var(--soft);
+  padding:2px 0 10px;
+}
+.project-transaction-row {
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  border-top:1px solid var(--divider);
+  padding:8px 1px;
+}
+.project-transaction-main {
+  min-width:0;
+  font-size:10px;
+}
+.project-transaction-main > b {
+  display:block;
+  font-size:10px;
+  margin-bottom:2px;
+}
+.project-transaction-main > div {
+  font-size:9px;
+  color:var(--soft);
+  line-height:1.35;
+}
+.project-transaction-main > div.warning { color:var(--warning); }
+.project-transaction-amount {
+  flex:0 0 auto;
+  white-space:nowrap;
+  font-size:10px;
+}
+.project-transaction-amount.success { color:var(--success); }
+.project-transaction-amount.danger { color:var(--danger); }
+.project-transaction-amount.muted { color:var(--muted); }
+.project-history-row {
+  border-top:1px solid var(--divider);
+  padding:7px 1px;
+}
+.project-history-row > div:first-child {
+  font-size:10px;
+  font-weight:650;
+}
+.project-history-row > div:last-child {
+  font-size:9px;
+  color:var(--soft);
+  margin-top:2px;
+}
