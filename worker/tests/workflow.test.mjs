@@ -214,3 +214,18 @@ test("expense documents preview inside the Mini App and prefer detected MIME", (
   assert.match(expensesRoute, /responseMime/);
   assert.match(expensesRoute, /detectedMime/);
 });
+
+
+test("expense PDF preview uses PDF.js canvas viewer with page and zoom controls", () => {
+  const expensesUi = read("../frontend/src/pages/Expenses.jsx");
+  const pdfPreview = read("../frontend/src/components/PdfPreview.jsx");
+  const packageJson = read("../frontend/package.json");
+  assert.match(expensesUi, /<PdfPreview/);
+  assert.match(pdfPreview, /pdfjs-dist/);
+  assert.match(pdfPreview, /getDocument/);
+  assert.match(pdfPreview, /<canvas/);
+  assert.match(pdfPreview, /Page \$\{page\} of \$\{pages\}/);
+  assert.match(pdfPreview, /setZoom/);
+  assert.match(packageJson, /pdfjs-dist/);
+  assert.doesNotMatch(expensesUi, /<iframe/);
+});

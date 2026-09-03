@@ -6,6 +6,7 @@ import { LoadingState, EmptyState, MessageBanner, PrimaryButton, smallBtn, month
 import { currentMonthValue, shiftMonthValue, todayValue } from "../utils/date";
 import { fmt } from "../utils/format";
 import Pagination, { pageSlice } from "../components/Pagination";
+import PdfPreview from "../components/PdfPreview";
 
 const FILTERS = [
   ["all", "All"],
@@ -264,6 +265,7 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
           url,
           name: doc.display_name || doc.original_filename || "Expense document",
           mime: blob.type || doc.mime_type || "application/octet-stream",
+          document: doc,
         };
       });
     }
@@ -391,27 +393,13 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
             style={{display:"block",width:"100%",maxHeight:"70vh",objectFit:"contain",borderRadius:8,background:"#fff"}}
           />
         ) : String(docPreview.mime).includes("pdf") ? (
-          <div className="sans" style={{padding:"20px 14px"}}>
-            <FileText size={38} style={{margin:"0 auto 10px",display:"block"}} />
-            <div style={{fontSize:13,fontWeight:700,color:"var(--primary-text)",wordBreak:"break-word"}}>{docPreview.name}</div>
-            <div style={{fontSize:10,color:"var(--muted)",marginTop:5}}>PDF document</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:16}}>
-              <button type="button" onClick={openPdfDocument} style={smallBtn("var(--primary-text)")}>Open PDF</button>
-              <button
-                type="button"
-                onClick={() => {
-                  const doc = documents?.find((d) => (d.display_name || d.original_filename || "Expense document") === docPreview.name);
-                  if (doc) sendDocument(doc);
-                }}
-                style={smallBtn("var(--primary-text)")}
-              >
-                Send to Telegram
-              </button>
-            </div>
-            <div style={{fontSize:9,color:"var(--soft)",marginTop:10,lineHeight:1.45}}>
-              Open PDF uses your device’s document/share viewer for better zoom and multi-page viewing.
-            </div>
-          </div>
+          <PdfPreview
+            url={docPreview.url}
+            name={docPreview.name}
+            onOpen={openPdfDocument}
+            onSend={docPreview.document ? () => sendDocument(docPreview.document) : undefined}
+            sendBusy={docBusy}
+          />
         ) : (
           <div className="sans" style={{padding:20,fontSize:11,color:"var(--muted)"}}>
             This document type cannot be previewed inside the Mini App. Use “Send to my Telegram” to open the original file.
