@@ -1,3 +1,5 @@
+import { LoaderCircle, RotateCcw } from "lucide-react";
+
 
 export function MessageBanner({ children, tone = "success" }) {
   if (!children) return null;
@@ -45,6 +47,26 @@ export function PageState({ kind = "empty", title, message, action, compact = fa
 
 export function LoadingState({ children = "Loading…", compact = false }) {
   return <PageState kind="loading" title={children} compact={compact} />;
+}
+
+export function PreviewLoadState({ status = "loading", label = "Loading preview…", error = "", onRetry }) {
+  if (status === "error") {
+    return (
+      <div className="sans" role="alert" style={{ minHeight: 220, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: 24, textAlign: "center" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--danger)" }}>Could not load preview</div>
+        <div style={{ maxWidth: 300, fontSize: 11, lineHeight: 1.5, color: "var(--muted)" }}>{error || "The document could not be loaded from Telegram."}</div>
+        {onRetry && <button type="button" onClick={onRetry} style={compactBtn}><RotateCcw size={13}/> Try again</button>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="sans" role="status" aria-live="polite" style={{ minHeight: 220, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: 24, textAlign: "center" }}>
+      <LoaderCircle className="preview-loading-spinner" size={28} aria-hidden="true" />
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primary-text)" }}>{label}</div>
+      <div style={{ fontSize: 10, color: "var(--soft)" }}>Fetching securely from Telegram…</div>
+    </div>
+  );
 }
 export function EmptyState({ children = "Nothing to show.", compact = false }) {
   return <PageState kind="empty" title={children} compact={compact} />;

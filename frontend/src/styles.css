@@ -1488,3 +1488,13 @@ button:not(:disabled):active {
     transform: none !important;
   }
 }
+
+/* Telegram-backed document preview loading indicator. */
+.preview-loading-spinner {
+  color: var(--primary);
+  animation: preview-spinner-rotate 850ms linear infinite;
+}
+@keyframes preview-spinner-rotate { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .preview-loading-spinner { animation-duration: 1600ms; }
+}

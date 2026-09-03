@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Eye, FileText, Pencil, Plus, RotateCcw, Send, Tag, Trash2, Paperclip } from "lucide-react";
 import { api } from "../../api";
 import { Modal } from "../../components/FormControls";
-import { MessageBanner, smallBtn } from "../../components/Shared";
+import { MessageBanner, PreviewLoadState, smallBtn } from "../../components/Shared";
 import PdfPreview from "../../components/PdfPreview";
 import { fmt } from "../../utils/format";
 import { adminCan } from "../../utils/permissions";
@@ -18,6 +18,7 @@ export default function DonationDetails({ admin, row, onClose, onSaved }) {
   const [documents,setDocuments]=useState(null);
   const [docBusy,setDocBusy]=useState(false);
   const [docPreview,setDocPreview]=useState(null);
+  const previewRequestRef=useRef(0);
   const [addDocumentType,setAddDocumentType]=useState("Payment Slip");
   const canFinance=adminCan(admin,"finance");
 
@@ -36,8 +37,25 @@ export default function DonationDetails({ admin, row, onClose, onSaved }) {
     catch(e){setError(e.message||"Could not save donation document to Telegram");}
     finally{setDocBusy(false);}
   };
-  const openDocument=async(document)=>{setDocBusy(true);setError("");try{const blob=await api.donations.downloadDocument(row.id,document.id);const url=URL.createObjectURL(blob);setDocPreview(previous=>{if(previous?.url)URL.revokeObjectURL(previous.url);return{url,name:document.display_name||document.original_filename||"Donation document",mime:blob.type||document.mime_type||"application/octet-stream",document};});}catch(e){setError(e.message||"Could not open document");}finally{setDocBusy(false);}};
-  const closePreview=()=>setDocPreview(previous=>{if(previous?.url)URL.revokeObjectURL(previous.url);return null;});
+  const openDocument=async(document)=>{
+    const requestId=++previewRequestRef.current;
+    const name=document.display_name||document.original_filename||"Donation document";
+    setDocPreview(previous=>{if(previous?.url)URL.revokeObjectURL(previous.url);return{status:"loading",url:"",name,mime:document.mime_type||"",document};});
+    setError("");
+    try{
+      const blob=await api.donations.downloadDocument(row.id,document.id);
+      const url=URL.createObjectURL(blob);
+      if(requestId!==previewRequestRef.current){URL.revokeObjectURL(url);return;}
+      setDocPreview({status:"ready",url,name,mime:blob.type||document.mime_type||"application/octet-stream",document});
+    }catch(e){
+      if(requestId!==previewRequestRef.current)return;
+      setDocPreview({status:"error",url:"",name,mime:document.mime_type||"",document,error:e.message||"Could not open document"});
+    }
+  };
+  const closePreview=()=>{
+    previewRequestRef.current+=1;
+    setDocPreview(previous=>{if(previous?.url)URL.revokeObjectURL(previous.url);return null;});
+  };
   const sendDocument=async(document)=>{setDocBusy(true);setError("");try{await api.donations.sendDocumentToTelegram(row.id,document.id);}catch(e){setError(e.message||"Could not send document to Telegram");}finally{setDocBusy(false);}};
   const editDocument=async(document)=>{const label=prompt("Document label:",document.display_name||document.original_filename||"");if(label===null||!label.trim())return;const type=prompt(`Document type: ${DOC_TYPES.join(", ")}`,document.document_type||"Other");if(type===null)return;const normalized=DOC_TYPES.find(v=>v.toLowerCase()===type.trim().toLowerCase());if(!normalized)return setError(`Choose: ${DOC_TYPES.join(", ")}.`);setDocBusy(true);try{await api.donations.updateDocument(row.id,document.id,{display_name:label.trim(),document_type:normalized});await loadDocuments();}catch(e){setError(e.message||"Could not update document");}finally{setDocBusy(false);}};
   const removeDocument=async(document)=>{const reason=prompt("Reason for removing this donation document:");if(!reason||reason.trim().length<3)return;setDocBusy(true);try{await api.donations.removeDocument(row.id,document.id,reason.trim());await loadDocuments();await refresh();}catch(e){setError(e.message||"Could not remove document");}finally{setDocBusy(false);}};
@@ -58,7 +76,7 @@ export default function DonationDetails({ admin, row, onClose, onSaved }) {
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{d.status==='active'&&<button type="button" disabled={busy} onClick={()=>setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13}/> Edit</button>}{d.status==='active'&&<button type="button" disabled={busy} onClick={reverse} style={smallBtn("var(--danger)")}><RotateCcw size={13}/> Reverse</button>}</div>
       {d.status!=='active'&&<div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:10,textAlign:"center"}}>Financial details are locked for reversed/voided donations. Supporting documents remain available for audit evidence.</div>}
     </Modal>
-    {docPreview&&<Modal onClose={closePreview} title={docPreview.name}><div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:12,padding:8,textAlign:"center"}}>{String(docPreview.mime).startsWith("image/")?<img src={docPreview.url} alt={docPreview.name} style={{display:"block",width:"100%",maxHeight:"70vh",objectFit:"contain",borderRadius:8,background:"#fff"}}/>:String(docPreview.mime).includes("pdf")?<PdfPreview url={docPreview.url} name={docPreview.name} onSend={docPreview.document?()=>sendDocument(docPreview.document):undefined} sendBusy={docBusy}/>:<div className="sans" style={{padding:20,fontSize:11,color:"var(--muted)"}}>Preview is not available for this file type. Use Send to Telegram to open the original.</div>}</div></Modal>}
+    {docPreview&&<Modal onClose={closePreview} title={docPreview.name}><div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:12,padding:8,textAlign:"center"}}>{docPreview.status==="loading"?<PreviewLoadState label={String(docPreview.mime).includes("pdf")?"Loading PDF…":"Loading document…"}/>:docPreview.status==="error"?<PreviewLoadState status="error" error={docPreview.error} onRetry={()=>openDocument(docPreview.document)}/>:String(docPreview.mime).startsWith("image/")?<img src={docPreview.url} alt={docPreview.name} style={{display:"block",width:"100%",maxHeight:"70vh",objectFit:"contain",borderRadius:8,background:"#fff"}}/>:String(docPreview.mime).includes("pdf")?<PdfPreview url={docPreview.url} name={docPreview.name} onSend={docPreview.document?()=>sendDocument(docPreview.document):undefined} sendBusy={docBusy}/>:<div className="sans" style={{padding:20,fontSize:11,color:"var(--muted)"}}>Preview is not available for this file type. Use Send to Telegram to open the original.</div>}</div></Modal>}
   </>;
 }
 function Detail({label,value}){return <div className="sans" style={{display:"flex",justifyContent:"space-between",gap:12,padding:"6px 0",borderBottom:"1px solid var(--divider)",fontSize:12}}><span style={{color:"var(--muted)"}}>{label}</span><strong style={{textAlign:"right"}}>{value}</strong></div>}

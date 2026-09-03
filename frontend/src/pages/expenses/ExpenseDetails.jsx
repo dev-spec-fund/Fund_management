@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Eye, FileText, Pencil, Plus, RotateCcw, Send, Tag, Trash2, Paperclip } from "lucide-react";
 import { api } from "../../api";
 import { Modal } from "../../components/FormControls";
-import { MessageBanner, smallBtn } from "../../components/Shared";
+import { MessageBanner, PreviewLoadState, smallBtn } from "../../components/Shared";
 import PdfPreview from "../../components/PdfPreview";
 import { fmt } from "../../utils/format";
 import { adminCan } from "../../utils/permissions";
@@ -16,6 +16,7 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const [documents, setDocuments] = useState(null);
   const [docBusy, setDocBusy] = useState(false);
   const [docPreview, setDocPreview] = useState(null);
+  const previewRequestRef = useRef(0);
   const [addDocumentType, setAddDocumentType] = useState("Receipt");
   const canViewDocuments = adminCan(admin, "finance");
 
@@ -50,28 +51,29 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
   };
 
   const openDocument = async (document) => {
-    setDocBusy(true);
+    const requestId = ++previewRequestRef.current;
+    const name = document.display_name || document.original_filename || "Expense document";
+    setDocPreview((previous) => {
+      if (previous?.url) URL.revokeObjectURL(previous.url);
+      return { status: "loading", url: "", name, mime: document.mime_type || "", document };
+    });
     setError("");
     try {
       const blob = await api.expenses.downloadDocument(row.id, document.id);
       const url = URL.createObjectURL(blob);
-      setDocPreview((previous) => {
-        if (previous?.url) URL.revokeObjectURL(previous.url);
-        return {
-          url,
-          name: document.display_name || document.original_filename || "Expense document",
-          mime: blob.type || document.mime_type || "application/octet-stream",
-          document,
-        };
-      });
+      if (requestId !== previewRequestRef.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      setDocPreview({ status: "ready", url, name, mime: blob.type || document.mime_type || "application/octet-stream", document });
     } catch (e) {
-      setError(e.message || "Could not open document");
-    } finally {
-      setDocBusy(false);
+      if (requestId !== previewRequestRef.current) return;
+      setDocPreview({ status: "error", url: "", name, mime: document.mime_type || "", document, error: e.message || "Could not open document" });
     }
   };
 
   const closeDocumentPreview = () => {
+    previewRequestRef.current += 1;
     setDocPreview((previous) => {
       if (previous?.url) URL.revokeObjectURL(previous.url);
       return null;
@@ -211,7 +213,7 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
     </Modal>
     {docPreview && <Modal onClose={closeDocumentPreview} title={docPreview.name}>
       <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 12, padding: 8, textAlign: "center" }}>
-        {String(docPreview.mime).startsWith("image/") ? <img src={docPreview.url} alt={docPreview.name} style={{ display: "block", width: "100%", maxHeight: "70vh", objectFit: "contain", borderRadius: 8, background: "#fff" }} /> : String(docPreview.mime).includes("pdf") ? <PdfPreview url={docPreview.url} name={docPreview.name} onOpen={openPdfDocument} onSend={docPreview.document ? () => sendDocument(docPreview.document) : undefined} sendBusy={docBusy} /> : <div className="sans" style={{ padding: 20, fontSize: 11, color: "var(--muted)" }}>This document type cannot be previewed inside the Mini App. Use “Send to my Telegram” to open the original file.</div>}
+        {docPreview.status === "loading" ? <PreviewLoadState label={String(docPreview.mime).includes("pdf") ? "Loading PDF…" : "Loading document…"} /> : docPreview.status === "error" ? <PreviewLoadState status="error" error={docPreview.error} onRetry={() => openDocument(docPreview.document)} /> : String(docPreview.mime).startsWith("image/") ? <img src={docPreview.url} alt={docPreview.name} style={{ display: "block", width: "100%", maxHeight: "70vh", objectFit: "contain", borderRadius: 8, background: "#fff" }} /> : String(docPreview.mime).includes("pdf") ? <PdfPreview url={docPreview.url} name={docPreview.name} onOpen={openPdfDocument} onSend={docPreview.document ? () => sendDocument(docPreview.document) : undefined} sendBusy={docBusy} /> : <div className="sans" style={{ padding: 20, fontSize: 11, color: "var(--muted)" }}>This document type cannot be previewed inside the Mini App. Use “Send to my Telegram” to open the original file.</div>}
       </div>
     </Modal>}
   </>;

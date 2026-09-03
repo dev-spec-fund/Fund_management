@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Bell, ChevronDown, Download, Eye, Paperclip, Pencil, Send } from "lucide-react";
 import { api } from "../../api";
 import { Modal, Field, useConfirmDialog } from "../../components/FormControls";
-import { PrimaryButton, smallBtn, approveBtn, rejectBtn } from "../../components/Shared";
+import { PreviewLoadState, PrimaryButton, smallBtn, approveBtn, rejectBtn } from "../../components/Shared";
 import { formatLocalDateTime } from "../../utils/date";
 import { fmt } from "../../utils/format";
 
@@ -30,6 +30,7 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
   const [reminderNote, setReminderNote] = useState("");
   const [showRejected, setShowRejected] = useState(false);
   const [slipPreview, setSlipPreview] = useState(null);
+  const slipPreviewRequestRef = useRef(0);
   const [slipBusy, setSlipBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   const [expandedContribution, setExpandedContribution] = useState(null);
@@ -49,23 +50,33 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
   };
 
   const openContributionSlip = async (contribution) => {
-    if (slipBusy) return;
+    const requestId = ++slipPreviewRequestRef.current;
+    const txnId = contribution.txn_id || "Contribution";
+    setSlipPreview((previous) => {
+      if (previous?.url) URL.revokeObjectURL(previous.url);
+      return { status: "loading", url: "", txnId, mime: contribution.slip_mime_type || "image/jpeg", contribution };
+    });
     setSlipBusy(true);
+    setActionMessage("");
     try {
-      const blob=await api.members.contributionSlip(member.id,contribution.id);
-      const url=URL.createObjectURL(blob);
-      setSlipPreview((previous) => {
-        if (previous?.url) URL.revokeObjectURL(previous.url);
-        return { url, txnId: contribution.txn_id || "Contribution", mime: blob.type || "image/jpeg" };
-      });
+      const blob = await api.members.contributionSlip(member.id, contribution.id);
+      const url = URL.createObjectURL(blob);
+      if (requestId !== slipPreviewRequestRef.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      setSlipPreview({ status: "ready", url, txnId, mime: blob.type || "image/jpeg", contribution });
     } catch (e) {
-      setActionMessage(e.message || "Could not open payment slip");
+      if (requestId !== slipPreviewRequestRef.current) return;
+      setSlipPreview({ status: "error", url: "", txnId, mime: contribution.slip_mime_type || "", contribution, error: e.message || "Could not open payment slip" });
     } finally {
-      setSlipBusy(false);
+      if (requestId === slipPreviewRequestRef.current) setSlipBusy(false);
     }
   };
 
   const closeSlipPreview = () => {
+    slipPreviewRequestRef.current += 1;
+    setSlipBusy(false);
     setSlipPreview((previous) => {
       if (previous?.url) URL.revokeObjectURL(previous.url);
       return null;
@@ -277,16 +288,14 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
     {slipPreview && (
       <Modal onClose={closeSlipPreview} title={`Payment slip · ${slipPreview.txnId}`}>
         <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:12,padding:8,textAlign:"center"}}>
-          {String(slipPreview.mime).startsWith("image/") ? (
-            <img
-              src={slipPreview.url}
-              alt={`Payment slip ${slipPreview.txnId}`}
-              style={{display:"block",width:"100%",maxHeight:"70vh",objectFit:"contain",borderRadius:8,background:"#fff"}}
-            />
+          {slipPreview.status === "loading" ? (
+            <PreviewLoadState label="Loading payment slip…" />
+          ) : slipPreview.status === "error" ? (
+            <PreviewLoadState status="error" error={slipPreview.error} onRetry={() => openContributionSlip(slipPreview.contribution)} />
+          ) : String(slipPreview.mime).startsWith("image/") ? (
+            <img src={slipPreview.url} alt={`Payment slip ${slipPreview.txnId}`} style={{display:"block",width:"100%",maxHeight:"70vh",objectFit:"contain",borderRadius:8,background:"#fff"}} />
           ) : (
-            <div className="sans" style={{padding:20,fontSize:11,color:"var(--muted)"}}>
-              This attachment cannot be previewed as an image. Use “Send to Telegram” to open the original file.
-            </div>
+            <div className="sans" style={{padding:20,fontSize:11,color:"var(--muted)"}}>This attachment cannot be previewed as an image. Use “Send to Telegram” to open the original file.</div>
           )}
         </div>
       </Modal>
