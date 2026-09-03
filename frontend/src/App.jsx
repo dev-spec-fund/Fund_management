@@ -258,10 +258,15 @@ export default function App() {
   const openTab = (nextTab) => {
     warmTab(nextTab);
 
-    // Only keep the active page mounted. Hidden visited pages previously kept
-    // data-change listeners and large UI state alive, causing background reloads
-    // after financial mutations. Lazy modules and GET data remain cached.
-    setMountedTabs(new Set([nextTab]));
+    // Keep a very small warm-page window for smooth back-and-forth navigation.
+    // This avoids the old unlimited hidden-page listener buildup while allowing
+    // the three most recently visited screens to remain instantly available.
+    setMountedTabs((current) => {
+      const ordered = [...current].filter((page) => page !== nextTab);
+      ordered.push(nextTab);
+      while (ordered.length > 3) ordered.shift();
+      return new Set(ordered);
+    });
     setTab(nextTab);
   };
 
@@ -305,7 +310,11 @@ export default function App() {
           You are an admin but not yet linked to a member account. Send /start to the bot and choose “Register Myself as Member”.
         </div>
       )}
-      <nav className="sans admin-tab-strip app-icon-nav" aria-label={adminView ? "Admin navigation" : "My Account navigation"}>
+      <nav
+        className="sans admin-tab-strip app-icon-nav"
+        aria-label={adminView ? "Admin navigation" : "My Account navigation"}
+        style={{ gridTemplateColumns: tabs.map((t) => t === tab ? "2.15fr" : "1fr").join(" ") }}
+      >
         {tabs.map((t) => (
           <NavItem
             key={t}
