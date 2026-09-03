@@ -183,7 +183,7 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
         outline: "none",
         borderRadius: prefix ? 0 : 10,
         padding: "10px 12px",
-        fontSize: 14,
+        fontSize: 16,
         boxSizing: "border-box",
         background: focused ? "var(--focus-bg)" : "var(--card)",
         boxShadow: focused ? "0 0 0 2px var(--focus-ring)" : "none",
