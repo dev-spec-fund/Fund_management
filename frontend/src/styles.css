@@ -1427,3 +1427,121 @@ button:not(:disabled):active {
     height: 15px;
   }
 }
+
+
+/* v76: subtle navigation micro-interactions. */
+.admin-tab-strip.app-icon-nav {
+  isolation: isolate;
+  animation: app-nav-enter 180ms ease-out both;
+}
+
+.app-nav-indicator {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--primary);
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 180ms cubic-bezier(.22,.72,.2,1),
+    width 180ms cubic-bezier(.22,.72,.2,1),
+    opacity 120ms ease-out;
+}
+
+.app-nav-indicator.ready {
+  opacity: 1;
+}
+
+.app-nav-item {
+  position: relative;
+  z-index: 1;
+  transition:
+    flex-basis 180ms cubic-bezier(.22,.72,.2,1),
+    min-width 180ms cubic-bezier(.22,.72,.2,1),
+    padding 180ms cubic-bezier(.22,.72,.2,1),
+    color 140ms ease-out,
+    gap 160ms ease-out,
+    transform 90ms ease-out;
+}
+
+/* Background now comes from the single sliding indicator. */
+.app-nav-item.active {
+  background: transparent !important;
+}
+
+.app-nav-item > svg {
+  transition:
+    transform 140ms ease-out,
+    opacity 140ms ease-out,
+    color 140ms ease-out;
+  transform: scale(1);
+  opacity: .82;
+}
+
+.app-nav-item.active > svg {
+  transform: scale(1.08);
+  opacity: 1;
+}
+
+.app-nav-label {
+  transform: translateX(-3px);
+  transition:
+    max-width 170ms cubic-bezier(.22,.72,.2,1),
+    opacity 130ms ease-out,
+    transform 150ms ease-out;
+}
+
+.app-nav-item.active .app-nav-label {
+  transform: translateX(0);
+}
+
+.app-nav-item:active {
+  transform: scale(.96) !important;
+}
+
+.page-panel--active {
+  animation: page-enter-soft 130ms ease-out both;
+}
+
+@keyframes page-enter-soft {
+  from {
+    opacity: .82;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes app-nav-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-tab-strip.app-icon-nav,
+  .page-panel--active {
+    animation: none !important;
+  }
+
+  .app-nav-indicator,
+  .app-nav-item,
+  .app-nav-item > svg,
+  .app-nav-label {
+    transition: none !important;
+  }
+
+  .app-nav-item:active {
+    transform: none !important;
+  }
+}
