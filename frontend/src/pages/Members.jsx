@@ -202,9 +202,14 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   const [reminding, setReminding] = useState(false);
   const [reminderNote, setReminderNote] = useState("");
   const [showRejected, setShowRejected] = useState(false);
+  const [slipPreview, setSlipPreview] = useState(null);
+  const [slipBusy, setSlipBusy] = useState(false);
   const [form, setForm] = useState({ name: member.name, phone: member.phone, monthly_amount: member.monthly_amount });
 
   useEffect(() => { api.members.statement(member.id).then(setDetail).catch(() => {}); }, [member.id]);
+  useEffect(() => () => {
+    if (slipPreview?.url) URL.revokeObjectURL(slipPreview.url);
+  }, [slipPreview]);
 
   const save = async () => {
     await api.members.update(member.id, { ...form, monthly_amount: Number(form.monthly_amount) });
@@ -214,12 +219,27 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   };
 
   const openContributionSlip = async (contribution) => {
+    if (slipBusy) return;
+    setSlipBusy(true);
     try {
       const blob=await api.members.contributionSlip(member.id,contribution.id);
       const url=URL.createObjectURL(blob);
-      const a=document.createElement("a"); a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.download=`${contribution.txn_id || "contribution"}-payment-slip`;
-      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000);
-    } catch (e) { alert(e.message || "Could not open payment slip"); }
+      setSlipPreview((previous) => {
+        if (previous?.url) URL.revokeObjectURL(previous.url);
+        return { url, txnId: contribution.txn_id || "Contribution", mime: blob.type || "image/jpeg" };
+      });
+    } catch (e) {
+      alert(e.message || "Could not open payment slip");
+    } finally {
+      setSlipBusy(false);
+    }
+  };
+
+  const closeSlipPreview = () => {
+    setSlipPreview((previous) => {
+      if (previous?.url) URL.revokeObjectURL(previous.url);
+      return null;
+    });
   };
 
   const sendContributionSlip = async (contribution) => {
@@ -296,7 +316,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
         {Boolean(h.has_slip) && canRemind && <div className="sans" style={{display:"flex",alignItems:"center",gap:7,background:"var(--surface-cool)",border:"1px solid var(--border)",borderRadius:9,padding:"7px 8px",marginTop:8}}>
           <Paperclip size={13} color="var(--muted)"/>
           <div style={{flex:1,minWidth:0,fontSize:10,fontWeight:700,color:"var(--primary-text)"}}>Payment slip attached</div>
-          <button type="button" title="Open payment slip" onClick={()=>openContributionSlip(h)} style={{...smallBtn("var(--primary-text)"),padding:6}}><Eye size={13}/></button>
+          <button type="button" title="Preview payment slip" disabled={slipBusy} onClick={()=>openContributionSlip(h)} style={{...smallBtn("var(--primary-text)"),padding:6,opacity:slipBusy?.65:1}}><Eye size={13}/></button>
           <button type="button" title="Send payment slip to my Telegram" onClick={()=>sendContributionSlip(h)} style={{...smallBtn("var(--primary-text)"),padding:6}}><Send size={13}/></button>
         </div>}
 
@@ -324,6 +344,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   };
 
   return (
+    <>
     <Modal onClose={onClose} title={member.name} action={<button type="button" onClick={() => setEditing(true)} style={{ background:"none", border:"none", cursor:"pointer" }}><Pencil size={17} color="var(--soft)" /></button>}>
       {editing ? (
         <>
@@ -411,6 +432,24 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
         </>
       )}
     </Modal>
+    {slipPreview && (
+      <Modal onClose={closeSlipPreview} title={`Payment slip · ${slipPreview.txnId}`}>
+        <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:12,padding:8,textAlign:"center"}}>
+          {String(slipPreview.mime).startsWith("image/") ? (
+            <img
+              src={slipPreview.url}
+              alt={`Payment slip ${slipPreview.txnId}`}
+              style={{display:"block",width:"100%",maxHeight:"70vh",objectFit:"contain",borderRadius:8,background:"#fff"}}
+            />
+          ) : (
+            <div className="sans" style={{padding:20,fontSize:11,color:"var(--muted)"}}>
+              This attachment cannot be previewed as an image. Use “Send to Telegram” to open the original file.
+            </div>
+          )}
+        </div>
+      </Modal>
+    )}
+    </>
   );
 }
 

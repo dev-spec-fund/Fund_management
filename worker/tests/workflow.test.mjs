@@ -183,3 +183,11 @@ test("OCR reference parser stays on the labelled line and rejects unsafe referen
   assert.match(telegram, /13,/);
   assert.match(telegram, /If uncertain, return null/);
 });
+
+
+test("contribution slip preview stays inside the Mini App instead of opening a blob tab", () => {
+  const members = read("../frontend/src/pages/Members.jsx");
+  assert.match(members, /slipPreview/);
+  assert.match(members, /<img/);
+  assert.doesNotMatch(members, /a\.target="_blank".*payment-slip/);
+});
