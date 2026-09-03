@@ -263,3 +263,15 @@ test('donation idempotency key blocks duplicate create retries in the database',
   assert.equal(scalar(db,"SELECT COUNT(*) FROM donations"),1);
   db.close();
 });
+
+
+test('member fund can open Uncategorised expenses', () => {
+  const reportsSource = fs.readFileSync(path.join(root,'src/routes/reports.ts'),'utf8');
+  const fundSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/FundView.jsx'),'utf8');
+
+  assert.match(reportsSource, /categoryId === 0/);
+  assert.match(reportsSource, /e\.category_id IS NULL/);
+  assert.match(reportsSource, /name:"Uncategorised"/);
+  assert.match(fundSource, /category\.category_id == null \? 0/);
+  assert.match(fundSource, /publicExpenses\(month, categoryId\)/);
+});

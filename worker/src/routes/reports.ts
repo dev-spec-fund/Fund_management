@@ -294,7 +294,21 @@ reportsRoute.get("/public-expenses", requireMemberOrAdmin, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   const categoryId = Number(c.req.query("category_id"));
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
-  if (!Number.isInteger(categoryId) || categoryId <= 0) return c.json({error:"Valid category_id is required"},400);
+  if (!Number.isInteger(categoryId) || categoryId < 0) return c.json({error:"Valid category_id is required"},400);
+
+  if (categoryId === 0) {
+    const rows = await c.env.DB.prepare(`
+      SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,e.transaction_month,e.created_at,e.approved_at,
+             NULL category_id,'Uncategorised' category
+      FROM expenses e
+      WHERE e.category_id IS NULL
+        AND COALESCE(e.status,'approved')='approved'
+        AND e.transaction_month=?
+      ORDER BY COALESCE(e.approved_at,e.created_at) DESC,e.id DESC
+    `).bind(month).all<any>();
+    const total = rows.results.reduce((sum:number,row:any)=>sum+Number(row.amount||0),0);
+    return c.json({month,category:{id:0,name:"Uncategorised"},total,expenses:rows.results});
+  }
 
   const category = await c.env.DB.prepare("SELECT id,name FROM expense_categories WHERE id=?")
     .bind(categoryId).first<any>();

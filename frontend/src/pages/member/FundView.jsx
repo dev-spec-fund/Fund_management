@@ -32,12 +32,13 @@ export function FundView() {
   }), [month]);
 
   const openExpenseCategory = async (category) => {
-    if (!category?.category_id) return;
+    if (!category) return;
+    const categoryId = category.category_id == null ? 0 : Number(category.category_id);
     setExpenseLoading(true);
     setExpenseError("");
-    setExpenseDetail({ category: { id: category.category_id, name: category.category }, month, total: Number(category.spent || 0), expenses: null });
+    setExpenseDetail({ category: { id: categoryId, name: category.category || "Uncategorised" }, month, total: Number(category.spent || 0), expenses: null });
     try {
-      setExpenseDetail(await api.reports.publicExpenses(month, category.category_id));
+      setExpenseDetail(await api.reports.publicExpenses(month, categoryId));
     } catch (e) {
       setExpenseError(e?.message || "Could not load expense details.");
     } finally {
