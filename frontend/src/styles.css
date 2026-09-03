@@ -1165,3 +1165,13 @@ button:not(:disabled):active {
   --soft-2: #858C84;
   --soft-3: #7B827A;
 }
+
+
+/* v72: prevent iOS/WebView auto-zoom when focusing form controls. */
+@media (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
