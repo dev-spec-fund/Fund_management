@@ -15,6 +15,7 @@ function initData() {
 }
 
 const GET_CACHE_TTL_MS = 30_000;
+const MAX_GET_CACHE_ENTRIES = 80;
 const responseCache = new Map();
 const inFlightGets = new Map();
 let cacheGeneration = 0;
@@ -58,6 +59,16 @@ function cacheKey(path) {
   return `${initData()}::${path}`;
 }
 
+function storeGetCache(key, data) {
+  responseCache.delete(key);
+  responseCache.set(key, { data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
+  while (responseCache.size > MAX_GET_CACHE_ENTRIES) {
+    const oldestKey = responseCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    responseCache.delete(oldestKey);
+  }
+}
+
 async function request(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const isGet = method === "GET";
@@ -92,7 +103,7 @@ async function request(path, options = {}) {
     if (startedAt) perfLog(`${method} ${path}`, startedAt);
     if (isGet) {
       if (requestGeneration === cacheGeneration) {
-        responseCache.set(key, { data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
+        storeGetCache(key, data);
       }
     } else {
       clearGetCache();

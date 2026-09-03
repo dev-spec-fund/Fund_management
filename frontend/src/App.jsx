@@ -109,6 +109,7 @@ export default function App() {
   const [mode, setMode] = useState("member");
   const [mountedTabs, setMountedTabs] = useState(() => new Set(["overview"]));
   const contentScrollRef = useRef(null);
+  const lastWarmRef = useRef({ key: "", at: 0 });
   const [navLabelTab, setNavLabelTab] = useState(tab);
   const bootStartedAt = useRef(typeof performance !== "undefined" ? performance.now() : 0);
 
@@ -165,47 +166,31 @@ export default function App() {
   useEffect(() => {
     if (!me) return undefined;
 
-    // Preload code and API data without mounting hidden React pages. This keeps
-    // navigation fast while preserving the v40 crash isolation. Admin requests
-    // are staged so they do not compete with the Overview bootstrap request.
+    // Performance Stage 1: preload JavaScript chunks only.
+    // API data is fetched on actual navigation, where the shared GET cache and
+    // in-flight de-duplication let the page reuse the request started on touch.
     const likelyNext = adminView
-      ? (canFinance ? ["pending", "members", "activity"] : ["members", "activity"])
+      ? (canFinance ? ["pending", "members", "expenses", "projects"] : ["members", "reports"])
       : ["history", "fund", "activity", ...(memberProjectsEnabled ? ["projects"] : []), "meetings"];
     const secondary = adminView
-      ? (canFinance ? ["expenses", "projects", "reports", "meetings"] : ["reports", "meetings"])
+      ? ["activity", "reports", "meetings"]
       : ["actions", "profile"];
     const later = adminView ? ["settings"] : [];
 
     const warmCode = (items) => {
-      items.filter((name) => tabs.includes(name)).forEach((name) => loaderForTab(name, adminView)?.());
+      items
+        .filter((name) => tabs.includes(name))
+        .forEach((name) => loaderForTab(name, adminView)?.());
     };
 
-    const timers = adminView ? [
-      setTimeout(() => warmCode(likelyNext), 180),
-      setTimeout(() => api.prefetchAdminData("primary", canFinance).catch(() => {}), 280),
-      setTimeout(() => warmCode(secondary), 850),
-      setTimeout(() => api.prefetchAdminData("operations", canFinance).catch(() => {}), 950),
-      setTimeout(() => api.prefetchAdminData("reports", canFinance).catch(() => {}), 1450),
-      // Settings is deliberately last because it is rarely the first destination.
-      // Heavy Health / Error Log / Audit Log requests are not prefetched.
-      setTimeout(() => warmCode(later), 2400),
-      setTimeout(() => api.prefetchAdminData("settings", canFinance).catch(() => {}), 3000),
-      // Dual-role Member data warms after the Admin UI has settled.
-      setTimeout(() => {
-        if (isMember && me?.member?.id) api.prefetchMemberData(me.member.id, "primary").catch(() => {});
-      }, 2550),
-      setTimeout(() => {
-        if (isMember && me?.member?.id) api.prefetchMemberData(me.member.id, "secondary").catch(() => {});
-      }, 4200),
-    ] : [
-      setTimeout(() => warmCode(likelyNext), 180),
-      setTimeout(() => { if (isMember && me?.member?.id) api.prefetchMemberData(me.member.id, "primary").catch(() => {}); }, 280),
-      // Actions/Profile are lower priority than History/Fund/Activity/Meetings.
-      setTimeout(() => warmCode(secondary), 1100),
-      setTimeout(() => { if (isMember && me?.member?.id) api.prefetchMemberData(me.member.id, "secondary").catch(() => {}); }, 1500),
+    const timers = [
+      setTimeout(() => warmCode(likelyNext), 260),
+      setTimeout(() => warmCode(secondary), 1400),
+      setTimeout(() => warmCode(later), 2800),
     ];
+
     return () => timers.forEach(clearTimeout);
-  }, [me, adminView, canFinance, isMember, tabs]);
+  }, [me, adminView, canFinance, tabs, memberProjectsEnabled]);
 
   // All normal screens share one scroll root. Reset it when the user intentionally
   // changes the active tab/mode so every screen opens from a predictable position.
@@ -219,6 +204,11 @@ export default function App() {
   if (error) return <Shell><Center>Couldn't connect: {error}</Center></Shell>;
 
   const warmTab = (nextTab) => {
+    const now = Date.now();
+    const key = `${mode}:${nextTab}`;
+    if (lastWarmRef.current.key === key && now - lastWarmRef.current.at < 800) return;
+    lastWarmRef.current = { key, at: now };
+
     loaderForTab(nextTab, adminView)?.();
     api.prefetchTabData({
       tab: nextTab,
@@ -230,12 +220,11 @@ export default function App() {
 
   const openTab = (nextTab) => {
     warmTab(nextTab);
-    setMountedTabs((current) => {
-      if (current.has(nextTab)) return current;
-      const next = new Set(current);
-      next.add(nextTab);
-      return next;
-    });
+
+    // Only keep the active page mounted. Hidden visited pages previously kept
+    // data-change listeners and large UI state alive, causing background reloads
+    // after financial mutations. Lazy modules and GET data remain cached.
+    setMountedTabs(new Set([nextTab]));
     setTab(nextTab);
   };
 
