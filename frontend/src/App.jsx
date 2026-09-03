@@ -276,7 +276,7 @@ export default function App() {
       <nav
         className="sans admin-tab-strip app-icon-nav"
         aria-label={adminView ? "Admin navigation" : "My Account navigation"}
-        style={{ gridTemplateColumns: tabs.map((t) => t === tab ? "2.35fr" : "1fr").join(" ") }}
+        style={{ gridTemplateColumns: tabs.map((t) => t === tab ? "2.15fr" : "1fr").join(" ") }}
       >
         {tabs.map((t) => (
           <NavItem

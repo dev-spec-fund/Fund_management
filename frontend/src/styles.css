@@ -1622,3 +1622,94 @@ button:not(:disabled):active {
     transition: none !important;
   }
 }
+
+
+/* v81: coordinated navigation micro-interaction.
+   One motion language for slot redistribution, active pill, icon and label. */
+:root {
+  --nav-motion-duration: 250ms;
+  --nav-motion-ease: cubic-bezier(.4, 0, .2, 1);
+}
+
+.admin-tab-strip.app-icon-nav {
+  transition:
+    grid-template-columns var(--nav-motion-duration) var(--nav-motion-ease),
+    background-color 180ms ease-out,
+    border-color 180ms ease-out !important;
+}
+
+.app-nav-item {
+  transition:
+    padding var(--nav-motion-duration) var(--nav-motion-ease),
+    gap 200ms var(--nav-motion-ease),
+    color 180ms ease-out,
+    background-color var(--nav-motion-duration) var(--nav-motion-ease),
+    transform 100ms ease-out !important;
+}
+
+.app-nav-item.active {
+  background: var(--primary) !important;
+}
+
+.app-nav-item > svg {
+  transform: scale(1);
+  opacity: .82;
+  transition:
+    transform 200ms var(--nav-motion-ease),
+    opacity 180ms ease-out,
+    color 180ms ease-out !important;
+}
+
+.app-nav-item.active > svg {
+  transform: scale(1.04);
+  opacity: 1;
+}
+
+.app-nav-label {
+  max-width: 0 !important;
+  opacity: 0 !important;
+  transform: translateX(-2px);
+  transition:
+    max-width 150ms var(--nav-motion-ease),
+    opacity 100ms ease-out,
+    transform 140ms var(--nav-motion-ease) !important;
+}
+
+/* Let the pill establish its movement before revealing the new label. */
+.app-nav-item.active .app-nav-label.visible {
+  max-width: 74px !important;
+  opacity: 1 !important;
+  transform: translateX(0);
+  transition:
+    max-width 170ms var(--nav-motion-ease) 55ms,
+    opacity 130ms ease-out 80ms,
+    transform 160ms var(--nav-motion-ease) 60ms !important;
+}
+
+/* Immediate tactile feedback, then the longer navigation transition takes over. */
+.app-nav-item:active {
+  transform: scale(.975) !important;
+}
+
+/* Current-location feedback is primarily in the nav; page content only cross-fades. */
+.page-panel--active {
+  animation: nav-page-crossfade 145ms ease-out both !important;
+}
+
+@keyframes nav-page-crossfade {
+  from { opacity: .88; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-tab-strip.app-icon-nav,
+  .app-nav-item,
+  .app-nav-item > svg,
+  .app-nav-label {
+    transition: none !important;
+  }
+
+  .page-panel--active {
+    animation: none !important;
+  }
+}
