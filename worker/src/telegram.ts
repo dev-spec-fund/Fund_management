@@ -93,11 +93,20 @@ function cleanRef(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const ref = String(value)
     .trim()
-    .replace(/^['"`]+|['"`,.;:]+$/g, "")
-    .replace(/\s+/g, "");
+    .replace(/^[\'"`]+|[\'"`,.;:]+$/g, "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
 
-  if (!ref || ref.toLowerCase() === "null" || ref.length < 4) return null;
+  if (!ref || ref === "NULL" || ref.length < 4 || ref.length > 40) return null;
+  if (!/^[A-Z0-9][A-Z0-9\-_/]*$/.test(ref)) return null;
   return ref;
+}
+
+function referenceLooksSuspicious(ref: string | null): boolean {
+  if (!ref) return true;
+  // Account/card/phone values are commonly long digit-only strings. Keep shorter
+  // numeric references valid because some banks legitimately issue numeric refs.
+  return /^\d{13,}$/.test(ref);
 }
 
 function cleanAmount(value: unknown): number | null {
@@ -127,18 +136,22 @@ function cleanDate(value: unknown): string | null {
 function parseSlipText(text: string): { amount: number | null; ref: string | null } {
   const normalized = text.replace(/\r/g, "\n");
 
-  // Prefer values explicitly labelled as a bank transaction/reference identifier.
+  // Match the value on the SAME line as a reference label. Using \s here used
+  // to cross line breaks and could accidentally capture an account/date value.
   const refPatterns = [
-    /(?:transaction\s*(?:id|reference|ref|number|no\.?|#)|bank\s*(?:reference|ref)|reference\s*(?:number|no\.?|#)?|ref\s*(?:number|no\.?|#)?)[\s:=#-]*([A-Z0-9][A-Z0-9\-_/]{3,})/i,
-    /(?:txn|trx)\s*(?:id|ref|no\.?|#)?[\s:=#-]*([A-Z0-9][A-Z0-9\-_/]{3,})/i,
+    /(?:bank\s*(?:reference|ref)|transaction\s*(?:reference|ref|id|number|no\.?|#)|payment\s*(?:reference|ref)|reference\s*(?:number|no\.?|id|#)?|ref\s*(?:number|no\.?|id|#)?)[ \t:=#-]*([A-Z0-9][A-Z0-9\-_/]{3,})/i,
+    /(?:txn|trx)[ \t]*(?:id|ref|no\.?|#)?[ \t:=#-]*([A-Z0-9][A-Z0-9\-_/]{3,})/i,
   ];
 
   let ref: string | null = null;
   for (const pattern of refPatterns) {
     const match = normalized.match(pattern);
     if (match?.[1]) {
-      ref = cleanRef(match[1]);
-      if (ref) break;
+      const candidate = cleanRef(match[1]);
+      if (candidate && !referenceLooksSuspicious(candidate)) {
+        ref = candidate;
+        break;
+      }
     }
   }
 
@@ -307,8 +320,8 @@ export async function ocrSlip(
 
   const runVision = async (retry = false) => {
     const prompt = retry
-      ? "Read the bank transfer slip image carefully. Reply with ONLY three lines: AMOUNT=<MVR transferred amount or null>\\nREF=<bank transaction/reference number or null>\\nDATE=<transaction date as YYYY-MM-DD or null>. Never use an account number as REF."
-      : "Read this Maldivian bank transfer slip. Extract the transferred MVR amount, BANK reference number, and transaction date. Reply ONLY as AMOUNT=<number|null>\\nREF=<string|null>\\nDATE=<YYYY-MM-DD|null>. Never use account/card/phone/customer/beneficiary numbers as REF.";
+      ? "Read the bank transfer slip image carefully. Reply with ONLY three lines: AMOUNT=<MVR transferred amount or null>\\nREF=<bank transaction/reference number or null>\\nDATE=<transaction date as YYYY-MM-DD or null>. REF must be the value visibly labelled Reference/Ref/Transaction ID/Transaction Reference. Never use an account, card, phone, customer, beneficiary, date, time, amount, receipt number or transfer-to/from number as REF. If the reference label/value is unclear, return null."
+      : "Read this Maldivian bank transfer slip. Extract the transferred MVR amount, BANK reference number, and transaction date. Reply ONLY as AMOUNT=<number|null>\\nREF=<string|null>\\nDATE=<YYYY-MM-DD|null>. REF must come from a visible Reference/Ref/Transaction ID/Transaction Reference label. Never use account/card/phone/customer/beneficiary/date/time/amount/receipt values as REF. If uncertain, return null.";
 
     const result: any = await (env.AI as any).run(
       "@cf/google/gemma-4-26b-a4b-it" as any,
@@ -331,7 +344,7 @@ export async function ocrSlip(
   try {
     const one = await runVision(false);
     firstVision = one.parsed;
-    if (one.parsed.amount !== null && one.parsed.ref) {
+    if (one.parsed.amount !== null && one.parsed.ref && !referenceLooksSuspicious(one.parsed.ref)) {
       return {
         amount: one.parsed.amount,
         ref: one.parsed.ref,
@@ -342,7 +355,7 @@ export async function ocrSlip(
     const two = await runVision(true);
     const merged = {
       amount: two.parsed.amount ?? firstVision.amount,
-      ref: two.parsed.ref ?? firstVision.ref,
+      ref: (!referenceLooksSuspicious(two.parsed.ref) ? two.parsed.ref : null) ?? (!referenceLooksSuspicious(firstVision.ref) ? firstVision.ref : null),
       date: two.parsed.date ?? firstVision.date,
     };
     if (merged.amount !== null || merged.ref) {

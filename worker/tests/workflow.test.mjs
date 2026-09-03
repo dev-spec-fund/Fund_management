@@ -174,3 +174,12 @@ test("approved contributions retain and expose the original Telegram payment sli
   assert.match(members, /\/contributions\/:contributionId\/slip\/send-to-telegram/);
   assert.match(members, /sendPhoto/);
 });
+
+
+test("OCR reference parser stays on the labelled line and rejects unsafe references", () => {
+  const telegram = read("src/telegram.ts");
+  assert.match(telegram, /SAME line as a reference label/);
+  assert.match(telegram, /referenceLooksSuspicious/);
+  assert.match(telegram, /13,/);
+  assert.match(telegram, /If uncertain, return null/);
+});
