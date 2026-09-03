@@ -511,3 +511,13 @@ input:focus, textarea:focus, select:focus {
 .expense-search button { border:0; background:transparent; color:var(--soft); padding:0; display:flex; cursor:pointer; }
 .expense-row { width:100%; display:flex; justify-content:space-between; align-items:center; gap:12px; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:12px 13px; margin-bottom:8px; cursor:pointer; }
 .expense-row:active { background:var(--button-soft); }
+
+
+/* v67: keep horizontally scrolling admin tabs comfortably inside the viewport. */
+.admin-tab-strip {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.admin-tab-strip::-webkit-scrollbar { display: none; }
+.admin-tab-strip > button:first-child { margin-left: 2px; }
+.admin-tab-strip > button:last-child { margin-right: 2px; }

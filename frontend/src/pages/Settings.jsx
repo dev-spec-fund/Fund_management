@@ -210,21 +210,6 @@ export default function Settings({ admin }) {
         <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:6}}>Used automatically for new members. Existing member amounts are not changed.</div>
       </div>
 
-      <SectionTitle>MEMBER PROJECT TRANSPARENCY</SectionTitle>
-      <div style={cardStyle}>
-        <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:700,color:"var(--primary-text)"}}>Show Community Projects to members</div>
-            <div style={{fontSize:10,color:"var(--soft)",marginTop:3}}>Members can see active/completed projects, approved spending and budget progress. Pending expenses, override reasons, internal notes and audit history stay private.</div>
-          </div>
-          <button disabled={!superAdmin} onClick={()=>superAdmin&&saveSetting("show_projects_to_members",settings.show_projects_to_members==="0"?"1":"0")}
-            aria-label="Toggle member project transparency"
-            style={{width:42,height:24,border:0,borderRadius:999,padding:3,background:settings.show_projects_to_members==="0"?"var(--toggle-off)":"var(--success)",cursor:superAdmin?"pointer":"default",flexShrink:0}}>
-            <span style={{display:"block",width:18,height:18,borderRadius:999,background:"var(--card)",transform:settings.show_projects_to_members==="0"?"translateX(0)":"translateX(18px)",transition:"transform .15s"}}/>
-          </button>
-        </div>
-      </div>
-
       <SectionTitle>EXPENSE CATEGORIES</SectionTitle>
       <div style={cardStyle}>
         {categories.map(cat=><div key={cat.id} className="sans" style={{display:"flex",alignItems:"center",gap:7,padding:"8px 0",borderBottom:"1px solid var(--divider)",opacity:Number(cat.active)===0?.55:1}}>
@@ -271,19 +256,6 @@ export default function Settings({ admin }) {
         }} style={{...approveBtn,width:"100%",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
           <Bell size={14}/> Send reminders now
         </button>}
-      </div>
-
-      <SectionTitle>FINANCIAL APPROVALS</SectionTitle>
-      <div style={cardStyle}>
-        <div className="sans" style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Second-approval threshold</div>
-        <div style={{display:"flex",alignItems:"center",border:"1px solid var(--border-strong)",borderRadius:8,background:"var(--card)",overflow:"hidden"}}>
-          <span className="sans" style={{padding:"0 0 0 11px",fontSize:12,color:"var(--soft)"}}>MVR</span>
-          <input type="number" value={settings.expense_approval_threshold ?? ""}
-            onChange={e=>setSettings({...settings,expense_approval_threshold:e.target.value})}
-            onBlur={e=>saveSetting("expense_approval_threshold",e.target.value)}
-            className="sans" style={{flex:1,minWidth:0,border:0,outline:"none",padding:"9px 11px",fontSize:14,background:"transparent"}} />
-        </div>
-        <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:6}}>Expenses at or above this amount require a second finance admin.</div>
       </div>
 
       <SectionTitle>MONTH MANAGEMENT</SectionTitle>

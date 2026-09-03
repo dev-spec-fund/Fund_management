@@ -205,7 +205,8 @@ export default function Meetings({admin}){
             </div>
             <span className="sans" style={{fontSize:10,padding:"5px 8px",height:"fit-content",borderRadius:99,background:status.bg,color:status.color}}>{status.label}</span>
           </div>
-          <div className="sans" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginTop:12,textAlign:"center"}}>
+          {status.label==="Cancelled"&&<div className="sans" style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase",letterSpacing:.5,marginTop:10}}>Final RSVP</div>}
+          <div className="sans" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginTop:status.label==="Cancelled"?5:12,textAlign:"center"}}>
             <div><b>{m.going||0}</b><div style={{fontSize:9,color:"var(--soft)"}}>Going</div></div>
             <div><b>{m.maybe||0}</b><div style={{fontSize:9,color:"var(--soft)"}}>Maybe</div></div>
             <div><b>{m.declined||0}</b><div style={{fontSize:9,color:"var(--soft)"}}>Declined</div></div>

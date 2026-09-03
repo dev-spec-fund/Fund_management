@@ -293,7 +293,7 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
     if (amount <= 0) return sendMessage(env, chatId, "I couldn't read the expense amount. Please add/edit this expense in the Fund App.");
     const threshold = Number(await getSetting(env, "expense_approval_threshold")) || 5000;
     const approvers = await env.DB.prepare("SELECT COUNT(*) n FROM admins WHERE id != ? AND COALESCE(active,1)=1 AND role IN ('owner','super_admin','treasurer')").bind(admin.id).first<{n:number}>();
-    const needsApproval = amount >= threshold && Number(approvers?.n || 0) > 0;
+    const needsApproval = false;
     const txnId = await generateTxnId(env, "E");
     const r = await env.DB.prepare(`INSERT INTO expenses
       (txn_id, description, amount, receipt_file_id, logged_by, transaction_month, status, approval_required, approved_by, approved_at)

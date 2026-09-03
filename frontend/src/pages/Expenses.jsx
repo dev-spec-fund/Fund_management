@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Search, Pencil, RotateCcw, Check, X, Paperclip, FileText, Send, Eye, Trash2, Tag } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search, Pencil, RotateCcw, X, Paperclip, FileText, Send, Eye, Trash2, Tag } from "lucide-react";
 import { api } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { Center, MessageBanner, PrimaryButton, smallBtn, monthNavBtn } from "../components/Shared";
@@ -8,10 +8,9 @@ import { fmt } from "../utils/format";
 
 const FILTERS = [
   ["all", "All"],
-  ["pending", "Pending"],
-  ["approved", "Approved"],
+  ["approved", "Posted"],
   ["reversed", "Reversed"],
-  ["voided", "Voided/Rejected"],
+  ["voided", "Voided"],
 ];
 
 function monthLabel(month) {
@@ -20,7 +19,9 @@ function monthLabel(month) {
 }
 
 function statusLabel(row) {
-  if (row.status === "voided" && String(row.void_reason || "").toLowerCase().includes("reject")) return "Rejected";
+  if (row.status === "approved") return "Posted";
+  if (row.status === "voided") return "Voided";
+  if (row.status === "reversed") return "Reversed";
   return String(row.status || "").replace(/^./, (c) => c.toUpperCase());
 }
 
@@ -86,7 +87,6 @@ export default function Expenses({ admin }) {
     const base = rows || [];
     return {
       total: base.reduce((s, r) => s + (r.status === "approved" ? Number(r.amount || 0) : 0), 0),
-      pending: base.filter((r) => r.status === "pending").reduce((s, r) => s + Number(r.amount || 0), 0),
       count: base.length,
     };
   }, [rows]);
@@ -101,7 +101,7 @@ export default function Expenses({ admin }) {
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 8 }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>EXPENSES</div>
-            <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 2 }}>{totals.count} records · Approved MVR {fmt(totals.total)}</div>
+            <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 2 }}>{totals.count} records · Posted MVR {fmt(totals.total)}</div>
           </div>
           <button type="button" onClick={() => setShowAdd(true)} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "8px 11px" }}><Plus size={14} /> Add</button>
         </div>
@@ -128,7 +128,6 @@ export default function Expenses({ admin }) {
 
       <MessageBanner>{message}</MessageBanner>
       <MessageBanner tone="error">{error}</MessageBanner>
-      {totals.pending > 0 && <div className="sans" style={{ fontSize: 11, color: "var(--warning)", marginBottom: 10 }}>Pending approval: MVR {fmt(totals.pending)}</div>}
 
       {rows === null ? <Center>Loading expenses…</Center> : rows.length === 0 ? <Center>No expenses found.</Center> : rows.map((row) => {
         const tone = statusTone(row.status);
@@ -136,7 +135,7 @@ export default function Expenses({ admin }) {
           <div style={{ minWidth: 0, textAlign: "left" }}>
             <div className="sans" style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
               <strong style={{ fontSize: 13 }}>{row.description}</strong>
-              <span style={{ fontSize: 9, padding: "3px 6px", borderRadius: 999, background: tone.bg, color: tone.color, border: `1px solid ${tone.border}` }}>{statusLabel(row)}</span>
+              {row.status !== "approved" && <span style={{ fontSize: 9, padding: "3px 6px", borderRadius: 999, background: tone.bg, color: tone.color, border: `1px solid ${tone.border}` }}>{statusLabel(row)}</span>}
               {Number(row.document_count||0)>0 ? <span title={`${row.document_count} supporting document${Number(row.document_count)===1?"":"s"}`} style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:9, color:"var(--muted)" }}><Paperclip size={10} />{row.document_count}</span> : <span title="No supporting document" style={{ fontSize:9, color:"var(--warning)" }}>No document</span>}
             </div>
             <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 4 }}>
@@ -273,10 +272,8 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
 
   if (editing) return <ExpenseForm admin={admin} row={row} onClose={onClose} onSaved={onSaved} />;
 
-  const approve = async () => { setBusy(true); setError(""); try { await expenseMutationWithOverrides((data) => api.expenses.approve(row.id, data), {}); await onSaved("Expense approved"); } catch (e) { setError(e.message); } finally { setBusy(false); } };
-  const reject = async () => { if (!confirm("Reject this pending expense?")) return; setBusy(true); setError(""); try { await api.expenses.reject(row.id); await onSaved("Expense rejected"); } catch (e) { setError(e.message); } finally { setBusy(false); } };
   const reverse = async () => {
-    const reason = prompt("Reason for reversing this approved expense:");
+    const reason = prompt("Reason for reversing this posted expense:");
     if (!reason || reason.trim().length < 3) return;
     setBusy(true); setError("");
     try { const r = await api.governance.reverse("expense", row.id, reason.trim()); await onSaved(`Expense reversed · ${r.reversal_id}`); }
@@ -293,7 +290,6 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
       <Detail label="Project" value={row.project_name ? `${row.project_code || ""} ${row.project_name}`.trim() : "None / General"} />
       <Detail label="Status" value={statusLabel(row)} />
       <Detail label="Logged by" value={row.logged_by_name || `Admin #${row.logged_by}`} />
-      {row.approved_by_name && <Detail label="Approved by" value={row.approved_by_name} />}
       {row.void_reason && <Detail label="Reason" value={row.void_reason} />}
       {Number(row.fund_override||0)===1 && <Detail label="Fund override" value={row.fund_override_reason || "Super Admin override"} />}
       {row.budget_override_reason && <Detail label="Budget override" value={row.budget_override_reason} />}
@@ -323,11 +319,8 @@ function ExpenseDetails({ admin, row, onClose, onSaved }) {
     {!canViewDocuments && <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginBottom: 12 }}>Supporting expense documents are restricted to finance admins.</div>}
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
       {row.status !== "reversed" && row.status !== "voided" && <button type="button" disabled={busy} onClick={() => setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13} /> Edit</button>}
-      {row.status === "pending" && <button type="button" disabled={busy} onClick={approve} style={smallBtn("var(--success-strong)")}><Check size={13} /> Approve</button>}
-      {row.status === "pending" && <button type="button" disabled={busy} onClick={reject} style={smallBtn("var(--danger)")}><X size={13} /> Reject</button>}
       {row.status === "approved" && <button type="button" disabled={busy} onClick={reverse} style={smallBtn("var(--danger)")}><RotateCcw size={13} /> Reverse</button>}
     </div>
-    {row.status === "pending" && <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 10 }}>If you created this expense and it requires second approval, another finance admin must approve it.</div>}
   </Modal>;
 }
 

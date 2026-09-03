@@ -202,8 +202,7 @@ expensesRoute.post("/", requireFinance, async (c) => {
   if(amount>available+0.005){
     if(!wantsFundOverride || !overrideReason || !adminCan(admin,'manage_admins')) return insufficientFundResponse(c,admin,available,amount);
   }
-  const threshold=money(await getSetting(c.env,"expense_approval_threshold")) || 5000;
-  const needsApproval=amount>=threshold && (await eligibleOtherFinanceAdmins(c,admin.id))>0;
+  const needsApproval=false;
   const txnId=await generateTxnId(c.env,"E");
   const fundOverride=amount>available+0.005 && wantsFundOverride && !!overrideReason && adminCan(admin,'manage_admins');
   const budgetOverrideReason=project?.budget!=null && amount>(Number(project.budget)-Number(project.spent||0))+0.005 ? boundedText(body.budget_override_reason,500) : null;
@@ -297,12 +296,10 @@ expensesRoute.patch("/:id", requireFinance, async (c) => {
   const wantsFundOverride=Boolean(body.override_fund_limit); const overrideReason=boundedText(body.override_reason,500);
   const priorFundOverrideValid=Number(before.fund_override||0)===1 && Math.abs(amount-Number(before.amount||0))<0.005;
   if(amount>available+0.005 && !priorFundOverrideValid && (!wantsFundOverride || !overrideReason || !adminCan(admin,'manage_admins'))) return insufficientFundResponse(c,admin,available,amount);
-  const threshold=money(await getSetting(c.env,"expense_approval_threshold")) || 5000;
   const materialChanged = description!==before.description || Number(requestedCategory)!==Number(before.category_id) || Number(requestedProject)!==Number(before.project_id) || Math.abs(amount-Number(before.amount))>0.004 || month!==originalMonth || String(expenseDate||'')!==String(before.expense_date||'');
   let status=before.status, approvalRequired=Number(before.approval_required||0), approvedBy=before.approved_by, approvedAt=before.approved_at;
   if(materialChanged){
-    const needsApproval=amount>=threshold && (await eligibleOtherFinanceAdmins(c,admin.id))>0;
-    status=needsApproval?'pending':'approved'; approvalRequired=needsApproval?1:0; approvedBy=needsApproval?null:admin.id; approvedAt=needsApproval?null:new Date().toISOString();
+    status='approved'; approvalRequired=0; approvedBy=admin.id; approvedAt=new Date().toISOString();
   }
   const newFundOverride=amount>available+0.005 && wantsFundOverride && !!overrideReason && adminCan(admin,'manage_admins');
   const keepPriorFundOverride=amount>available+0.005 && priorFundOverrideValid;

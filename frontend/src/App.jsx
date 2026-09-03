@@ -44,7 +44,6 @@ const Meetings = lazy(pageLoaders.meetings);
 const Settings = lazy(pageLoaders.settings);
 const MyHistory = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyHistory })));
 const FundView = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.FundView })));
-const MemberProjects = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MemberProjects })));
 const Activity = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.Activity })));
 const MemberMeetings = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MemberMeetings })));
 const MyActions = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyActions })));
@@ -54,7 +53,7 @@ const loaderForTab = (tab, adminView = false) => {
   // Activity is shared from MemberViews, but Meetings has separate Admin and
   // Member implementations. Keep the preload target aligned with the screen
   // that will actually render so the first Admin Meetings visit is warm too.
-  if (["history", "fund", "projects", "activity", "actions", "profile"].includes(tab)) return pageLoaders.memberViews;
+  if (["history", "fund", "activity", "actions", "profile"].includes(tab)) return pageLoaders.memberViews;
   if (tab === "meetings") return adminView ? pageLoaders.meetings : pageLoaders.memberViews;
   return pageLoaders[tab] || null;
 };
@@ -77,7 +76,7 @@ export default function App() {
   const canFinance = adminView && ["owner", "super_admin", "treasurer"].includes(me?.admin?.role);
   const tabs = useMemo(() => adminView
     ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "projects", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
-    : ["overview", "history", "fund", ...(me?.member_features?.projects === false ? [] : ["projects"]), "activity", "meetings", "actions", "profile"], [adminView, canFinance, me?.member_features?.projects]);
+    : ["overview", "history", "fund", "activity", "meetings", "actions", "profile"], [adminView, canFinance]);
 
   useEffect(() => {
     const telegram = window.Telegram?.WebApp;
@@ -118,7 +117,7 @@ export default function App() {
     // are staged so they do not compete with the Overview bootstrap request.
     const likelyNext = adminView
       ? (canFinance ? ["pending", "members", "activity"] : ["members", "activity"])
-      : ["history", "fund", ...(me?.member_features?.projects === false ? [] : ["projects"]), "activity", "meetings"];
+      : ["history", "fund", "activity", "meetings"];
     const secondary = adminView
       ? (canFinance ? ["expenses", "projects", "reports", "meetings"] : ["reports", "meetings"])
       : ["actions", "profile"];
@@ -199,7 +198,6 @@ export default function App() {
     if (page === "members" && adminView) return <Members isAdmin admin={me.admin} />;
     if (page === "history" && memberView) return <MyHistory member={me.member} />;
     if (page === "fund" && memberView) return <FundView />;
-    if (page === "projects" && memberView) return <MemberProjects />;
     if (page === "activity") return <Activity isAdmin={adminView} canFinance={canFinance} />;
     if (page === "meetings" && memberView) return <MemberMeetings />;
     if (page === "actions" && memberView) return <MyActions />;
@@ -227,7 +225,7 @@ export default function App() {
           You are an admin but not yet linked to a member account. Send /start to the bot and choose “Register Myself as Member”.
         </div>
       )}
-      <div className="sans" style={{ flexShrink: 0, display: "flex", gap: 18, padding: "0 20px", marginTop: 18, overflowX: "auto" }}>
+      <div className="sans admin-tab-strip" style={{ flexShrink: 0, display: "flex", gap: 18, padding: "0 28px", marginTop: 18, overflowX: "auto", scrollPaddingInline: 28 }}>
         {tabs.map((t) => (
           <button key={t} onPointerDown={() => warmTab(t)} onClick={() => openTab(t)} style={{ background: "none", border: "none", cursor: "pointer", color: tab === t ? "var(--primary-text)" : "var(--muted-2)", fontSize: 14, fontWeight: tab === t ? 600 : 500, paddingBottom: 6, whiteSpace: "nowrap", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", textTransform: "capitalize" }}>{t}</button>
         ))}

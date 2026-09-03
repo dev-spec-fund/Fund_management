@@ -24,8 +24,7 @@ export default function PendingApprovals() {
 
   const registrations = data.registrations || [];
   const contributions = data.contributions || [];
-  const expenses = data.expenses || [];
-  const count = registrations.length + contributions.length + expenses.length;
+  const count = registrations.length + contributions.length;
 
   const act = async (fn) => {
     try {
@@ -41,12 +40,10 @@ export default function PendingApprovals() {
     ["all", "All", count],
     ["contributions", "Slips", contributions.length],
     ["registrations", "Members", registrations.length],
-    ["expenses", "Expenses", expenses.length],
   ];
 
   const showContributions = filter === "all" || filter === "contributions";
   const showRegistrations = filter === "all" || filter === "registrations";
-  const showExpenses = filter === "all" || filter === "expenses";
   const checkedLabel = lastChecked
     ? lastChecked.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
@@ -141,23 +138,6 @@ export default function PendingApprovals() {
           </div>)}
         </>}
 
-        {showExpenses && expenses.length > 0 && <>
-          <SectionTitle>EXPENSE CONFIRMATIONS</SectionTitle>
-          {expenses.map((e) => <div key={e.id} style={{...cardStyle,padding:13}}>
-            <div style={{display:"flex",justifyContent:"space-between",gap:10}}>
-              <div style={{minWidth:0}}>
-                <div className="sans" style={{fontWeight:700,fontSize:14}}>{e.description}</div>
-                <div className="sans" style={{fontSize:11,color:"var(--soft)",marginTop:2}}>{e.txn_id} · by {e.logged_by_name || "admin"}</div>
-              </div>
-              <div className="sans" style={{fontWeight:700,fontSize:14,whiteSpace:"nowrap"}}>MVR {fmt(e.amount)}</div>
-            </div>
-            {e.created_at && <div className="sans" style={{fontSize:10,color:"var(--soft-4)",marginTop:5}}>Submitted {formatLocalDateTime(e.created_at)}</div>}
-            <div style={{display:"flex",gap:7,marginTop:10}}>
-              <button onClick={() => act(() => api.expenses.approve(e.id))} style={{...approveBtn,flex:1}}>Confirm</button>
-              <button onClick={() => act(() => api.expenses.reject(e.id))} style={rejectBtn}>Reject</button>
-            </div>
-          </div>)}
-        </>}
       </>
     )}
 

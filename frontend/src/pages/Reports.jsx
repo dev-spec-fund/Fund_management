@@ -130,9 +130,9 @@ export default function Reports({ setTab }) {
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>REPORTS</div>
           <div style={{ display: "flex", gap: 6, position: "relative" }}>
-            <button type="button" onClick={async()=>{try{const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month,monthLabel,summary})}catch(e){alert(e.message)}}} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
-            <button type="button" onClick={exportCsv} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>
-            <button type="button" onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("var(--primary)"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Add</button>
+            <button type="button" onClick={async()=>{try{const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month,monthLabel,summary})}catch(e){alert(e.message)}}} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> PDF</button>
+            <button type="button" onClick={exportCsv} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "7px 10px" }}><Download size={13} /> CSV</button>
+            <button type="button" onClick={() => setShowAdd(!showAdd)} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "7px 10px" }}><Plus size={13} /> Log</button>
             {showAdd && (
               <div style={{ position: "absolute", right: 0, top: 38, zIndex: 8, width: 160, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 5, boxShadow: "0 8px 24px var(--shadow)" }}>
                 <button type="button" onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent", padding: "9px 10px", color: "var(--success)", cursor: "pointer" }}>+ Log donation</button>
