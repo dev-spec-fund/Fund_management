@@ -504,16 +504,171 @@ input:focus, textarea:focus, select:focus {
   z-index: 21;
 }
 
-.expense-filter-row { display:flex; gap:6px; overflow-x:auto; padding-bottom:7px; scrollbar-width:none; }
+.expense-filter-row {
+  display:flex;
+  gap:6px;
+  overflow-x:auto;
+  padding-bottom:5px;
+  scrollbar-width:none;
+}
 .expense-filter-row::-webkit-scrollbar { display:none; }
-.expense-filter-chip { flex:0 0 auto; min-height:32px; border:1px solid var(--border-strong-2); background:var(--button-soft); color:var(--primary-text); border-radius:999px; padding:6px 11px; font-size:11px; font-weight:600; cursor:pointer; }
-.expense-filter-chip.active { background:var(--primary); border-color:var(--primary); color:var(--on-primary); }
-.expense-search { display:flex; align-items:center; gap:7px; border:1px solid var(--border); background:var(--card); border-radius:10px; padding:8px 10px; color:var(--soft); }
-.expense-search input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:var(--text); font-size:12px; }
-.expense-search button { border:0; background:transparent; color:var(--soft); padding:0; display:flex; cursor:pointer; }
-.expense-row { width:100%; display:flex; justify-content:space-between; align-items:center; gap:12px; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:12px 13px; margin-bottom:8px; cursor:pointer; }
-.expense-row:active { background:var(--button-soft); }
+.expense-filter-chip {
+  flex:0 0 auto;
+  min-height:30px;
+  border:1px solid var(--border-strong-2);
+  background:var(--button-soft);
+  color:var(--primary-text);
+  border-radius:999px;
+  padding:5px 10px;
+  font-size:10px;
+  font-weight:650;
+  cursor:pointer;
+}
+.expense-filter-chip.active {
+  background:var(--primary);
+  border-color:var(--primary);
+  color:var(--on-primary);
+}
 
+.expense-search-row {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:7px;
+  margin-top:3px;
+}
+.expense-search {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  border:1px solid var(--border);
+  background:var(--card);
+  border-radius:10px;
+  padding:7px 9px;
+  color:var(--soft);
+  min-width:0;
+}
+.expense-search input {
+  flex:1;
+  min-width:0;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:var(--text);
+  font-size:12px;
+}
+.expense-search button {
+  border:0;
+  background:transparent;
+  color:var(--soft);
+  padding:0;
+  display:flex;
+  cursor:pointer;
+}
+.expense-filter-toggle {
+  min-height:34px;
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--primary-text);
+  border-radius:10px;
+  padding:7px 9px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  font-size:10px;
+  font-weight:650;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.expense-filter-toggle.active {
+  border-color:var(--border-strong-2);
+  background:var(--button-soft);
+}
+.expense-secondary-filters {
+  margin-top:7px;
+  padding:8px 9px 4px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--card);
+}
+.expense-secondary-filter-label {
+  font-size:9px;
+  color:var(--soft);
+  text-transform:uppercase;
+  letter-spacing:.7px;
+  margin-bottom:6px;
+}
+
+.expense-row {
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  background:var(--card);
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:11px;
+  padding:10px 11px;
+  margin-bottom:7px;
+  cursor:pointer;
+  text-align:left;
+}
+.expense-row:active { background:var(--button-soft); }
+.expense-row-main { min-width:0; flex:1 1 auto; }
+.expense-row-title-line {
+  display:flex;
+  gap:6px;
+  align-items:center;
+  min-width:0;
+}
+.expense-row-title {
+  font-size:12px;
+  line-height:1.25;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.expense-status-badge {
+  flex:0 0 auto;
+  font-size:8px;
+  line-height:1;
+  padding:3px 5px;
+  border-radius:999px;
+  border:1px solid;
+}
+.expense-row-meta {
+  display:flex;
+  gap:4px;
+  align-items:center;
+  flex-wrap:wrap;
+  font-size:9px;
+  color:var(--soft);
+  margin-top:4px;
+  line-height:1.35;
+}
+.expense-row-foot {
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin-top:4px;
+  font-size:9px;
+  color:var(--muted);
+}
+.expense-document-indicator {
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+}
+.expense-document-missing { color:var(--warning); }
+.expense-row-amount {
+  flex:0 0 auto;
+  color:var(--danger);
+  font-weight:750;
+  font-size:12px;
+  line-height:1.25;
+  white-space:nowrap;
+  padding-top:1px;
+}
 
 /* v67: keep horizontally scrolling admin tabs comfortably inside the viewport. */
 .admin-tab-strip {
