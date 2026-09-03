@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Search, X, Paperclip } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search, X, Paperclip, SlidersHorizontal } from "lucide-react";
 import { LoadingState, EmptyState, MessageBanner, smallBtn, monthNavBtn } from "../components/Shared";
 import { shiftMonthValue } from "../utils/date";
 import { fmt } from "../utils/format";
@@ -24,6 +24,7 @@ export default function Expenses({ admin }) {
   } = useExpensesData();
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const expensePage = pageSlice(rows || [], page);
   const handleSaved = async (text = "Expense saved") => {
@@ -51,15 +52,30 @@ export default function Expenses({ admin }) {
       <div className="expense-filter-row sans">
         {FILTERS.map(([value, label]) => <button type="button" key={value} onClick={() => setFilter(value)} className={filter === value ? "expense-filter-chip active" : "expense-filter-chip"}>{label}</button>)}
       </div>
-      <div className="expense-filter-row sans" style={{ marginTop: 6 }}>
-        {[['all', 'All docs'], ['with', 'Has documents'], ['without', 'No documents']].map(([value, label]) => <button type="button" key={value} onClick={() => setDocumentsFilter(value)} className={documentsFilter === value ? "expense-filter-chip active" : "expense-filter-chip"}>{label}</button>)}
+
+      <div className="expense-search-row">
+        <div className="expense-search sans">
+          <Search size={14} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search expenses" />
+          {query && <button type="button" aria-label="Clear search" onClick={() => setQuery("")}><X size={14} /></button>}
+        </div>
+        <button
+          type="button"
+          className={`expense-filter-toggle sans${showFilters || documentsFilter !== "all" ? " active" : ""}`}
+          onClick={() => setShowFilters((v) => !v)}
+          aria-expanded={showFilters}
+        >
+          <SlidersHorizontal size={14} />
+          Filter{documentsFilter !== "all" ? " · 1" : ""}
+        </button>
       </div>
 
-      <div className="expense-search sans">
-        <Search size={14} />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search description, category or ID" />
-        {query && <button type="button" aria-label="Clear search" onClick={() => setQuery("")}><X size={14} /></button>}
-      </div>
+      {showFilters && <div className="expense-secondary-filters sans">
+        <div className="expense-secondary-filter-label">Documents</div>
+        <div className="expense-filter-row">
+          {[['all', 'All'], ['with', 'Has document'], ['without', 'No document']].map(([value, label]) => <button type="button" key={value} onClick={() => setDocumentsFilter(value)} className={documentsFilter === value ? "expense-filter-chip active" : "expense-filter-chip"}>{label}</button>)}
+        </div>
+      </div>}
     </div>
 
     <MessageBanner>{message}</MessageBanner>
@@ -68,17 +84,25 @@ export default function Expenses({ admin }) {
     {rows === null ? <LoadingState>Loading expenses…</LoadingState> : rows.length === 0 ? <EmptyState>No expenses found.</EmptyState> : expensePage.rows.map((row) => {
       const tone = statusTone(row.status);
       return <button type="button" key={row.id} onClick={() => setSelected(row)} className="expense-row">
-        <div style={{ minWidth: 0, textAlign: "left" }}>
-          <div className="sans" style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-            <strong style={{ fontSize: 13 }}>{row.description}</strong>
-            {row.status !== "approved" && <span style={{ fontSize: 9, padding: "3px 6px", borderRadius: 999, background: tone.bg, color: tone.color, border: `1px solid ${tone.border}` }}>{statusLabel(row)}</span>}
-            {Number(row.document_count || 0) > 0 ? <span title={`${row.document_count} supporting document${Number(row.document_count) === 1 ? "" : "s"}`} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 9, color: "var(--muted)" }}><Paperclip size={10} />{row.document_count}</span> : <span title="No supporting document" style={{ fontSize: 9, color: "var(--warning)" }}>No document</span>}
+        <div className="expense-row-main">
+          <div className="sans expense-row-title-line">
+            <strong className="expense-row-title">{row.description}</strong>
+            {row.status !== "approved" && <span className="expense-status-badge" style={{ background: tone.bg, color: tone.color, borderColor: tone.border }}>{statusLabel(row)}</span>}
           </div>
-          <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 4 }}>
-            {row.expense_date || row.transaction_month} · {row.category_name || (row.project_name ? "Project expense / Uncategorised" : "Uncategorised")}{row.project_name ? ` · ${row.project_name}` : ""} · {row.txn_id || `#${row.id}`}
+          <div className="sans expense-row-meta">
+            <span>{row.expense_date || row.transaction_month}</span>
+            <span>•</span>
+            <span>{row.category_name || (row.project_name ? "Project expense" : "Uncategorised")}</span>
+            {row.project_name && <><span>•</span><span>{row.project_name}</span></>}
+          </div>
+          <div className="sans expense-row-foot">
+            <span>{row.txn_id || `#${row.id}`}</span>
+            {Number(row.document_count || 0) > 0
+              ? <span className="expense-document-indicator" title={`${row.document_count} supporting document${Number(row.document_count) === 1 ? "" : "s"}`}><Paperclip size={10} />{row.document_count}</span>
+              : <span className="expense-document-missing">No document</span>}
           </div>
         </div>
-        <div className="sans" style={{ color: "var(--danger)", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>MVR {fmt(row.amount)}</div>
+        <div className="sans expense-row-amount">MVR {fmt(row.amount)}</div>
       </button>;
     })}
 
