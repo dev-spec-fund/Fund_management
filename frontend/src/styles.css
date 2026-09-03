@@ -17,10 +17,10 @@
   --shimmer: rgba(255,255,255,0.52);
   --muted: #6B7268;
   --muted-2: #7A8078;
-  --soft: #8A9086;
-  --soft-2: #9A9384;
-  --soft-3: #AAA493;
-  --soft-4: #B5AE9C;
+  --soft: #777E75;
+  --soft-2: #858B82;
+  --soft-3: #949A90;
+  --soft-4: #A2A79C;
   --border: #E9E4D8;
   --border-strong: #D9D3C4;
   --border-strong-2: #DED8CA;
@@ -366,14 +366,14 @@ input:focus, textarea:focus, select:focus {
 .settings-subnav-sticky,
 .expenses-sticky-controls {
   position: sticky;
-  /* .app-page-content has 20px top padding. Pull the sticky surface through
-     that padding so scrolling rows can never appear in the gap above it. */
-  top: -20px;
+  /* .app-page-content uses compact 15px top padding. Pull sticky controls
+     through that padding so rows never appear in the gap above them. */
+  top: -15px;
   z-index: 20;
   isolation: isolate;
   background: var(--bg);
-  padding: 24px 0 9px;
-  margin: -20px 0 10px;
+  padding: 19px 0 8px;
+  margin: -15px 0 9px;
   border-bottom: 1px solid var(--divider);
   box-shadow: 0 6px 10px -10px var(--shadow);
 }
@@ -1071,4 +1071,97 @@ input:focus, textarea:focus, select:focus {
   font-size:8px;
   color:var(--soft);
   line-height:1.35;
+}
+
+
+/* v71: final app-wide visual consistency pass. */
+:root {
+  --ui-radius-sm: 9px;
+  --ui-radius: 11px;
+  --ui-radius-lg: 14px;
+  --ui-section-gap: 12px;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: 'Inter', sans-serif;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled):active {
+  transform: translateY(.25px);
+}
+
+.page-sticky-controls {
+  border-bottom-color: var(--divider);
+}
+
+/* Keep common list cards visually related across admin/member views. */
+.expense-row,
+.project-detail-summary,
+.expense-secondary-filters,
+.report-action-menu,
+.meeting-actions-menu,
+.meeting-actions-trigger,
+.expense-filter-toggle,
+.expense-search {
+  border-radius: var(--ui-radius);
+}
+
+/* Make secondary information readable without competing with primary content. */
+.expense-row-meta,
+.expense-row-foot,
+.project-transaction-main > div,
+.project-history-row > div:last-child,
+.report-action-menu > button small,
+.meeting-actions-menu > button small {
+  line-height: 1.4;
+}
+
+/* Touch targets stay compact but comfortably tappable. */
+.admin-tab-strip > button {
+  min-height: 38px;
+}
+.expense-filter-chip {
+  min-height: 30px;
+}
+.report-header-action,
+.expense-filter-toggle {
+  min-height: 34px;
+}
+
+/* Modal surfaces use the same compact rhythm as the main app. */
+.app-modal-sheet {
+  border-radius: 16px 16px 0 0 !important;
+}
+.app-modal-header {
+  min-height: 56px !important;
+  padding-left: 18px !important;
+  padding-right: 14px !important;
+}
+.app-modal-header > div:first-child {
+  font-size: 16px !important;
+  line-height: 1.2;
+}
+.app-modal-body {
+  padding: 12px 18px calc(20px + env(safe-area-inset-bottom)) !important;
+}
+
+/* Inputs across older screens inherit a consistent control shape. */
+.app-modal-body input:not([type="checkbox"]):not([type="radio"]),
+.app-modal-body select,
+.app-modal-body textarea {
+  border-radius: var(--ui-radius-sm) !important;
+}
+
+/* Prevent extremely faint helper text in dark mode. */
+:root[data-theme="dark"] {
+  --soft: #929991;
+  --soft-2: #858C84;
+  --soft-3: #7B827A;
 }
