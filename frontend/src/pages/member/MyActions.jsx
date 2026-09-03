@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, onDataChange } from "../../api";
-import { LoadingState } from "../../components/Shared";
+import { LoadingState, approveBtn } from "../../components/Shared";
 
 export function MyActions() {
   const [rows, setRows] = useState(null);
@@ -29,7 +29,7 @@ export function MyActions() {
       </div>
       <span className="sans" style={{fontSize:10,color:a.status==="open"?"var(--warning)":"var(--success)",whiteSpace:"nowrap"}}>{a.status}</span>
     </div>
-    {a.status==="open" && <button type="button" disabled={busyId===a.id} onClick={()=>done(a.id)} className="sans" style={{width:"100%",marginTop:10,background:"var(--success-bg)",color:"var(--success-strong)",border:"1px solid var(--success-border)",borderRadius:8,padding:9,fontSize:11,fontWeight:700,cursor:"pointer"}}>{busyId===a.id?"Saving…":"Mark done"}</button>}
+    {a.status==="open" && <button type="button" disabled={busyId===a.id} onClick={()=>done(a.id)} className="sans" style={{...approveBtn,width:"100%",marginTop:10}}>{busyId===a.id?"Saving…":"Mark done"}</button>}
   </div>;
   return <>
     <div className="sans" style={{fontSize:15,fontWeight:700,color:"var(--primary-text)",marginBottom:3}}>My Actions</div>

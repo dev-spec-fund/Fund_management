@@ -53,10 +53,38 @@ export function ErrorState({ children = "Could not load this view.", onRetry, co
   return <PageState kind="error" title="Could not load" message={children} compact={compact} action={onRetry ? <button type="button" onClick={onRetry} style={compactBtn}>Try again</button> : null} />;
 }
 
+export const buttonBase = {
+  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+  minHeight: 38, borderRadius: 9, padding: "8px 12px", fontSize: 12, fontWeight: 600,
+  lineHeight: 1.2, cursor: "pointer", boxSizing: "border-box", whiteSpace: "nowrap",
+};
+
+export const compactBtn = {
+  ...buttonBase, minHeight: 32, padding: "6px 10px",
+  background: "var(--button-soft)", color: "var(--primary-text)",
+  border: "1px solid var(--border-strong-2)",
+};
+export const primaryBtn = {
+  ...buttonBase, background: "var(--primary)", color: "var(--on-primary)",
+  border: "1px solid var(--primary)",
+};
+export const secondaryBtn = {
+  ...buttonBase, background: "var(--button-soft)", color: "var(--primary-text)",
+  border: "1px solid var(--border-strong-2)",
+};
+export const approveBtn = {
+  ...buttonBase, background: "var(--success-bg)", color: "var(--success-strong)",
+  border: "1px solid var(--success-border)",
+};
+export const rejectBtn = {
+  ...buttonBase, background: "var(--danger-bg)", color: "var(--danger)",
+  border: "1px solid var(--danger-border)",
+};
+
 export function PrimaryButton({ onClick, children, disabled = false, type = "button" }) {
   return (
     <button type={type} onClick={onClick} disabled={disabled} className="sans"
-      style={{ width: "100%", background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 10, padding: 13, fontSize: 14, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? .65 : 1 }}>
+      style={{ ...primaryBtn, width: "100%", minHeight: 44, borderRadius: 10, padding: "11px 14px", fontSize: 13, fontWeight: 700 }}>
       {children}
     </button>
   );
@@ -65,14 +93,15 @@ export function PrimaryButton({ onClick, children, disabled = false, type = "but
 export function SectionTitle({children}) { return <div className="sans" style={{fontSize:12,color:"var(--muted)",fontWeight:700,letterSpacing:.7,margin:"18px 0 8px"}}>{children}</div>; }
 export function EmptyLine({children}) { return <div className="sans" style={{fontSize:12,color:"var(--soft)",padding:"8px 2px 14px"}}>{children}</div>; }
 export const cardStyle={background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:8};
-export const compactBtn={background:"var(--button-soft)",border:"1px solid var(--border-strong-2)",borderRadius:8,padding:"7px 10px",fontSize:12,cursor:"pointer"};
-export const approveBtn={...compactBtn,background:"var(--success-bg)",color:"var(--success-strong)",border:"1px solid var(--success-border)",fontWeight:600};
-export const rejectBtn={...compactBtn,background:"var(--danger-bg)",color:"var(--danger)",border:"1px solid var(--danger-border)",fontWeight:600};
 
 export function monthNavBtn() {
-  return { display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, background: "var(--bg)", color: "var(--primary-text)", border: "1px solid var(--border)", borderRadius: 9, cursor: "pointer" };
+  return { ...compactBtn, width: 36, minWidth: 36, height: 36, minHeight: 36, padding: 0, background: "var(--card)" };
 }
 
-export function smallBtn(color) {
-  return { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px", fontSize: 12, fontWeight: 600, color, cursor: "pointer" };
+export function smallBtn(color = "var(--primary-text)") {
+  const isSuccess = color === "var(--success)" || color === "var(--success-strong)";
+  const isDanger = color === "var(--danger)" || color === "var(--danger-strong)";
+  if (isSuccess) return { ...approveBtn, flex: 1 };
+  if (isDanger) return { ...rejectBtn, flex: 1 };
+  return { ...secondaryBtn, flex: 1, color };
 }

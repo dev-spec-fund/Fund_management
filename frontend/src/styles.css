@@ -394,12 +394,13 @@ input:focus, textarea:focus, select:focus {
   font-weight: 600;
 }
 .activity-clear-filter {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card);
-  color: var(--muted);
-  padding: 7px 11px;
-  font-size: 11px;
+  min-height: 32px;
+  border: 1px solid var(--border-strong-2);
+  border-radius: 9px;
+  background: var(--button-soft);
+  color: var(--primary-text);
+  padding: 6px 10px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -433,13 +434,14 @@ input:focus, textarea:focus, select:focus {
   font-size: 11px;
 }
 .activity-custom-range > button {
+  min-height: 38px;
   border: 1px solid var(--primary);
   border-radius: 9px;
   background: var(--primary);
   color: var(--on-primary);
-  padding: 9px 11px;
-  font-size: 11px;
-  font-weight: 700;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
 .activity-type-filters {
@@ -504,8 +506,8 @@ input:focus, textarea:focus, select:focus {
 
 .expense-filter-row { display:flex; gap:6px; overflow-x:auto; padding-bottom:7px; scrollbar-width:none; }
 .expense-filter-row::-webkit-scrollbar { display:none; }
-.expense-filter-chip { flex:0 0 auto; border:1px solid var(--border); background:var(--card); color:var(--muted); border-radius:999px; padding:6px 9px; font-size:10px; font-weight:600; cursor:pointer; }
-.expense-filter-chip.active { background:var(--success-bg); border-color:var(--success-border); color:var(--success-strong); }
+.expense-filter-chip { flex:0 0 auto; min-height:32px; border:1px solid var(--border-strong-2); background:var(--button-soft); color:var(--primary-text); border-radius:999px; padding:6px 11px; font-size:11px; font-weight:600; cursor:pointer; }
+.expense-filter-chip.active { background:var(--primary); border-color:var(--primary); color:var(--on-primary); }
 .expense-search { display:flex; align-items:center; gap:7px; border:1px solid var(--border); background:var(--card); border-radius:10px; padding:8px 10px; color:var(--soft); }
 .expense-search input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:var(--text); font-size:12px; }
 .expense-search button { border:0; background:transparent; color:var(--soft); padding:0; display:flex; cursor:pointer; }

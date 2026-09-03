@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, onDataChange } from "../../api";
-import { LoadingState } from "../../components/Shared";
+import { LoadingState, primaryBtn, secondaryBtn } from "../../components/Shared";
 
 export function MemberMeetings() {
   const [rows, setRows] = useState(null);
@@ -35,7 +35,7 @@ export function MemberMeetings() {
       {m.agenda && <div className="sans" style={{fontSize:11,color:"var(--muted)",marginTop:10,lineHeight:1.45}}>Agenda: {m.agenda}</div>}
       {m.cancel_reason && <div className="sans" style={{fontSize:11,color:"var(--danger)",marginTop:8}}>Cancelled: {m.cancel_reason}</div>}
       {m.status !== "cancelled" && <div className="sans" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginTop:12}}>
-        {[['yes','Going'],['maybe','Maybe'],['no','Decline']].map(([value,label]) => <button key={value} type="button" disabled={busyId===m.id} onClick={()=>rsvp(m.id,value)} style={{background:m.rsvp===value?"var(--primary)":"var(--button-soft)",color:m.rsvp===value?"var(--on-primary)":"var(--muted)",border:"1px solid var(--border)",borderRadius:8,padding:"9px 6px",fontSize:11,fontWeight:600,cursor:"pointer"}}>{label}</button>)}
+        {[['yes','Going'],['maybe','Maybe'],['no','Decline']].map(([value,label]) => <button key={value} type="button" disabled={busyId===m.id} onClick={()=>rsvp(m.id,value)} style={{...(m.rsvp===value?primaryBtn:secondaryBtn),width:"100%",minWidth:0,padding:"8px 6px"}}>{label}</button>)}
       </div>}
       {(m.minutes || m.decisions) && <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid var(--divider-2)"}}>
         {m.minutes && <div className="sans" style={{fontSize:11,lineHeight:1.5,color:"var(--muted)",marginBottom:m.decisions?8:0}}><b style={{color:"var(--text)"}}>Minutes:</b> {m.minutes}</div>}

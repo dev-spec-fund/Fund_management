@@ -58,7 +58,7 @@ export default function PendingApprovals() {
           : <div style={{fontSize:11,color:"var(--success)",marginTop:2}}>All caught up</div>}
       </div>
       <button type="button" onClick={load} aria-label="Refresh approvals"
-        style={{...compactBtn,width:34,height:34,padding:0,borderRadius:10,fontSize:17}}>↻</button>
+        style={{...compactBtn,width:36,minWidth:36,height:36,minHeight:36,padding:0,fontSize:17}}>↻</button>
     </div>
 
     {error && <div className="sans" style={{background:"var(--danger-bg)",color:"var(--danger)",padding:10,borderRadius:10,fontSize:12,marginBottom:12}}>{error}</div>}
@@ -76,8 +76,7 @@ export default function PendingApprovals() {
       <>
         <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:3,marginBottom:16}}>
           {filters.map(([key,label,n]) => (
-            <button type="button" key={key} onClick={()=>setFilter(key)} className="sans"
-              style={{flex:"0 0 auto",border:`1px solid ${filter===key?"var(--primary)":"var(--border-2)"}`,background:filter===key?"var(--primary)":"var(--card)",color:filter===key?"var(--on-primary)":"var(--muted)",borderRadius:20,padding:"6px 11px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+            <button type="button" key={key} onClick={()=>setFilter(key)} className={filter===key ? "expense-filter-chip active sans" : "expense-filter-chip sans"}>
               {label} {n}
             </button>
           ))}

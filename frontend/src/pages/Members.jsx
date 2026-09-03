@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Plus, X, Bell, ChevronLeft, ChevronRight, Pencil, Search } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
-import { Center, PrimaryButton, smallBtn } from "../components/Shared";
+import { Center, PrimaryButton, smallBtn, monthNavBtn, primaryBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, formatLocalDateTime } from "../utils/date";
 import { fmt } from "../utils/format";
 import Pagination, { pageSlice } from "../components/Pagination";
@@ -91,7 +91,7 @@ export default function Members({ isAdmin, admin }) {
           <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "var(--primary-text)" }}>Members</div>
           <div className="sans" style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{activeMembers.length} active members</div>
         </div>
-        <button type="button" onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={{ display: "flex", alignItems: "center", gap: 5, background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 9, padding: "8px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+        <button type="button" onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={primaryBtn}>
           <Plus size={15} /> Add
         </button>
       </div>
@@ -121,7 +121,7 @@ export default function Members({ isAdmin, admin }) {
       {financeAdmin && (counts.partial + counts.unpaid) > 0 && (
         <button type="button" onClick={sendOutstandingReminders} disabled={reminderBusy}
           className="sans"
-          style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, background:"var(--success-bg)", color:"var(--success-strong)", border:"1px solid var(--success-border)", borderRadius:11, padding:"10px 12px", fontSize:12, fontWeight:700, cursor:reminderBusy?"default":"pointer", opacity:reminderBusy?.7:1, marginBottom:8 }}>
+          style={{...approveBtn,width:"100%",marginBottom:8}}>
           <Bell size={14} /> {reminderBusy ? "Sending reminders…" : `Remind ${counts.partial + counts.unpaid} outstanding ${counts.partial + counts.unpaid === 1 ? "member" : "members"}`}
         </button>
       )}
@@ -129,7 +129,7 @@ export default function Members({ isAdmin, admin }) {
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 3, marginBottom: 10 }}>
         {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt']].map(([key,label]) => (
-          <button type="button" key={key} onClick={() => setFilter(key)} className="sans" style={{ flexShrink: 0, border: filter === key ? "1px solid var(--primary)" : "1px solid var(--border-strong-2)", background: filter === key ? "var(--primary)" : "var(--card)", color: filter === key ? "var(--on-primary)" : "var(--muted)", borderRadius: 999, padding: "6px 10px", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>{label}</button>
+          <button type="button" key={key} onClick={() => setFilter(key)} className={filter === key ? "expense-filter-chip active sans" : "expense-filter-chip sans"}>{label}</button>
         ))}
       </div>
 
@@ -374,7 +374,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
               const r=await api.admin.sendPaymentReminders({month,member_id:member.id});
               setReminderNote(r.sent ? "Reminder sent." : (r.reason || "No reminder sent."));
             }catch(e){setReminderNote(e.message)} finally{setReminding(false)}
-          }} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"var(--success-bg)",color:"var(--success-strong)",border:"1px solid var(--success-border)",borderRadius:10,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",marginTop:10}}>
+          }} style={{...approveBtn,width:"100%",marginTop:10}}>
             <Bell size={14}/>{reminding?"Sending…":"Send payment reminder"}
           </button>}
 
@@ -387,7 +387,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
           {reminderNote && <div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5,textAlign:"center"}}>{reminderNote}</div>}
 
           <button type="button" onClick={toggleActive} className="sans"
-            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"none",color:member.active?"var(--danger)":"var(--success)",border:"1px solid "+(member.active?"var(--danger-border)":"var(--success-bg-2)"),borderRadius:10,padding:12,fontSize:13,fontWeight:600,cursor:"pointer",marginTop:12}}>
+            style={{...(member.active?rejectBtn:approveBtn),width:"100%",marginTop:12}}>
             {member.active ? "Deactivate member" : "Reactivate member"}
           </button>
         </>
