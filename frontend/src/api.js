@@ -166,7 +166,7 @@ async function prefetchAdminData(stage = "primary", canFinance = false) {
       "/api/settings",
       "/api/settings/admins",
       "/api/expenses/categories",
-      "/api/admin/month-close",
+      "/api/governance/month-close",
       "/api/admin/health",
       "/api/admin/errors",
       "/api/settings/audit-log",
@@ -195,7 +195,7 @@ async function prefetchTabData({ tab, adminView = false, canFinance = false, mem
     ];
     else if (tab === "settings") paths = [
       "/api/settings", "/api/settings/admins", "/api/expenses/categories",
-      "/api/admin/month-close", "/api/admin/health", "/api/admin/errors", "/api/settings/audit-log",
+      "/api/governance/month-close", "/api/admin/health", "/api/admin/errors", "/api/settings/audit-log",
     ];
   } else {
     if (tab === "history" && memberId) paths = [`/api/members/${memberId}/statement`];
@@ -345,8 +345,10 @@ export const api = {
   },
 
   governance: {
+    monthClosures: () => request("/api/governance/month-close"),
     monthCloseCheck: (month) => request(`/api/governance/month-close/${month}/check`),
     closeMonth: (month, note = "") => request(`/api/governance/month-close/${month}`, { method: "POST", body: JSON.stringify({ note }) }),
+    reopenMonth: (month) => request(`/api/governance/month-close/${month}`, { method: "DELETE" }),
     snapshots: (year = "") => request(`/api/governance/snapshots${year ? `?year=${encodeURIComponent(year)}` : ""}`),
     reverse: (entity_type, entity_id, reason) => request("/api/governance/reverse", { method: "POST", body: JSON.stringify({ entity_type, entity_id, reason }) }),
     reversals: () => request("/api/governance/reversals"),
@@ -378,9 +380,6 @@ export const api = {
     errors: () => request("/api/admin/errors"),
     resolveError: (id) => request(`/api/admin/errors/${id}/resolve`, { method: "POST" }),
     resolveAllErrors: () => request("/api/admin/errors/resolve-all", { method: "POST" }),
-    monthClosures: () => request("/api/admin/month-close"),
-    closeMonth: (month, note) => request(`/api/admin/month-close/${month}`, { method: "POST", body: JSON.stringify({ note }) }),
-    reopenMonth: (month) => request(`/api/admin/month-close/${month}`, { method: "DELETE" }),
     backup: () => request("/api/admin/backup"),
   },
 };

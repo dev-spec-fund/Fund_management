@@ -121,8 +121,6 @@ adminRoute.delete('/contributions/:id', requireFinance, async c => {
   ]); await auditEntity(c.env,admin.id,'contribution_voided','contribution',id,row,{...row,status:'voided'}); return c.json({ok:true});
 });
 
-adminRoute.get('/month-close', requireAdmin, async c => { await ensureOperationalSchema(c.env); return c.json((await c.env.DB.prepare("SELECT mc.*,a.name closed_by_name FROM month_closures mc LEFT JOIN admins a ON a.id=mc.closed_by ORDER BY month DESC").all()).results); });
-adminRoute.delete('/month-close/:month', requireSuperAdmin, async c => { const admin=c.get('admin')!; const month=c.req.param('month') || ""; await c.env.DB.batch([c.env.DB.prepare("DELETE FROM month_closures WHERE month=?").bind(month),c.env.DB.prepare("DELETE FROM monthly_snapshots WHERE month=?").bind(month)]); await auditEntity(c.env,admin.id,'month_reopened','month',month,null,{snapshot_removed:true}); return c.json({ok:true}); });
 
 
 adminRoute.post('/payment-reminders', requireFinance, async c => {

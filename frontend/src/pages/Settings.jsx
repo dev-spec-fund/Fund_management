@@ -100,7 +100,7 @@ export default function Settings({ admin }) {
       api.settings.admins().then(setAdmins),
       api.expenses.categories().then(setCategories),
       api.admin.health().then(setHealth),
-      api.admin.monthClosures().then(setClosures),
+      api.governance.monthClosures().then(setClosures),
     ];
     if(financeAdmin) jobs.push(api.settings.auditLog().then(setAudit));
     if(superAdmin){
@@ -116,7 +116,6 @@ export default function Settings({ admin }) {
       path?.startsWith("/api/settings") ||
       path?.startsWith("/api/expenses/categories") ||
       path?.startsWith("/api/governance/month-close") ||
-      path?.startsWith("/api/admin/month-close") ||
       path?.startsWith("/api/admin/errors")
     ) load();
   }),[admin?.id,role]);
@@ -293,7 +292,7 @@ export default function Settings({ admin }) {
         </div>
         {closeMonthValue<currentMonth && !monthClosed && <div className="sans" style={{fontSize:10,color:"var(--warning)",marginTop:9,lineHeight:1.4}}>⚠ {monthLabel(closeMonthValue)} is a past open month. You can review and close it now; the current month stays open.</div>}
         {superAdmin && !monthClosed && <button disabled={closeBusy} onClick={reviewMonthClose} style={{...rejectBtn,marginTop:12}}>{closeBusy?"Checking…":"Review month closing"}</button>}
-        {superAdmin && monthClosed && <button onClick={()=>api.admin.reopenMonth(closeMonthValue).then(()=>{setCloseCheck(null);return load()}).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen {monthLabel(closeMonthValue)}</button>}
+        {superAdmin && monthClosed && <button onClick={()=>api.governance.reopenMonth(closeMonthValue).then(()=>{setCloseCheck(null);return load()}).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen {monthLabel(closeMonthValue)}</button>}
       </div>
 
       {superAdmin && !monthClosed && closeCheck && <div style={{...cardStyle,marginTop:10,borderColor:(closeCheck.blockers||[]).length?"var(--danger-border)":"var(--success-border)"}}>
@@ -318,7 +317,7 @@ export default function Settings({ admin }) {
               <span><b>{x.month}</b><div style={{color:"var(--soft-2)",marginTop:2}}>by {x.closed_by_name || "admin"}</div></span>
               <div style={{display:"flex",gap:6}}>
                 <button onClick={async()=>{try{const summary=await api.reports.summary(x.month);const {exportFundPdf}=await import("../utils/exports");await exportFundPdf({month:x.month,monthLabel:monthLabel(x.month),summary});}catch(e){setMessage(e.message||"Could not create closed-month PDF")}}} style={compactBtn}>PDF</button>
-                {superAdmin&&<button onClick={()=>api.admin.reopenMonth(x.month).then(load).catch(e=>setMessage(e.message))} style={compactBtn}>Reopen</button>}
+                {superAdmin&&<button onClick={()=>api.governance.reopenMonth(x.month).then(load).catch(e=>setMessage(e.message))} style={compactBtn}>Reopen</button>}
               </div>
             </div>
           )}

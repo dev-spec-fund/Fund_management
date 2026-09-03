@@ -62,6 +62,25 @@ async function nextReversalId(env:any){
   return `RV${String(row?.value||1).padStart(7,'0')}`;
 }
 
+governanceRoute.get('/month-close', requireAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  const rows=await c.env.DB.prepare("SELECT mc.*,a.name closed_by_name FROM month_closures mc LEFT JOIN admins a ON a.id=mc.closed_by ORDER BY month DESC").all<any>();
+  return c.json(rows.results);
+});
+
+governanceRoute.delete('/month-close/:month', requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  const admin=c.get('admin')!; const month=c.req.param('month') || "";
+  if(!validMonth(month)) return c.json({error:'Use YYYY-MM'},400);
+  if(!(await isMonthClosed(c.env,month))) return c.json({error:'Month is not closed'},404);
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM month_closures WHERE month=?").bind(month),
+    c.env.DB.prepare("DELETE FROM monthly_snapshots WHERE month=?").bind(month)
+  ]);
+  await auditEntity(c.env,admin.id,'month_reopened','month',month,null,{snapshot_removed:true});
+  return c.json({ok:true});
+});
+
 governanceRoute.get('/month-close/:month/check', requireAdmin, async c=>{
   await ensureOperationalSchema(c.env); const month=c.req.param('month');
   if(!validMonth(month)) return c.json({error:'Use YYYY-MM'},400);
