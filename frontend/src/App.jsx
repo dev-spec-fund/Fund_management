@@ -136,8 +136,8 @@ export default function App() {
       setTimeout(() => warmCode(secondary), 850),
       setTimeout(() => api.prefetchAdminData("operations", canFinance).catch(() => {}), 950),
       setTimeout(() => api.prefetchAdminData("reports", canFinance).catch(() => {}), 1450),
-      // Settings is deliberately last because it is rarely the first destination
-      // and its health/audit requests are the heaviest background group.
+      // Settings is deliberately last because it is rarely the first destination.
+      // Heavy Health / Error Log / Audit Log requests are not prefetched.
       setTimeout(() => warmCode(later), 2400),
       setTimeout(() => api.prefetchAdminData("settings", canFinance).catch(() => {}), 3000),
       // Dual-role Member data warms after the Admin UI has settled.

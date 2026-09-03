@@ -101,23 +101,35 @@ export default function Settings({ admin }) {
       setSettingsLoading(false);
     }
 
-    // Secondary panels are independent and may fail without blocking Settings.
+    // Keep initial Settings load lightweight. Heavy diagnostics/history are
+    // fetched only when the user opens their section below.
     const jobs=[
       api.settings.admins().then(setAdmins),
       api.expenses.categories().then(setCategories),
-      api.admin.health().then(setHealth),
       api.governance.monthClosures().then(setClosures),
     ];
-    if(financeAdmin) jobs.push(api.settings.auditLog().then(setAudit));
     if(superAdmin){
       jobs.push(api.members.list().then(setMembersForAdmin));
-      jobs.push(api.admin.errors().then(setErrors));
       jobs.push(api.settings.roles().then(setCustomRoles));
     }
     await Promise.allSettled(jobs);
   };
 
   useEffect(()=>{ load(); },[admin?.id,role]);
+
+  // System diagnostics are intentionally lazy: opening General/Admins/Audit no
+  // longer triggers Telegram health checks or reads the error log.
+  useEffect(()=>{
+    if(settingsSection!=="system") return;
+    api.admin.health().then(setHealth).catch(e=>setMessage(e.message));
+    if(superAdmin) api.admin.errors().then(setErrors).catch(e=>setMessage(e.message));
+  },[settingsSection,superAdmin,admin?.id]);
+
+  // Audit history can be large, so load it only when the Audit section is used.
+  useEffect(()=>{
+    if(settingsSection!=="audit" || !financeAdmin) return;
+    api.settings.auditLog().then(setAudit).catch(e=>setMessage(e.message));
+  },[settingsSection,financeAdmin,admin?.id]);
   useEffect(()=>onDataChange(({path})=>{
     if(
       path?.startsWith("/api/settings") ||

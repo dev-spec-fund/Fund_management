@@ -162,14 +162,13 @@ async function prefetchAdminData(stage = "primary", canFinance = false) {
       `/api/governance/analytics/${year}`,
     ];
   } else if (stage === "settings") {
+    // Warm only lightweight Settings data. Health, Error Log and Audit Log are
+    // intentionally loaded by Settings.jsx only when their section is opened.
     paths = [
       "/api/settings",
       "/api/settings/admins",
       "/api/expenses/categories",
       "/api/governance/month-close",
-      "/api/admin/health",
-      "/api/admin/errors",
-      "/api/settings/audit-log",
     ];
   }
 
@@ -195,7 +194,7 @@ async function prefetchTabData({ tab, adminView = false, canFinance = false, mem
     ];
     else if (tab === "settings") paths = [
       "/api/settings", "/api/settings/admins", "/api/expenses/categories",
-      "/api/governance/month-close", "/api/admin/health", "/api/admin/errors", "/api/settings/audit-log",
+      "/api/governance/month-close",
     ];
   } else {
     if (tab === "history" && memberId) paths = [`/api/members/${memberId}/statement`];
