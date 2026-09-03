@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
@@ -117,6 +117,37 @@ export function Modal({ title, onClose, action, children, closeDisabled = false 
   // a fixed descendant of the locked page scroller can inherit gesture/overflow
   // restrictions and make long forms (such as Meeting create/edit) unscrollable.
   return createPortal(modal, document.body);
+}
+
+export function useConfirmDialog() {
+  const [dialog, setDialog] = useState(null);
+  const resolverRef = useRef(null);
+
+  const settle = (value) => {
+    const resolve = resolverRef.current;
+    resolverRef.current = null;
+    setDialog(null);
+    resolve?.(value);
+  };
+
+  const askConfirm = ({ title = "Confirm action", message, confirmLabel = "Confirm", cancelLabel = "Cancel", tone = "danger" } = {}) =>
+    new Promise((resolve) => {
+      if (resolverRef.current) resolverRef.current(false);
+      resolverRef.current = resolve;
+      setDialog({ title, message, confirmLabel, cancelLabel, tone });
+    });
+
+  const confirmationDialog = dialog ? (
+    <Modal title={dialog.title} onClose={() => settle(false)}>
+      <div className="sans" style={{fontSize:13,lineHeight:1.55,color:"var(--muted)",whiteSpace:"pre-line",marginBottom:18}}>{dialog.message}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <button type="button" onClick={() => settle(false)} className="sans" style={{minHeight:42,borderRadius:10,border:"1px solid var(--border-strong-2)",background:"var(--button-soft)",color:"var(--primary-text)",fontWeight:700,cursor:"pointer"}}>{dialog.cancelLabel}</button>
+        <button type="button" onClick={() => settle(true)} className="sans" style={{minHeight:42,borderRadius:10,border:`1px solid ${dialog.tone === "danger" ? "var(--danger-border)" : "var(--primary)"}`,background:dialog.tone === "danger" ? "var(--danger-bg)" : "var(--primary)",color:dialog.tone === "danger" ? "var(--danger)" : "var(--on-primary)",fontWeight:700,cursor:"pointer"}}>{dialog.confirmLabel}</button>
+      </div>
+    </Modal>
+  ) : null;
+
+  return { confirm: askConfirm, confirmationDialog };
 }
 
 export function Field({ label, value, onChange, type = "text", prefix = null, placeholder = "" }) {

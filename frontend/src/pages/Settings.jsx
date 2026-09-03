@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
+import { useConfirmDialog } from "../components/FormControls";
 import { api, onDataChange } from "../api";
 import { LoadingState, ErrorState, MessageBanner, SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, todayValue, formatLocalDateTime } from "../utils/date";
@@ -52,6 +53,7 @@ function AuditEntry({a}) {
 
 
 export default function Settings({ admin }) {
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [settings,setSettings]=useState(null);
   const [admins,setAdmins]=useState([]);
   const [audit,setAudit]=useState([]);
@@ -237,7 +239,7 @@ export default function Settings({ admin }) {
           <span style={{flex:1,fontSize:12,fontWeight:600}}>{cat.name}{Number(cat.active)===0?" · Inactive":""}</span>
           {financeAdmin&&<><button type="button" style={compactBtn} onClick={async()=>{const name=prompt("Category name",cat.name);if(!name||name===cat.name)return;try{await api.expenses.updateCategory(cat.id,{name});load()}catch(e){setMessage(e.message)}}}>Edit</button>
           <button type="button" style={compactBtn} onClick={async()=>{try{await api.expenses.updateCategory(cat.id,{active:Number(cat.active)===0});load()}catch(e){setMessage(e.message)}}}>{Number(cat.active)===0?"Activate":"Deactivate"}</button>
-          <button type="button" style={{...compactBtn,color:"var(--danger)"}} onClick={async()=>{if(!confirm(`Delete ${cat.name}? If it has historical expenses it will be deactivated instead.`))return;try{await api.expenses.removeCategory(cat.id);load()}catch(e){setMessage(e.message)}}}>Delete</button></>}
+          <button type="button" style={{...compactBtn,color:"var(--danger)"}} onClick={async()=>{if(!await confirm({title:"Delete expense category?",message:`Delete ${cat.name}? If it has historical expenses it will be deactivated instead.`,confirmLabel:"Delete"}))return;try{await api.expenses.removeCategory(cat.id);load()}catch(e){setMessage(e.message)}}}>Delete</button></>}
         </div>)}
         {financeAdmin&&<button type="button" style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=prompt("New expense category name");if(!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}>+ Add category</button>}
       </div>
@@ -268,7 +270,7 @@ export default function Settings({ admin }) {
         {settings.reminder_day==="off" && <div className="sans" style={{fontSize:11,color:"var(--soft)",background:"var(--bg)",borderRadius:9,padding:10}}>Automatic reminders are off. Manual reminders are still available.</div>}
 
         {financeAdmin && <button type="button" onClick={async()=>{
-          if(!confirm("Send payment reminders now to all members with an outstanding balance for the current month?")) return;
+          if(!await confirm({title:"Send payment reminders?",message:"Send payment reminders now to all members with an outstanding balance for the current month?",confirmLabel:"Send reminders",tone:"primary"})) return;
           try{
             setMessage("Sending reminders…");
             const r=await api.admin.sendPaymentReminders({month:currentMonth});
@@ -378,7 +380,7 @@ export default function Settings({ admin }) {
                   <div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{Number(r.assigned_admins||0)} active admin{Number(r.assigned_admins||0)===1?"":"s"}</div>
                 </div>
                 <button type="button" disabled={Number(r.assigned_admins||0)>0} style={{...rejectBtn,padding:"6px 8px"}} onClick={async()=>{
-                  if(!confirm(`Delete custom role "${r.name}"?`)) return;
+                  if(!await confirm({title:"Delete custom role?",message:`Delete custom role "${r.name}"?`,confirmLabel:"Delete role"})) return;
                   try{await api.settings.removeRole(r.id);setMessage("Custom role removed");load()}catch(e){setMessage(e.message)}
                 }}>Delete</button>
               </div>
@@ -418,7 +420,7 @@ export default function Settings({ admin }) {
             const m=membersForAdmin.find(x=>String(x.id)===String(promoteMemberId));
             const selected=promoteRole.startsWith("custom:")?customRoles.find(r=>String(r.id)===promoteRole.split(":")[1]):null;
             const label=selected?.name || promoteRole.replace("_"," ");
-            if(!confirm(`Promote ${m?.name||"this member"} to ${label}?`))return;
+            if(!await confirm({title:"Promote member?",message:`Promote ${m?.name||"this member"} to ${label}?`,confirmLabel:"Promote",tone:"primary"}))return;
             try{
               await api.settings.promoteMember(Number(promoteMemberId),selected?"viewer":promoteRole,selected?.id||null);
               setPromoteMemberId("");setMessage("Member promoted");load()
@@ -445,7 +447,7 @@ export default function Settings({ admin }) {
                     const value=e.target.value;
                     const selected=value.startsWith("custom:")?customRoles.find(r=>String(r.id)===value.split(":")[1]):null;
                     const label=selected?.name || e.target.options[e.target.selectedIndex].text;
-                    if(!confirm(`Change ${a.name}'s role to ${label}?`)) return;
+                    if(!await confirm({title:"Change admin role?",message:`Change ${a.name}'s role to ${label}?`,confirmLabel:"Change role",tone:"primary"})) return;
                     api.settings.updateAdmin(a.id,{role:selected?"viewer":value,custom_role_id:selected?.id||null}).then(load).catch(err=>setMessage(err.message));
                   }} style={{border:"1px solid var(--border-strong)",borderRadius:8,padding:"6px 7px",background:"var(--bg)",fontSize:11,opacity:a.active===0?.55:1}}>
                     <option value="super_admin">Super Admin</option>
@@ -458,7 +460,7 @@ export default function Settings({ admin }) {
             {superAdmin && a.member_id && a.active!==0 && Number(a.id)!==Number(admin?.id) &&
               <button type="button"
                 onClick={async()=>{
-                  if(!confirm(`Demote ${a.member_name || a.name} to normal member?\n\nThey will lose admin access immediately. Their member account, Telegram link, contribution history and payment obligations will remain unchanged.`)) return;
+                  if(!await confirm({title:"Demote admin?",message:`Demote ${a.member_name || a.name} to normal member?\n\nThey will lose admin access immediately. Their member account, Telegram link, contribution history and payment obligations will remain unchanged.`,confirmLabel:"Demote admin"})) return;
                   try{
                     await api.settings.demoteMember(a.id);
                     setMessage(`${a.member_name || a.name} demoted to member`);
@@ -512,7 +514,7 @@ export default function Settings({ admin }) {
           <div className="expense-filter-row sans" style={{marginBottom:8}}>{[["open","Open"],["resolved","Resolved"],["all","All"]].map(([v,l])=><button key={v} type="button" onClick={()=>{setErrorFilter(v);setErrorPage(1)}} className={errorFilter===v?"expense-filter-chip active":"expense-filter-chip"}>{l}{v==="all"?` ${errors.length}`:""}</button>)}</div>
           {errors.some(e=>e.status!=="resolved")&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}>
             <button type="button" onClick={async()=>{
-              if(!confirm("Mark all open errors as resolved? Error history will be retained.")) return;
+              if(!await confirm({title:"Resolve all errors?",message:"Mark all open errors as resolved? Error history will be retained.",confirmLabel:"Resolve all",tone:"primary"})) return;
               try{
                 await api.admin.resolveAllErrors();
                 setErrors(await api.admin.errors());
@@ -545,6 +547,7 @@ export default function Settings({ admin }) {
         {!audit.length&&<EmptyLine>No audit entries.</EmptyLine>}
       </div>
     </>}
+    {confirmationDialog}
   </>;
 }
 

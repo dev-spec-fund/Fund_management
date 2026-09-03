@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, onDataChange } from "../api";
-import { Modal, Field } from "../components/FormControls";
+import { Modal, Field, useConfirmDialog } from "../components/FormControls";
 import { LoadingState, EmptyState, MessageBanner, PageHeader, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
 import Pagination, { pageSlice } from "../components/Pagination";
@@ -23,6 +23,7 @@ export default function Meetings({admin}){
   const [memberOptions,setMemberOptions]=useState([]);
   const [page,setPage]=useState(1);
   const canFinance=adminCan(admin, "finance");
+  const { confirm, confirmationDialog } = useConfirmDialog();
 
   const load=()=>api.admin.meetings().then(setRows).catch(e=>setMessage(e.message));
   useEffect(()=>{load();api.members.list().then(setMemberOptions).catch(()=>{})},[]);
@@ -64,7 +65,7 @@ export default function Meetings({admin}){
     try{
       const meeting=await api.admin.createMeeting(form);
       setShowCreate(false);setForm(emptyForm);await load();
-      if(window.confirm("Meeting created. Send Telegram invitations to all active linked members now?")){
+      if(await confirm({title:"Send invitations?",message:"Meeting created. Send Telegram invitations to all active linked members now?",confirmLabel:"Send invitations",tone:"primary"})){
         const r=await api.admin.sendMeetingInvites(meeting.id);
         setMessage(`Invitations sent: ${r.sent}${r.unlinked?` · ${r.unlinked} unlinked`:""}${r.failed?` · ${r.failed} failed`:""}`);
         await load();
@@ -73,7 +74,7 @@ export default function Meetings({admin}){
   };
 
   const send=async(m)=>{
-    if(!window.confirm(`Send "${m.title}" invitation to all active Telegram-linked members?`))return;
+    if(!await confirm({title:"Send invitations?",message:`Send "${m.title}" invitation to all active Telegram-linked members?`,confirmLabel:"Send invitations",tone:"primary"}))return;
     setBusy(true);setMessage("");
     try{
       const r=await api.admin.sendMeetingInvites(m.id);
@@ -102,9 +103,9 @@ export default function Meetings({admin}){
         return;
       }
       const label=result.rescheduled?"Meeting rescheduled.":"Meeting updated.";
-      if(details.status==="sent"&&window.confirm(result.rescheduled
+      if(details.status==="sent"&&await confirm({title:"Notify members?",message:result.rescheduled
         ?"Meeting rescheduled. Notify members of the new date/time now?"
-        :"Meeting updated. Notify members of the changes now?")){
+        :"Meeting updated. Notify members of the changes now?",confirmLabel:"Notify members",tone:"primary"})){
         const r=await api.admin.notifyMeetingUpdate(details.id,{
           rescheduled:result.rescheduled,
           previous_date:result.previous_date,
@@ -121,7 +122,7 @@ export default function Meetings({admin}){
     const reason=window.prompt("Reason for cancelling this meeting:");
     if(reason===null)return;
     if(!reason.trim())return setMessage("Cancellation reason is required.");
-    if(!window.confirm(`Cancel "${details.title}"? Telegram-linked members will be notified.`))return;
+    if(!await confirm({title:"Cancel meeting?",message:`Cancel "${details.title}"? Telegram-linked members will be notified.`,confirmLabel:"Cancel meeting"}))return;
     setBusy(true);setMessage("");
     try{
       const r=await api.admin.cancelMeeting(details.id,reason.trim());
@@ -135,7 +136,7 @@ export default function Meetings({admin}){
     const pending=details.responses?.pending||[];
     const linked=pending.filter(x=>x.telegram_id).length;
     if(!linked)return setMessage("No awaiting members are linked to Telegram.");
-    if(!window.confirm(`Send an RSVP reminder to ${linked} awaiting ${linked===1?"member":"members"}?`))return;
+    if(!await confirm({title:"Send RSVP reminder?",message:`Send an RSVP reminder to ${linked} awaiting ${linked===1?"member":"members"}?`,confirmLabel:"Send reminder",tone:"primary"}))return;
     setBusy(true);setMessage("");
     try{
       const r=await api.admin.remindMeetingPending(details.id);
@@ -191,6 +192,7 @@ export default function Meetings({admin}){
   };
 
   return <>
+    {confirmationDialog}
     <PageHeader
       title="Meetings"
       subtitle="Invitations, RSVP and meeting schedule"

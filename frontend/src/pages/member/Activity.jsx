@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, onDataChange } from "../../api";
-import { Modal, Field } from "../../components/FormControls";
+import { Modal, Field, useConfirmDialog } from "../../components/FormControls";
 import { LoadingState, approveBtn, rejectBtn } from "../../components/Shared";
 import { currentMonthValue, shiftMonthValue, todayValue } from "../../utils/date";
 import { fmt } from "../../utils/format";
@@ -8,6 +8,7 @@ import Pagination, { pageSlice } from "../../components/Pagination";
 import { ActivityRow, activityDayLabel } from "../../components/ActivityRow";
 
 export function Activity({ isAdmin, canFinance = false }) {
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("all");
   const [datePreset, setDatePreset] = useState("all");
@@ -122,7 +123,7 @@ export function Activity({ isAdmin, canFinance = false }) {
     const reason = window.prompt("Reason for voiding this expense:");
     if (reason === null) return;
     if (!reason.trim()) return setExpenseError("A void reason is required.");
-    if (!window.confirm(`Void ${editingExpense.txn_id || "this expense"}? The record will remain in the audit history.`)) return;
+    if (!await confirm({title:"Void expense?",message:`Void ${editingExpense.txn_id || "this expense"}? The record will remain in the audit history.`,confirmLabel:"Void expense"})) return;
     setExpenseBusy(true); setExpenseError("");
     try {
       await api.expenses.remove(editingExpense.id, reason.trim());
@@ -136,13 +137,13 @@ export function Activity({ isAdmin, canFinance = false }) {
     if (!canFinance) return;
     const reason=window.prompt(`Reason for reversing ${row.txn_id || row._kind || "transaction"}:`);
     if(reason===null) return;
-    if(reason.trim().length<3) return window.alert("Please enter a reversal reason.");
-    if(!window.confirm(`Reverse ${row.txn_id || "this transaction"}? The original record will remain in the audit/reversal history.`)) return;
+    if(reason.trim().length<3) return setActivityError("Please enter a reversal reason.");
+    if(!await confirm({title:"Reverse transaction?",message:`Reverse ${row.txn_id || "this transaction"}? The original record will remain in the audit/reversal history.`,confirmLabel:"Reverse transaction"})) return;
     try {
       const r=await api.governance.reverse(row._kind || row.kind,row.id,reason.trim());
-      window.alert(`Reversed as ${r.reversal_id}`);
+      setActivityError(`Reversed as ${r.reversal_id}`);
       await loadActivity();
-    } catch(e) { window.alert(e.message || "Could not reverse transaction"); }
+    } catch(e) { setActivityError(e.message || "Could not reverse transaction"); }
   };
   if (rows === null) return <LoadingState>Loading activity…</LoadingState>;
 
@@ -178,6 +179,7 @@ export function Activity({ isAdmin, canFinance = false }) {
 
   return (
     <>
+      {confirmationDialog}
       <div className="activity-filter-sticky page-sticky-controls">
         <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 7 }}>
           <div>

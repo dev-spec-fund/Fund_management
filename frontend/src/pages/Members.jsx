@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Plus, X, Bell, ChevronLeft, ChevronRight, Pencil, Search, Paperclip, Eye, Send } from "lucide-react";
 import { api, onDataChange } from "../api";
-import { Modal, Field } from "../components/FormControls";
+import { Modal, Field, useConfirmDialog } from "../components/FormControls";
 import { Center, PrimaryButton, smallBtn, monthNavBtn, primaryBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { currentMonthValue, formatLocalDateTime } from "../utils/date";
 import { fmt } from "../utils/format";
@@ -9,6 +9,7 @@ import { adminCan } from "../utils/permissions";
 import Pagination, { pageSlice } from "../components/Pagination";
 
 export default function Members({ isAdmin, admin }) {
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [members, setMembers] = useState([]);
   const [month, setMonth] = useState(currentMonthValue());
   const [monthlySummary, setMonthlySummary] = useState(null);
@@ -72,7 +73,7 @@ export default function Members({ isAdmin, admin }) {
   const sendOutstandingReminders = async () => {
     const dueCount = counts.partial + counts.unpaid;
     if (!dueCount) return;
-    if (!confirm(`Send Telegram payment reminders to ${dueCount} outstanding ${dueCount === 1 ? "member" : "members"} for ${monthLabel}?`)) return;
+    if (!await confirm({title:"Send payment reminders?",message:`Send Telegram payment reminders to ${dueCount} outstanding ${dueCount === 1 ? "member" : "members"} for ${monthLabel}?`,confirmLabel:"Send reminders",tone:"primary"})) return;
     try {
       setReminderBusy(true);
       setReminderMessage("");
@@ -87,6 +88,7 @@ export default function Members({ isAdmin, admin }) {
 
   return (
     <>
+      {confirmationDialog}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div>
           <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "var(--primary-text)" }}>Members</div>
@@ -198,6 +200,7 @@ function StatusBadge({ status }) {
 }
 
 function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [detail, setDetail] = useState(null);
   const [editing, setEditing] = useState(false);
   const [reminding, setReminding] = useState(false);
@@ -205,6 +208,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   const [showRejected, setShowRejected] = useState(false);
   const [slipPreview, setSlipPreview] = useState(null);
   const [slipBusy, setSlipBusy] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
   const [form, setForm] = useState({ name: member.name, phone: member.phone, monthly_amount: member.monthly_amount });
 
   useEffect(() => { api.members.statement(member.id).then(setDetail).catch(() => {}); }, [member.id]);
@@ -230,7 +234,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
         return { url, txnId: contribution.txn_id || "Contribution", mime: blob.type || "image/jpeg" };
       });
     } catch (e) {
-      alert(e.message || "Could not open payment slip");
+      setActionMessage(e.message || "Could not open payment slip");
     } finally {
       setSlipBusy(false);
     }
@@ -244,13 +248,13 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   };
 
   const sendContributionSlip = async (contribution) => {
-    try { await api.members.sendContributionSlipToTelegram(member.id,contribution.id); alert("Payment slip sent to your Telegram."); }
-    catch (e) { alert(e.message || "Could not send payment slip to Telegram"); }
+    try { await api.members.sendContributionSlipToTelegram(member.id,contribution.id); setActionMessage("Payment slip sent to your Telegram."); }
+    catch (e) { setActionMessage(e.message || "Could not send payment slip to Telegram"); }
   };
 
   const toggleActive = async () => {
     const action = member.active ? "deactivate" : "reactivate";
-    if (!confirm(`${action === "deactivate" ? "Deactivate" : "Reactivate"} ${member.name}?`)) return;
+    if (!await confirm({title:`${action === "deactivate" ? "Deactivate" : "Reactivate"} member?`,message:`${action === "deactivate" ? "Deactivate" : "Reactivate"} ${member.name}?`,confirmLabel:action === "deactivate" ? "Deactivate" : "Reactivate",tone:action === "deactivate" ? "danger" : "primary"})) return;
     await api.members.update(member.id, { active: member.active ? 0 : 1 });
     onChanged();
     onClose();
@@ -346,7 +350,9 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
 
   return (
     <>
+    {confirmationDialog}
     <Modal onClose={onClose} title={member.name} action={<button type="button" onClick={() => setEditing(true)} style={{ background:"none", border:"none", cursor:"pointer" }}><Pencil size={17} color="var(--soft)" /></button>}>
+      {actionMessage && <div className="sans" style={{fontSize:11,padding:9,borderRadius:8,marginBottom:10,background:"var(--surface-cool)",color:"var(--primary-text)"}}>{actionMessage}</div>}
       {editing ? (
         <>
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -408,7 +414,7 @@ function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
           </div>
 
           {member.active && canRemind && currentDue > 0 && <button type="button" className="sans" disabled={reminding} onClick={async()=>{
-            if(!confirm(`Send a payment reminder to ${member.name} for ${monthLabel}?`)) return;
+            if(!await confirm({title:"Send payment reminder?",message:`Send a payment reminder to ${member.name} for ${monthLabel}?`,confirmLabel:"Send reminder",tone:"primary"})) return;
             try{
               setReminding(true); setReminderNote("");
               const r=await api.admin.sendPaymentReminders({month,member_id:member.id});
