@@ -133,59 +133,6 @@ function currentMaldivesPeriod() {
   return { year, month: `${year}-${month}` };
 }
 
-async function prefetchMemberData(memberId, stage = "primary") {
-  if (!memberId) return [];
-  const { month } = currentMaldivesPeriod();
-  const paths = stage === "secondary"
-    ? [
-        "/api/me/actions",
-        "/api/me/dashboard",
-      ]
-    : [
-        `/api/members/${memberId}/statement`,
-        `/api/reports/public-summary?month=${month}`,
-        "/api/reports/activity",
-        "/api/me/meetings",
-      ];
-  return Promise.allSettled(paths.map((path) => request(path)));
-}
-
-async function prefetchAdminData(stage = "primary", canFinance = false) {
-  const { year, month } = currentMaldivesPeriod();
-  let paths = [];
-
-  if (stage === "primary") {
-    paths = [
-      "/api/members",
-      `/api/reports/summary?month=${month}`,
-      "/api/reports/activity",
-      ...(canFinance ? ["/api/admin/pending"] : []),
-    ];
-  } else if (stage === "operations") {
-    paths = [
-      "/api/admin/meetings",
-      ...(canFinance ? ["/api/expenses", "/api/expenses/categories", "/api/projects"] : []),
-    ];
-  } else if (stage === "reports") {
-    paths = [
-      `/api/reports/trend?month=${month}`,
-      `/api/governance/annual/${year}`,
-      `/api/governance/analytics/${year}`,
-    ];
-  } else if (stage === "settings") {
-    // Warm only lightweight Settings data. Health, Error Log and Audit Log are
-    // intentionally loaded by Settings.jsx only when their section is opened.
-    paths = [
-      "/api/settings",
-      "/api/settings/admins",
-      "/api/expenses/categories",
-      "/api/governance/month-close",
-    ];
-  }
-
-  return Promise.allSettled(paths.map((path) => request(path)));
-}
-
 async function prefetchTabData({ tab, adminView = false, canFinance = false, memberId = null } = {}) {
   const { year, month } = currentMaldivesPeriod();
   let paths = [];
@@ -271,8 +218,6 @@ async function downloadBlob(path) {
 export const api = {
   me: () => request("/api/me"),
   reportClientError,
-  prefetchMemberData,
-  prefetchAdminData,
   prefetchTabData,
   branding: () => request("/api/branding"),
   myDashboard: () => request("/api/me/dashboard"),

@@ -1261,8 +1261,14 @@ button:not(:disabled):active {
   }
 }
 
-/* v75: native-style bottom icon navigation.
-   All destinations remain visible; only the active item expands to show its label. */
+
+/* v82: production bottom navigation.
+   Consolidates v75/v79/v80/v81 into one maintained rule set. */
+:root {
+  --nav-motion-duration: 250ms;
+  --nav-motion-ease: cubic-bezier(.4, 0, .2, 1);
+}
+
 .admin-tab-strip.app-icon-nav {
   position: fixed;
   left: 50%;
@@ -1270,16 +1276,16 @@ button:not(:disabled):active {
   transform: translateX(-50%);
   z-index: 45;
 
-  display: flex;
+  display: grid !important;
   align-items: center;
-  justify-content: space-between;
+  justify-content: stretch;
   gap: 2px;
 
   width: calc(100% - 20px);
   max-width: 456px;
   min-height: 48px;
   margin: 0;
-  padding: 6px 6px;
+  padding: 6px;
 
   overflow: visible;
   border: 1px solid var(--border-strong);
@@ -1289,6 +1295,12 @@ button:not(:disabled):active {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   scrollbar-width: none;
+
+  transition:
+    grid-template-columns var(--nav-motion-duration) var(--nav-motion-ease),
+    background-color 180ms ease-out,
+    border-color 180ms ease-out !important;
+  animation: app-nav-enter 190ms ease-out both;
 }
 
 .admin-tab-strip.app-icon-nav::before,
@@ -1297,11 +1309,16 @@ button:not(:disabled):active {
 }
 
 .app-nav-item {
-  flex: 0 1 33px;
-  min-width: 29px;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0 !important;
+  max-width: none !important;
   height: 36px;
   min-height: 36px;
-  padding: 0 7px;
+  flex: none !important;
+
+  padding: 0 6px;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -1318,328 +1335,6 @@ button:not(:disabled):active {
   -webkit-tap-highlight-color: transparent;
 
   transition:
-    flex-basis .16s ease,
-    min-width .16s ease,
-    padding .16s ease,
-    background-color .16s ease,
-    color .16s ease,
-    gap .16s ease;
-}
-
-.app-nav-item > svg {
-  flex: 0 0 17px;
-  width: 17px;
-  height: 17px;
-}
-
-.app-nav-label {
-  max-width: 0;
-  opacity: 0;
-  overflow: hidden;
-  font-size: 10px;
-  line-height: 1;
-  font-weight: 700;
-  transition: max-width .16s ease, opacity .12s ease;
-}
-
-.app-nav-item.active {
-  flex: 1 1 auto;
-  min-width: 74px;
-  max-width: 108px;
-  padding: 0 11px;
-  gap: 5px;
-  background: var(--primary);
-  color: var(--on-primary);
-}
-
-.app-nav-item.active .app-nav-label {
-  max-width: 76px;
-  opacity: 1;
-}
-
-.app-nav-item:not(.active):active {
-  background: var(--button-soft);
-  color: var(--primary-text);
-}
-
-.app-nav-item:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-/* The fixed bottom bar must never cover page content. */
-.app-page-content {
-  padding-bottom: calc(82px + env(safe-area-inset-bottom)) !important;
-}
-
-/* Keep sticky page controls below the top shell; bottom navigation is independent. */
-.page-panel {
-  padding-bottom: 2px;
-}
-
-:root[data-theme="dark"] .admin-tab-strip.app-icon-nav {
-  background: color-mix(in srgb, var(--card) 94%, transparent);
-  border-color: var(--border-strong);
-  box-shadow: 0 8px 28px rgba(0,0,0,.34);
-}
-
-@media (max-width: 390px) {
-  .admin-tab-strip.app-icon-nav {
-    width: calc(100% - 14px);
-    gap: 0;
-    padding-left: 4px;
-    padding-right: 4px;
-  }
-
-  .app-nav-item {
-    min-width: 27px;
-    padding-left: 6px;
-    padding-right: 6px;
-  }
-
-  .app-nav-item.active {
-    min-width: 68px;
-    max-width: 96px;
-    padding-left: 8px;
-    padding-right: 8px;
-  }
-
-  .app-nav-label {
-    font-size: 9px;
-  }
-}
-
-@media (max-width: 350px) {
-  .app-nav-item {
-    min-width: 25px;
-    padding-left: 5px;
-    padding-right: 5px;
-  }
-
-  .app-nav-item.active {
-    min-width: 62px;
-    max-width: 88px;
-  }
-
-  .app-nav-item > svg {
-    flex-basis: 15px;
-    width: 15px;
-    height: 15px;
-  }
-}
-
-
-/* v79: smoother, calmer bottom-navigation motion. */
-.app-nav-item {
-  position: relative;
-  z-index: 1;
-  background: transparent;
-  transition:
-    flex-basis 195ms cubic-bezier(.2,.72,.2,1),
-    min-width 195ms cubic-bezier(.2,.72,.2,1),
-    max-width 195ms cubic-bezier(.2,.72,.2,1),
-    padding 195ms cubic-bezier(.2,.72,.2,1),
-    gap 165ms ease-out,
-    color 145ms ease-out,
-    background-color 175ms ease-out,
-    transform 95ms ease-out;
-}
-
-.app-nav-item.active {
-  background: var(--primary) !important;
-  color: var(--on-primary);
-}
-
-.app-nav-item > svg {
-  transform: scale(1);
-  opacity: .84;
-  transition:
-    transform 150ms ease-out,
-    opacity 145ms ease-out,
-    color 145ms ease-out;
-}
-
-.app-nav-item.active > svg {
-  transform: scale(1.05);
-  opacity: 1;
-}
-
-.app-nav-label {
-  max-width: 0 !important;
-  opacity: 0 !important;
-  overflow: hidden;
-  transform: translateX(-1px);
-  transition:
-    max-width 125ms ease-out,
-    opacity 100ms ease-out,
-    transform 115ms ease-out;
-}
-
-.app-nav-item.active .app-nav-label {
-  max-width: 0 !important;
-  opacity: 0 !important;
-}
-
-.app-nav-item.active .app-nav-label.visible {
-  max-width: 76px !important;
-  opacity: 1 !important;
-  transform: translateX(0);
-  transition:
-    max-width 150ms ease-out,
-    opacity 125ms ease-out 35ms,
-    transform 130ms ease-out 25ms;
-}
-
-.app-nav-item:active {
-  transform: scale(.97) !important;
-}
-
-/* Keep page changes understated so the navigation feels like the main motion. */
-.page-panel--active {
-  animation: page-enter-calm 115ms ease-out both;
-}
-
-@keyframes page-enter-calm {
-  from {
-    opacity: .90;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* The bar only enters once when the shell first appears. */
-.admin-tab-strip.app-icon-nav {
-  animation: app-nav-enter-calm 190ms ease-out both;
-}
-
-@keyframes app-nav-enter-calm {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .admin-tab-strip.app-icon-nav,
-  .page-panel--active {
-    animation: none !important;
-  }
-
-  .app-nav-item,
-  .app-nav-item > svg,
-  .app-nav-label {
-    transition: none !important;
-  }
-
-  .app-nav-item:active {
-    transform: none !important;
-  }
-}
-
-
-/* v80: synchronized grid navigation motion.
-   The complete icon layout interpolates together instead of each Flex item
-   independently pushing its neighbours. */
-.admin-tab-strip.app-icon-nav {
-  display: grid !important;
-  align-items: center;
-  justify-content: stretch;
-  gap: 2px;
-  transition: grid-template-columns 240ms cubic-bezier(.22,.78,.2,1);
-}
-
-.app-nav-item {
-  width: 100%;
-  min-width: 0 !important;
-  max-width: none !important;
-  flex: none !important;
-  padding-left: 6px;
-  padding-right: 6px;
-  transition:
-    padding 190ms cubic-bezier(.22,.78,.2,1),
-    gap 170ms ease-out,
-    color 145ms ease-out,
-    background-color 180ms ease-out,
-    transform 95ms ease-out !important;
-}
-
-.app-nav-item.active {
-  min-width: 0 !important;
-  max-width: none !important;
-  padding-left: 9px;
-  padding-right: 9px;
-}
-
-.app-nav-item > svg {
-  transform: scale(1);
-  transition:
-    transform 165ms cubic-bezier(.22,.78,.2,1),
-    opacity 145ms ease-out,
-    color 145ms ease-out !important;
-}
-
-.app-nav-item.active > svg {
-  transform: scale(1.045);
-}
-
-.app-nav-item.active .app-nav-label.visible {
-  transition:
-    max-width 165ms cubic-bezier(.22,.78,.2,1),
-    opacity 130ms ease-out 45ms,
-    transform 145ms ease-out 30ms !important;
-}
-
-/* Fade pages rather than visibly moving the whole content area. */
-.page-panel--active {
-  animation: page-fade-soft 120ms ease-out both !important;
-}
-
-@keyframes page-fade-soft {
-  from { opacity: .92; }
-  to { opacity: 1; }
-}
-
-@media (max-width: 390px) {
-  .admin-tab-strip.app-icon-nav {
-    gap: 1px;
-  }
-  .app-nav-item,
-  .app-nav-item.active {
-    padding-left: 5px;
-    padding-right: 5px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .admin-tab-strip.app-icon-nav {
-    transition: none !important;
-  }
-}
-
-
-/* v81: coordinated navigation micro-interaction.
-   One motion language for slot redistribution, active pill, icon and label. */
-:root {
-  --nav-motion-duration: 250ms;
-  --nav-motion-ease: cubic-bezier(.4, 0, .2, 1);
-}
-
-.admin-tab-strip.app-icon-nav {
-  transition:
-    grid-template-columns var(--nav-motion-duration) var(--nav-motion-ease),
-    background-color 180ms ease-out,
-    border-color 180ms ease-out !important;
-}
-
-.app-nav-item {
-  transition:
     padding var(--nav-motion-duration) var(--nav-motion-ease),
     gap 200ms var(--nav-motion-ease),
     color 180ms ease-out,
@@ -1648,10 +1343,31 @@ button:not(:disabled):active {
 }
 
 .app-nav-item.active {
+  padding-left: 9px;
+  padding-right: 9px;
+  gap: 5px;
   background: var(--primary) !important;
+  color: var(--on-primary);
+}
+
+.app-nav-item:not(.active):active {
+  background: var(--button-soft);
+  color: var(--primary-text);
+}
+
+.app-nav-item:active {
+  transform: scale(.975) !important;
+}
+
+.app-nav-item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .app-nav-item > svg {
+  flex: 0 0 17px;
+  width: 17px;
+  height: 17px;
   transform: scale(1);
   opacity: .82;
   transition:
@@ -1668,6 +1384,10 @@ button:not(:disabled):active {
 .app-nav-label {
   max-width: 0 !important;
   opacity: 0 !important;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
   transform: translateX(-2px);
   transition:
     max-width 150ms var(--nav-motion-ease),
@@ -1675,7 +1395,11 @@ button:not(:disabled):active {
     transform 140ms var(--nav-motion-ease) !important;
 }
 
-/* Let the pill establish its movement before revealing the new label. */
+.app-nav-item.active .app-nav-label {
+  max-width: 0 !important;
+  opacity: 0 !important;
+}
+
 .app-nav-item.active .app-nav-label.visible {
   max-width: 74px !important;
   opacity: 1 !important;
@@ -1686,12 +1410,14 @@ button:not(:disabled):active {
     transform 160ms var(--nav-motion-ease) 60ms !important;
 }
 
-/* Immediate tactile feedback, then the longer navigation transition takes over. */
-.app-nav-item:active {
-  transform: scale(.975) !important;
+.app-page-content {
+  padding-bottom: calc(82px + env(safe-area-inset-bottom)) !important;
 }
 
-/* Current-location feedback is primarily in the nav; page content only cross-fades. */
+.page-panel {
+  padding-bottom: 2px;
+}
+
 .page-panel--active {
   animation: nav-page-crossfade 145ms ease-out both !important;
 }
@@ -1699,6 +1425,50 @@ button:not(:disabled):active {
 @keyframes nav-page-crossfade {
   from { opacity: .88; }
   to { opacity: 1; }
+}
+
+@keyframes app-nav-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+:root[data-theme="dark"] .admin-tab-strip.app-icon-nav {
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  border-color: var(--border-strong);
+  box-shadow: 0 8px 28px rgba(0,0,0,.34);
+}
+
+@media (max-width: 390px) {
+  .admin-tab-strip.app-icon-nav {
+    width: calc(100% - 14px);
+    gap: 1px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .app-nav-item,
+  .app-nav-item.active {
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+
+  .app-nav-label {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 350px) {
+  .app-nav-item > svg {
+    flex-basis: 15px;
+    width: 15px;
+    height: 15px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1709,7 +1479,12 @@ button:not(:disabled):active {
     transition: none !important;
   }
 
+  .admin-tab-strip.app-icon-nav,
   .page-panel--active {
     animation: none !important;
+  }
+
+  .app-nav-item:active {
+    transform: none !important;
   }
 }
