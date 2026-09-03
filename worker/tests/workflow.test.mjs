@@ -32,7 +32,7 @@ test("allocation planner prefetches future state", () => {
 
 test("schema version is current", () => {
   const ops=read("src/ops.ts");
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 21/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 22/);
 });
 
 test("demotion preserves member record and removes admin access only", () => {
@@ -49,10 +49,6 @@ test("duplicate slips require reference amount and date match", () => {
   assert.match(ops,/bank_date/);
 });
 
-test("high-value expense approval prevents self approval", () => {
-  const expenses=read("src/routes/expenses.ts");
-  assert.match(expenses,/different admin|own expense|logged_by/i);
-});
 
 test("normalized duplicate member indexes are migration controlled", () => {
   const migration=read("migrations/0010_performance_and_normalized_members.sql");

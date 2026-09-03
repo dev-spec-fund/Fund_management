@@ -35,8 +35,7 @@ adminRoute.get('/pending', requireFinance, async c => {
     try { return {...row,allocation_preview:await buildAllocationPlan(c.env,row)}; }
     catch { return {...row,allocation_preview:[]}; }
   }));
-  const expenses = await c.env.DB.prepare(`SELECT e.*,a.name logged_by_name FROM expenses e LEFT JOIN admins a ON a.id=e.logged_by WHERE e.status='pending' ORDER BY e.created_at ASC`).all();
-  return c.json({ registrations: enrichedRegs, contributions: contributionRows, slips: contributionRows, expenses: expenses.results });
+  return c.json({ registrations: enrichedRegs, contributions: contributionRows, slips: contributionRows });
 });
 
 adminRoute.post('/pending/registrations/:id/approve', requireFinance, async c => {

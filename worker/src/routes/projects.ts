@@ -21,7 +21,6 @@ function normalizeBudget(value:any){
 async function projectRow(c:any,id:number){
   return c.env.DB.prepare(`SELECT p.*,m.member_code responsible_member_code,m.name responsible_member_name,
       COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount ELSE 0 END),0) spent,
-      COALESCE(SUM(CASE WHEN e.status='pending' THEN e.amount ELSE 0 END),0) pending_spend,
       COUNT(DISTINCT CASE WHEN e.status='approved' THEN e.id END) expense_count,
       COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_received,
       COALESCE((SELECT COUNT(*) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_count
@@ -48,7 +47,6 @@ projectsRoute.get('/', requireAdmin, async c=>{
   if(q){where.push('(p.name LIKE ? OR p.project_code LIKE ? OR p.description LIKE ? OR m.name LIKE ?)');const like=`%${q}%`;vals.push(like,like,like,like);}
   const rows=await c.env.DB.prepare(`SELECT p.*,m.member_code responsible_member_code,m.name responsible_member_name,
       COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount ELSE 0 END),0) spent,
-      COALESCE(SUM(CASE WHEN e.status='pending' THEN e.amount ELSE 0 END),0) pending_spend,
       COUNT(DISTINCT CASE WHEN e.status='approved' THEN e.id END) expense_count,
       COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_received,
       COALESCE((SELECT COUNT(*) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_count

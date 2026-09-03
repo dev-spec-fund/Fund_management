@@ -15,7 +15,7 @@ expensesRoute.get("/", requireAdmin, async (c) => {
   const q=String(c.req.query("q")||"").trim().slice(0,100);
   const documents=String(c.req.query("documents")||"").trim();
   if(month && !validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
-  if(status && !["pending","approved","reversed","voided"].includes(status)) return c.json({error:"Invalid expense status"},400);
+  if(status && !["approved","reversed","voided"].includes(status)) return c.json({error:"Invalid expense status"},400);
   if(documents && !["with","without"].includes(documents)) return c.json({error:"Invalid documents filter"},400);
   const where:string[]=[]; const vals:any[]=[];
   if(month){where.push("e.transaction_month=?");vals.push(month);}
@@ -24,7 +24,7 @@ expensesRoute.get("/", requireAdmin, async (c) => {
   if(documents==="with") where.push("EXISTS (SELECT 1 FROM expense_documents fd WHERE fd.expense_id=e.id AND fd.removed_at IS NULL)");
   if(documents==="without") where.push("NOT EXISTS (SELECT 1 FROM expense_documents fd WHERE fd.expense_id=e.id AND fd.removed_at IS NULL)");
   const rows = await c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.category_id,e.amount,e.receipt_file_id,e.logged_by,e.edited_by,e.expense_date,e.transaction_month,
-      e.status,e.approval_required,e.approved_by,e.approved_at,e.voided_by,e.voided_at,e.void_reason,e.created_at,e.updated_at,
+      e.status,e.approved_by,e.approved_at,e.voided_by,e.voided_at,e.void_reason,e.created_at,e.updated_at,
       e.project_id,e.fund_override,e.fund_override_reason,e.fund_override_by,e.fund_override_at,e.fund_balance_before,e.budget_override_reason,e.budget_override_by,
       c.name category_name,p.name project_name,p.project_code,la.name logged_by_name,aa.name approved_by_name,
       (SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id=e.id AND d.removed_at IS NULL) document_count
@@ -69,11 +69,6 @@ async function validateProjectBudget(c:any, admin:any, project:any, amount:numbe
   return null;
 }
 
-async function eligibleOtherFinanceAdmins(c:any, adminId:number) {
-  const row = await c.env.DB.prepare("SELECT COUNT(*) n FROM admins WHERE id != ? AND role IN ('owner','super_admin','treasurer') AND COALESCE(active,1)=1")
-    .bind(adminId).first<{n:number}>();
-  return Number(row?.n || 0);
-}
 
 
 const EXPENSE_DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
@@ -205,61 +200,19 @@ expensesRoute.post("/", requireFinance, async (c) => {
   if(amount>available+0.005){
     if(!wantsFundOverride || !overrideReason || !adminCan(admin,'manage_admins')) return insufficientFundResponse(c,admin,available,amount);
   }
-  const needsApproval=false;
   const txnId=await generateTxnId(c.env,"E");
   const fundOverride=amount>available+0.005 && wantsFundOverride && !!overrideReason && adminCan(admin,'manage_admins');
   const budgetOverrideReason=project?.budget!=null && amount>(Number(project.budget)-Number(project.spent||0))+0.005 ? boundedText(body.budget_override_reason,500) : null;
   const res=await c.env.DB.prepare(`INSERT INTO expenses
-    (txn_id,description,category_id,project_id,amount,logged_by,expense_date,transaction_month,status,approval_required,approved_by,approved_at,
+    (txn_id,description,category_id,project_id,amount,logged_by,expense_date,transaction_month,status,approved_by,approved_at,
      fund_override,fund_override_reason,fund_override_by,fund_override_at,fund_balance_before,budget_override_reason,budget_override_by)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .bind(txnId,description,category?.id ?? null,project?.id ?? null,amount,admin.id,expenseDate,month,needsApproval?"pending":"approved",needsApproval?1:0,needsApproval?null:admin.id,needsApproval?null:new Date().toISOString(),
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .bind(txnId,description,category?.id ?? null,project?.id ?? null,amount,admin.id,expenseDate,month,"approved",admin.id,new Date().toISOString(),
       fundOverride?1:0,fundOverride?overrideReason:null,fundOverride?admin.id:null,fundOverride?new Date().toISOString():null,available,budgetOverrideReason,budgetOverrideReason?admin.id:null).run();
-  await auditEntity(c.env,admin.id,"expense_created","expense",Number(res.meta.last_row_id),null,{txn_id:txnId,description,amount,expense_date:expenseDate,month,project_id:project?.id||null,status:needsApproval?"pending":"approved",fund_override:fundOverride,budget_override:!!budgetOverrideReason});
-  return c.json({id:res.meta.last_row_id,txn_id:txnId,status:needsApproval?"pending":"approved",approval_required:needsApproval,fund_override:fundOverride},201);
+  await auditEntity(c.env,admin.id,"expense_created","expense",Number(res.meta.last_row_id),null,{txn_id:txnId,description,amount,expense_date:expenseDate,month,project_id:project?.id||null,status:"approved",fund_override:fundOverride,budget_override:!!budgetOverrideReason});
+  return c.json({id:res.meta.last_row_id,txn_id:txnId,status:"approved",fund_override:fundOverride},201);
 });
 
-expensesRoute.post("/:id/approve", requireFinance, async(c)=>{
-  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
-  const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
-  if(!before) return c.json({error:"Not found"},404);
-  if(before.status!=="pending") return c.json({error:`Already ${before.status}`},409);
-  if(Number(before.logged_by)===Number(admin.id)) return c.json({error:"A different finance admin must confirm this expense"},409);
-  try{await requireOpenMonth(c.env,before.transaction_month||before.created_at.slice(0,7));}catch(e:any){return c.json({error:e.message},409);}
-  const body=await c.req.json().catch(()=>({})) as any;
-  const project=await validProject(c,before.project_id);
-  if(before.project_id && !project) return c.json({error:"Linked project no longer exists"},409);
-  if(project && !before.budget_override_reason){
-    const budgetProblem=await validateProjectBudget(c,admin,project,Number(before.amount),body);
-    if(budgetProblem)return budgetProblem;
-    if(project.budget!=null && Number(before.amount)>(Number(project.budget)-Number(project.spent||0))+0.005 && body.budget_override_reason){
-      await c.env.DB.prepare("UPDATE expenses SET budget_override_reason=?,budget_override_by=? WHERE id=?").bind(boundedText(body.budget_override_reason,500),admin.id,id).run();
-    }
-  }
-  const available=await availableFundBalance(c.env);
-  if(Number(before.amount)>available+0.005 && !Number(before.fund_override||0)){
-    const reason=boundedText(body.override_reason,500);
-    if(!body.override_fund_limit || !reason || !adminCan(admin,'manage_admins')) return insufficientFundResponse(c,admin,available,Number(before.amount));
-    await c.env.DB.prepare("UPDATE expenses SET fund_override=1,fund_override_reason=?,fund_override_by=?,fund_override_at=datetime('now'),fund_balance_before=? WHERE id=?").bind(reason,admin.id,available,id).run();
-  }
-  const r=await c.env.DB.prepare("UPDATE expenses SET status='approved',approved_by=?,approved_at=datetime('now') WHERE id=? AND status='pending'").bind(admin.id,id).run();
-  if(!r.meta.changes)return c.json({error:"Already reviewed"},409);
-  const after=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
-  await auditEntity(c.env,admin.id,"expense_approved","expense",id,before,after);
-  return c.json({ok:true});
-});
-
-expensesRoute.post("/:id/reject", requireFinance, async(c)=>{
-  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
-  const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
-  if(!before)return c.json({error:"Not found"},404);
-  if(before.status!=="pending")return c.json({error:`Already ${before.status}`},409);
-  const r=await c.env.DB.prepare("UPDATE expenses SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason='Rejected during approval' WHERE id=? AND status='pending'").bind(admin.id,id).run();
-  if(!r.meta.changes)return c.json({error:"Already reviewed"},409);
-  const after=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
-  await auditEntity(c.env,admin.id,"expense_rejected","expense",id,before,after);
-  return c.json({ok:true});
-});
 
 expensesRoute.patch("/:id", requireFinance, async (c) => {
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const body=await c.req.json<any>();
@@ -300,18 +253,18 @@ expensesRoute.patch("/:id", requireFinance, async (c) => {
   const priorFundOverrideValid=Number(before.fund_override||0)===1 && Math.abs(amount-Number(before.amount||0))<0.005;
   if(amount>available+0.005 && !priorFundOverrideValid && (!wantsFundOverride || !overrideReason || !adminCan(admin,'manage_admins'))) return insufficientFundResponse(c,admin,available,amount);
   const materialChanged = description!==before.description || Number(requestedCategory)!==Number(before.category_id) || Number(requestedProject)!==Number(before.project_id) || Math.abs(amount-Number(before.amount))>0.004 || month!==originalMonth || String(expenseDate||'')!==String(before.expense_date||'');
-  let status=before.status, approvalRequired=Number(before.approval_required||0), approvedBy=before.approved_by, approvedAt=before.approved_at;
+  let status=before.status, approvedBy=before.approved_by, approvedAt=before.approved_at;
   if(materialChanged){
-    status='approved'; approvalRequired=0; approvedBy=admin.id; approvedAt=new Date().toISOString();
+    status='approved'; approvedBy=admin.id; approvedAt=new Date().toISOString();
   }
   const newFundOverride=amount>available+0.005 && wantsFundOverride && !!overrideReason && adminCan(admin,'manage_admins');
   const keepPriorFundOverride=amount>available+0.005 && priorFundOverrideValid;
   const budgetOverrideReason=project?.budget!=null && amount>(Number(project.budget)-Math.max(0,Number(project.spent||0)-(requestedProject===before.project_id?replaceApproved:0)))+0.005 ? boundedText(body.budget_override_reason,500) : null;
-  await c.env.DB.prepare("UPDATE expenses SET description=?,category_id=?,project_id=?,amount=?,expense_date=?,transaction_month=?,edited_by=?,updated_at=datetime('now'),status=?,approval_required=?,approved_by=?,approved_at=?,fund_override=?,fund_override_reason=?,fund_override_by=?,fund_override_at=?,fund_balance_before=?,budget_override_reason=?,budget_override_by=? WHERE id=?")
-    .bind(description,requestedCategory,requestedProject,amount,expenseDate,month,admin.id,status,approvalRequired,approvedBy,approvedAt,
+  await c.env.DB.prepare("UPDATE expenses SET description=?,category_id=?,project_id=?,amount=?,expense_date=?,transaction_month=?,edited_by=?,updated_at=datetime('now'),status=?,approved_by=?,approved_at=?,fund_override=?,fund_override_reason=?,fund_override_by=?,fund_override_at=?,fund_balance_before=?,budget_override_reason=?,budget_override_by=? WHERE id=?")
+    .bind(description,requestedCategory,requestedProject,amount,expenseDate,month,admin.id,status,approvedBy,approvedAt,
       newFundOverride?1:(keepPriorFundOverride?1:0),newFundOverride?overrideReason:(keepPriorFundOverride?before.fund_override_reason:null),newFundOverride?admin.id:(keepPriorFundOverride?before.fund_override_by:null),newFundOverride?new Date().toISOString():(keepPriorFundOverride?before.fund_override_at:null),newFundOverride?available:(keepPriorFundOverride?before.fund_balance_before:available),budgetOverrideReason||before.budget_override_reason,budgetOverrideReason?admin.id:before.budget_override_by,id).run();
   const after=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
-  await auditEntity(c.env,admin.id,"expense_updated","expense",id,before,after); return c.json({ok:true,status:after.status,approval_required:after.approval_required});
+  await auditEntity(c.env,admin.id,"expense_updated","expense",id,before,after); return c.json({ok:true,status:after.status});
 });
 
 expensesRoute.delete("/:id", requireFinance, async(c)=>{

@@ -199,31 +199,13 @@ async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramI
     const ocr = file ? await ocrSlip(env, file.bytes, file.mime) : { amount: null, ref: null, raw: "" };
     const amount = Number(ocr.amount || 0);
     if (amount <= 0) return sendMessage(env, chatId, "I couldn't read the expense amount. Please add/edit this expense in the Fund App.");
-    const threshold = Number(await getSetting(env, "expense_approval_threshold")) || 5000;
-    const approvers = await env.DB.prepare("SELECT COUNT(*) n FROM admins WHERE id != ? AND COALESCE(active,1)=1 AND role IN ('owner','super_admin','treasurer')").bind(admin.id).first<{n:number}>();
-    const needsApproval = false;
     const txnId = await generateTxnId(env, "E");
     const r = await env.DB.prepare(`INSERT INTO expenses
-      (txn_id, description, amount, receipt_file_id, logged_by, transaction_month, status, approval_required, approved_by, approved_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(txnId, description || "Expense", amount, slipReference(fileId), admin.id, month, needsApproval ? "pending" : "approved", needsApproval ? 1 : 0, needsApproval ? null : admin.id, needsApproval ? null : new Date().toISOString()).run();
+      (txn_id, description, amount, receipt_file_id, logged_by, transaction_month, status, approved_by, approved_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(txnId, description || "Expense", amount, slipReference(fileId), admin.id, month, "approved", admin.id, new Date().toISOString()).run();
     const expenseId = Number(r.meta.last_row_id);
-    await logAudit(env, admin.id, "expense_created", `${txnId} — ${description || "Expense"} — MVR ${amount} — ${needsApproval ? "pending approval" : "approved"}`);
-    if (needsApproval) {
-      const captionText = `🧾 <b>Expense confirmation required</b>
-
-Txn: <code>${txnId}</code>
-Description: ${esc(description || "Expense")}
-Amount: <b>MVR ${amount}</b>
-Month: ${month}
-Logged by: ${esc(admin.name)}`;
-      const admins = await env.DB.prepare("SELECT telegram_id,id FROM admins WHERE id != ? AND COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").bind(admin.id).all<any>();
-      await Promise.allSettled(admins.results.map((a) => sendPhoto(env, a.telegram_id, fileId, captionText, { reply_markup: { inline_keyboard: [[
-        { text: "✅ Confirm expense", callback_data: `expapprove:${expenseId}` },
-        { text: "❌ Reject expense", callback_data: `expreject:${expenseId}` },
-      ]] } })));
-      return sendMessage(env, chatId, `Expense ${txnId} saved as pending. A different admin must confirm it because it is MVR ${amount}.`);
-    }
+    await logAudit(env, admin.id, "expense_created", `${txnId} — ${description || "Expense"} — MVR ${amount} — approved`);
     return sendMessage(env, chatId, `Expense logged (${txnId}): ${esc(description || "Expense")} — MVR ${amount}`);
   }
 
@@ -459,34 +441,6 @@ async function handleCallback(env: Env, callback: any) {
     );
     await finishRegistrationMessage(env, callback, `${callback.message.caption || callback.message.text}\n\n✅ Approved by ${esc(admin.name)}\nMember ID: ${esc(member.member_code)}`);
     return answerCallback(env, callback.id, `Registered as ${member.member_code}`);
-  }
-
-  if (action === "expapprove" || action === "expreject") {
-    if (!adminCan(admin, "finance")) return answerCallback(env, callback.id, "Treasurer or Super Admin required.");
-    const expenseId = Number(parts[1]);
-    const expense = await env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(expenseId).first<any>();
-    if (!expense) return answerCallback(env, callback.id, "Expense not found.");
-    if (expense.status !== "pending") return answerCallback(env, callback.id, `Already ${expense.status}.`);
-    if (action === "expapprove" && Number(expense.logged_by) === Number(admin.id)) return answerCallback(env, callback.id, "A different admin must confirm this expense.");
-    try { await requireOpenMonth(env, expense.transaction_month || expense.created_at.slice(0,7)); } catch (e:any) { return answerCallback(env, callback.id, e.message); }
-    if (action === "expapprove") {
-      const changed = await env.DB.prepare("UPDATE expenses SET status='approved',approved_by=?,approved_at=datetime('now') WHERE id=? AND status='pending'").bind(admin.id,expenseId).run();
-      if (!changed.meta.changes) return answerCallback(env, callback.id, "Already reviewed.");
-      await logAudit(env, admin.id, "expense_approved", `${expense.txn_id} approved`);
-      const previous = callback.message.caption || callback.message.text || "Expense";
-      await finishRegistrationMessage(env, callback, `${previous}
-
-✅ Confirmed by ${esc(admin.name)}`);
-      return answerCallback(env, callback.id, "Expense confirmed");
-    }
-    const changed = await env.DB.prepare("UPDATE expenses SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason='Rejected during approval' WHERE id=? AND status='pending'").bind(admin.id,expenseId).run();
-    if (!changed.meta.changes) return answerCallback(env, callback.id, "Already reviewed.");
-    await logAudit(env, admin.id, "expense_rejected", `${expense.txn_id} rejected`);
-    const previous = callback.message.caption || callback.message.text || "Expense";
-    await finishRegistrationMessage(env, callback, `${previous}
-
-❌ Rejected by ${esc(admin.name)}`);
-    return answerCallback(env, callback.id, "Expense rejected");
   }
 
   if (action !== "approve" && action !== "reject") return answerCallback(env, callback.id, "Unknown action.");

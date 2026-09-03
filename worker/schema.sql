@@ -147,7 +147,6 @@ CREATE TABLE IF NOT EXISTS expenses (
   expense_date TEXT,
   transaction_month TEXT,
   status TEXT NOT NULL DEFAULT 'approved',
-  approval_required INTEGER NOT NULL DEFAULT 0,
   approved_by INTEGER REFERENCES admins(id),
   approved_at TEXT,
   voided_by INTEGER REFERENCES admins(id),
@@ -258,7 +257,6 @@ CREATE TABLE IF NOT EXISTS month_closures (
   note TEXT
 );
 
-INSERT OR IGNORE INTO settings (key, value) VALUES ('expense_approval_threshold', '5000');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('mini_app_url', 'https://fund-management.pages.dev');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('reminder_schedule', 'Daily 00:00 Maldives (19:00 UTC)');
 
@@ -447,3 +445,5 @@ CREATE INDEX IF NOT EXISTS idx_expense_documents_active ON expense_documents(exp
 CREATE INDEX IF NOT EXISTS idx_admins_custom_role ON admins(custom_role_id, active);
 CREATE INDEX IF NOT EXISTS idx_admin_role_permissions_role ON admin_role_permissions(role_id);
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (21,'custom_admin_roles');
+
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (22,'remove_expense_approval_workflow');

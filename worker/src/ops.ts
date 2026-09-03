@@ -26,7 +26,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 21;
+const REQUIRED_SCHEMA_VERSION = 22;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -41,7 +41,7 @@ export async function ensureOperationalSchema(env: Env) {
       ["member_registration_requests", ["phone"]],
       ["contributions", ["bank_date","corrected_by","corrected_at","voided_by","voided_at","void_reason","duplicate_key"]],
       ["donations", ["member_id","project_id","transaction_month","status","voided_by","voided_at","void_reason"]],
-      ["expenses", ["expense_date","transaction_month","status","approval_required","approved_by","approved_at","voided_by","voided_at","void_reason","project_id","fund_override","fund_override_reason","fund_override_by","fund_override_at","fund_balance_before","budget_override_reason","budget_override_by"]],
+      ["expenses", ["expense_date","transaction_month","status","approved_by","approved_at","voided_by","voided_at","void_reason","project_id","fund_override","fund_override_reason","fund_override_by","fund_override_at","fund_balance_before","budget_override_reason","budget_override_by"]],
       ["projects", ["project_code","name","budget","status","responsible_member_id"]],
       ["expense_documents", ["expense_id","telegram_file_id","original_filename","display_name","document_type","uploaded_by","created_at","removed_at","removed_by","removal_reason"]],
       ["expense_categories", ["active"]],

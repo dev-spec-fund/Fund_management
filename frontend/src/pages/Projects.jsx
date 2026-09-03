@@ -20,7 +20,6 @@ export default function Projects({ admin }) {
   useEffect(()=>{setPage(1);const t=setTimeout(load,220);return()=>clearTimeout(t);},[filter,query]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses")||path?.startsWith("/api/donations"))load();}),[filter,query]);
   const totalSpent=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.spent||0),0),[rows]);
-  const pendingSpend=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.pending_spend||0),0),[rows]);
   const projectPage=pageSlice(rows||[],page);
   const saved=async(text)=>{setSelected(null);setShowAdd(false);setMessage(text);await load();};
   return <>
@@ -40,7 +39,7 @@ export default function Projects({ admin }) {
         {p.budget!=null?<><div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5}}>Budget MVR {fmt(p.budget)} · {Math.max(0,Number(p.budget_used_pct||0)).toFixed(0)}% used</div><Progress value={Number(p.budget_used_pct||0)}/></>:<div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5}}>Open-cost project</div>}
         <div className="sans" style={{fontSize:9,color:"var(--primary-text)",marginTop:6,fontWeight:600}}>{Number(p.expense_count||0)} expense{Number(p.expense_count||0)===1?"":"s"} · {Number(p.donation_count||0)} donation{Number(p.donation_count||0)===1?"":"s"} · Tap to view</div>
       </div>
-      <div className="sans" style={{textAlign:"right",whiteSpace:"nowrap"}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>Spent</div><strong style={{fontSize:13}}>MVR {fmt(p.spent)}</strong>{Number(p.pending_spend||0)>0&&<div style={{fontSize:9,color:"var(--warning)",marginTop:3}}>MVR {fmt(p.pending_spend)} pending</div>}{p.budget!=null&&<div style={{fontSize:9,color:Number(p.remaining_budget)<0?"var(--danger)":"var(--soft)",marginTop:3}}>{Number(p.remaining_budget)<0?`Over MVR ${fmt(Math.abs(p.remaining_budget))}`:`MVR ${fmt(p.remaining_budget)} left`}</div>}</div>
+      <div className="sans" style={{textAlign:"right",whiteSpace:"nowrap"}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>Spent</div><strong style={{fontSize:13}}>MVR {fmt(p.spent)}</strong>{p.budget!=null&&<div style={{fontSize:9,color:Number(p.remaining_budget)<0?"var(--danger)":"var(--soft)",marginTop:3}}>{Number(p.remaining_budget)<0?`Over MVR ${fmt(Math.abs(p.remaining_budget))}`:`MVR ${fmt(p.remaining_budget)} left`}</div>}</div>
     </button>)}
     <Pagination page={projectPage.page} total={(rows||[]).length} onChange={setPage}/>
     {showAdd&&<ProjectForm admin={admin} onClose={()=>setShowAdd(false)} onSaved={()=>saved("Project created")}/>} 
@@ -74,7 +73,6 @@ function ProjectDetails({project,admin,onClose,onSaved}){
   const p=data||project;
   const expenses=p.expenses||[];
   const approved=expenses.filter(e=>e.status==="approved");
-  const pending=expenses.filter(e=>e.status==="pending");
   const adjustments=expenses.filter(e=>adjustmentStatuses.has(String(e.status)));
   const canEdit=!["completed","cancelled"].includes(p.status)||isSuper(admin);
   const changeStatus=async(status)=>{let cancel_reason=null;if(status==="cancelled"){cancel_reason=prompt("Reason for cancelling this project:")||"";if(cancel_reason.trim().length<3)return;}setBusy(true);setError("");try{await api.projects.update(p.id,{status,cancel_reason});await onSaved(status==="active"?"Project reopened/activated":status==="completed"?"Project completed":"Project cancelled");}catch(e){setError(e.message);}finally{setBusy(false);}};
@@ -82,7 +80,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
     <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:14,marginBottom:12}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
         <Metric label="Status" value={String(p.status||"").toUpperCase()} color={tone(p.status)}/><Metric label="Total spent" value={`MVR ${fmt(p.spent)}`}/>
-        <Metric label="Donations received" value={`MVR ${fmt(p.donation_received||0)}`} color="var(--success)"/><Metric label="Expenses" value={String(p.expense_count||approved.length)}/>{Number(p.pending_spend||0)>0&&<Metric label="Pending expenses" value={`MVR ${fmt(p.pending_spend||0)}`} color="var(--warning)"/>}
+        <Metric label="Donations received" value={`MVR ${fmt(p.donation_received||0)}`} color="var(--success)"/><Metric label="Expenses" value={String(p.expense_count||approved.length)}/>
       </div>
       {p.budget==null?<div className="sans" style={{fontSize:11,color:"var(--muted)",padding:"8px 0"}}><WalletCards size={13} style={{verticalAlign:"-2px",marginRight:5}}/>Open-cost project — no budget limit set.</div>:<><Detail label="Budget" value={`MVR ${fmt(p.budget)}`}/><Detail label="Remaining" value={`MVR ${fmt(p.remaining_budget)}`}/><Detail label="Budget used" value={`${Number(p.budget_used_pct||0).toFixed(1)}%`}/><Progress value={Number(p.budget_used_pct||0)} large/></>}
       <Detail label="Responsible" value={p.responsible_member_name||"Not assigned"}/><Detail label="Start" value={p.start_date||"—"}/><Detail label="Target end" value={p.target_end_date||"—"}/>{p.cancel_reason&&<Detail label="Cancellation reason" value={p.cancel_reason}/>} {p.description&&<div className="sans" style={{fontSize:11,color:"var(--muted)",lineHeight:1.5,marginTop:10}}>{p.description}</div>}
@@ -91,7 +89,6 @@ function ProjectDetails({project,admin,onClose,onSaved}){
     {(p.donations||[]).length>0&&<><div className="sans" style={{fontSize:11,fontWeight:700,color:"var(--muted)",margin:"12px 0 7px"}}>PROJECT DONATIONS ({p.donations.length})</div>{p.donations.map(d=><div key={d.id} style={{display:"flex",justifyContent:"space-between",gap:10,borderTop:"1px solid var(--divider)",padding:"8px 0"}}><div className="sans" style={{fontSize:11,minWidth:0}}><b>{d.donor_name}</b><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{d.transaction_month} · {d.txn_id}{d.note?` · ${d.note}`:""}</div></div><b className="sans" style={{fontSize:11,whiteSpace:"nowrap",color:"var(--success)"}}>+ MVR {fmt(d.amount)}</b></div>)}</>}
 
     <ExpenseSection title={`PROJECT EXPENSES — APPROVED (${approved.length})`} rows={approved} empty="No approved project expenses yet."/>
-    {pending.length>0&&<ExpenseSection title="PENDING EXPENSES" rows={pending} empty="" pending/>}
     {adjustments.length>0&&<ExpenseSection title="REVERSED / VOIDED ADJUSTMENTS" rows={adjustments} empty="" adjustment/>}
 
     {(p.audit_history||[]).length>0&&<><div className="sans" style={{fontSize:11,fontWeight:700,color:"var(--muted)",margin:"15px 0 7px",display:"flex",alignItems:"center",gap:5}}><History size={13}/> PROJECT HISTORY</div>{p.audit_history.map(a=><div key={a.id} style={{borderTop:"1px solid var(--divider)",padding:"8px 0"}}><div className="sans" style={{fontSize:10,fontWeight:600}}>{auditLabel(a.action)}</div><div className="sans" style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{String(a.created_at||"").replace("T"," ").slice(0,16)} · {a.admin_name}{a.before_status&&a.after_status&&a.before_status!==a.after_status?` · ${a.before_status} → ${a.after_status}`:""}</div></div>)}</>}

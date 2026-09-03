@@ -14,7 +14,7 @@ const yearRx=/^\d{4}$/;
 const n=(v:any)=>Number(v||0);
 
 async function monthMetrics(env:any, month:string){
-  const [cash,donations,expenses,memberRows,pendingContrib,pendingExpenses,openErrors,lastBackup]=await Promise.all([
+  const [cash,donations,expenses,memberRows,pendingContrib,openErrors,lastBackup]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month=?").bind(month).first<any>(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month=?").bind(month).first<any>(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month=?").bind(month).first<any>(),
@@ -34,7 +34,6 @@ async function monthMetrics(env:any, month:string){
       WHERE m.active=1 AND substr(COALESCE(m.joined_at,m.created_at),1,7)<=?
     `).bind(month,month,month,month,month,month,month,month).all<any>(),
     env.DB.prepare("SELECT COUNT(*) count FROM contributions WHERE status='pending' AND month=?").bind(month).first<any>(),
-    env.DB.prepare("SELECT COUNT(*) count FROM expenses WHERE status='pending' AND transaction_month=?").bind(month).first<any>(),
     env.DB.prepare("SELECT COUNT(*) count FROM error_log WHERE status='open'").first<any>(),
     env.DB.prepare("SELECT created_at FROM audit_log WHERE action='database_backup_exported' ORDER BY created_at DESC LIMIT 1").first<any>()
   ]);
@@ -52,7 +51,7 @@ async function monthMetrics(env:any, month:string){
     closing_balance:opening+contributionCash+donationCash-expenseCash,total_due:totalDue,total_collected:totalCollected,
     collection_rate:totalDue>0?Math.min(100,(totalCollected/totalDue)*100):100,active_members:rows.length,
     paid_members:counts('paid'),partial_members:counts('partial'),unpaid_members:counts('unpaid'),exempt_members:counts('exempt'),
-    pending_contributions:n(pendingContrib?.count),pending_expenses:n(pendingExpenses?.count),open_errors:n(openErrors?.count),last_backup_at:lastBackup?.created_at||null
+    pending_contributions:n(pendingContrib?.count),open_errors:n(openErrors?.count),last_backup_at:lastBackup?.created_at||null
   };
 }
 
@@ -88,7 +87,6 @@ governanceRoute.get('/month-close/:month/check', requireAdmin, async c=>{
   const already=await isMonthClosed(c.env,month);
   return c.json({...metrics,closed:already,blockers:[
     ...(metrics.pending_contributions?[`${metrics.pending_contributions} pending contribution(s)`]:[]),
-    ...(metrics.pending_expenses?[`${metrics.pending_expenses} pending expense(s)`]:[])
   ],warnings:[
     ...((metrics.unpaid_members+metrics.partial_members)>0?[`${metrics.unpaid_members+metrics.partial_members} member(s) still outstanding`]:[]),
     ...(metrics.open_errors?[`${metrics.open_errors} unresolved system error(s)`]:[]),
@@ -101,7 +99,7 @@ governanceRoute.post('/month-close/:month', requireCloseMonth, async c=>{
   if(!validMonth(month)) return c.json({error:'Use YYYY-MM'},400);
   if(await isMonthClosed(c.env,month)) return c.json({error:'Month is already closed'},409);
   const m=await monthMetrics(c.env,month);
-  if((m.pending_contributions||0)>0 || (m.pending_expenses||0)>0) return c.json({error:'Resolve pending financial approvals before closing',check:m},409);
+  if((m.pending_contributions||0)>0) return c.json({error:'Resolve pending contributions before closing',check:m},409);
   await c.env.DB.batch([
     c.env.DB.prepare(`INSERT OR REPLACE INTO monthly_snapshots(month,opening_balance,contribution_cash,donation_cash,expenses,closing_balance,total_due,total_collected,collection_rate,active_members,paid_members,partial_members,unpaid_members,exempt_members,closed_by,closed_at,note)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?)`).bind(month,m.opening_balance,m.contribution_cash,m.donation_cash,m.expenses,m.closing_balance,m.total_due,m.total_collected,m.collection_rate,m.active_members,m.paid_members,m.partial_members,m.unpaid_members,m.exempt_members,admin.id,String(body.note||'').trim()||null),

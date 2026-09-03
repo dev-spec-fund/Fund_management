@@ -275,8 +275,6 @@ export const api = {
     create: (data) => request("/api/expenses", { method: "POST", body: JSON.stringify(data) }),
     update: (id, data) => request(`/api/expenses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     remove: (id, reason) => request(`/api/expenses/${id}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
-    approve: (id, data = {}) => request(`/api/expenses/${id}/approve`, { method: "POST", body: JSON.stringify(data) }),
-    reject: (id) => request(`/api/expenses/${id}/reject`, { method: "POST" }),
     documents: (id) => request(`/api/expenses/${id}/documents`),
     uploadDocument: (id, file, documentType = "") => {
       const form = new FormData();
