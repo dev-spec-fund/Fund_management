@@ -66,14 +66,51 @@ export async function ensureOperationalSchema(env: Env) {
   }
 }
 
+const ERROR_SENSITIVE_KEYS = new Set([
+  "phone", "normalized_phone", "telegram_id", "telegram_user_id", "chat_id",
+  "ref_number", "bank_reference", "bank_ref", "reference", "txn_id",
+  "slip_file_id", "file_id", "telegram_file_id", "photo_file_id",
+  "ocr_raw", "ocr_text", "image", "image_bytes", "raw",
+  "ai_response", "model_response", "prompt", "init_data", "initdata",
+]);
+
+function sanitizeErrorString(value: string) {
+  return String(value || "")
+    .replace(/((?:phone|normalized_phone|telegram(?:_user)?_id|chat_id|ref(?:_number)?|bank_(?:ref|reference)|reference|txn_id)\s*[:=]\s*)[^,;\s}\]]+/gi, "$1[redacted]")
+    .replace(/((?:slip_file_id|file_id|telegram_file_id|photo_file_id|ocr_raw|ocr_text|init_data|initdata)\s*[:=]\s*)[^,;\s}\]]+/gi, "$1[redacted]")
+    .replace(/\b\+?960[ -]?[0-9]{7}\b/g, "[redacted-phone]")
+    .replace(/\b[0-9]{7,12}\b/g, "[redacted-id]");
+}
+
+function sanitizeErrorValue(value: unknown, depth = 0): unknown {
+  if (depth > 5) return "[truncated]";
+  if (value == null || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const clean = sanitizeErrorString(value);
+    return clean.length > 1000 ? `${clean.slice(0, 1000)}…` : clean;
+  }
+  if (Array.isArray(value)) return value.slice(0, 25).map(v => sanitizeErrorValue(v, depth + 1));
+  if (typeof value === "object") {
+    const clean: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      clean[key] = ERROR_SENSITIVE_KEYS.has(key.toLowerCase()) ? "[redacted]" : sanitizeErrorValue(val, depth + 1);
+    }
+    return clean;
+  }
+  return sanitizeErrorString(String(value));
+}
+
 export async function safeLogError(env: Env, source: string, error: unknown, detail?: unknown) {
   try {
-    const message = error instanceof Error ? error.message : String(error);
-    const extra = detail === undefined ? (error instanceof Error ? error.stack : null) : JSON.stringify(detail);
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    const message = sanitizeErrorString(rawMessage).slice(0, 1000);
+    const rawExtra = detail === undefined ? (error instanceof Error ? error.stack : null) : detail;
+    const cleanExtra = rawExtra == null ? null : sanitizeErrorValue(rawExtra);
+    const extra = cleanExtra == null ? null : (typeof cleanExtra === "string" ? cleanExtra : JSON.stringify(cleanExtra));
     await env.DB.prepare("INSERT INTO error_log (source,message,detail) VALUES (?,?,?)")
-      .bind(source, message.slice(0, 1000), String(extra || "").slice(0, 8000) || null).run();
+      .bind(sanitizeErrorString(source).slice(0, 200), message, String(extra || "").slice(0, 8000) || null).run();
   } catch (e) {
-    console.error("Failed to persist error", e, error);
+    console.error("Failed to persist error", e instanceof Error ? e.message : String(e));
   }
 }
 
