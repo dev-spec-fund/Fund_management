@@ -275,3 +275,20 @@ test('member fund can open Uncategorised expenses', () => {
   assert.match(fundSource, /category\.category_id == null \? 0/);
   assert.match(fundSource, /publicExpenses\(month, categoryId\)/);
 });
+
+
+test('member acceptance polish keeps contribution totals consistent and project subsections compact', () => {
+  const historySource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MyHistory.jsx'),'utf8');
+  const profileSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MyProfile.jsx'),'utf8');
+  const projectSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberProjects.jsx'),'utf8');
+  const contributionUtil = fs.readFileSync(path.resolve(root,'../frontend/src/utils/contributions.js'),'utf8');
+
+  assert.match(historySource, /approvedContributionSummary\(rows\)/);
+  assert.match(profileSource, /approvedContributionSummary\(contributions\)/);
+  assert.match(contributionUtil, /status.*approved/);
+  assert.match(historySource, /member-history-filter/);
+  assert.match(projectSource, /ProjectSubsection/);
+  assert.match(projectSource, /sectionOpen\(p\.id,"donations"\)/);
+  assert.match(projectSource, /sectionOpen\(p\.id,"expenses"\)/);
+  assert.match(profileSource, /Date\.UTC/);
+});
