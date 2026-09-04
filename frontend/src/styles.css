@@ -2236,3 +2236,110 @@ button:not(:disabled):active {
   .member-fund-category-progress > div,
   .member-action-card {transition:none!important;}
 }
+
+
+/* v36: Member acceptance polish. */
+.member-history-filters {
+  display:flex;
+  gap:6px;
+  overflow-x:auto;
+  padding:1px 1px 8px;
+  scrollbar-width:none;
+}
+.member-history-filters::-webkit-scrollbar { display:none; }
+.member-history-filter {
+  flex:0 0 auto;
+  min-height:32px;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:var(--card);
+  color:var(--muted);
+  padding:5px 9px 5px 11px;
+  font-size:10px;
+  font-weight:700;
+  cursor:pointer;
+}
+.member-history-filter b {
+  min-width:17px;
+  height:17px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+  background:var(--button-soft);
+  font-size:8px;
+}
+.member-history-filter.active {
+  background:var(--primary);
+  border-color:var(--primary);
+  color:var(--on-primary);
+}
+.member-history-filter.active b {
+  background:color-mix(in srgb,var(--on-primary) 16%,transparent);
+}
+
+.member-project-subsection {
+  margin-top:11px;
+  border-top:1px solid var(--divider);
+}
+.member-project-subsection-toggle {
+  width:100%;
+  min-height:40px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  border:0;
+  background:transparent;
+  color:inherit;
+  padding:8px 0;
+  cursor:pointer;
+}
+.member-project-subsection-toggle > span:first-child {
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.65px;
+  color:var(--soft);
+}
+.member-project-subsection-toggle b {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:18px;
+  height:18px;
+  margin-left:4px;
+  border-radius:999px;
+  background:var(--button-soft);
+  color:var(--muted);
+  font-size:8px;
+  letter-spacing:0;
+}
+.member-project-subsection-chevron {
+  color:var(--soft);
+  font-family:var(--sans);
+  font-size:17px;
+  transition:transform 180ms cubic-bezier(.4,0,.2,1);
+}
+.member-project-subsection-chevron.open { transform:rotate(180deg); }
+.member-project-subsection-body {
+  display:grid;
+  grid-template-rows:0fr;
+  opacity:.35;
+  transition:grid-template-rows 200ms cubic-bezier(.4,0,.2,1),opacity 150ms ease-out;
+}
+.member-project-subsection-body.open {
+  grid-template-rows:1fr;
+  opacity:1;
+}
+.member-project-subsection-body > div {
+  min-height:0;
+  overflow:hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .member-project-subsection-chevron,
+  .member-project-subsection-body { transition:none!important; }
+}
