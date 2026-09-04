@@ -2,10 +2,12 @@ import React, { useEffect, useState } from "react";
 import { api, onDataChange } from "../../api";
 import { EmptyState, ErrorState, compactBtn } from "../../components/Shared";
 import { fmt } from "../../utils/format";
+import { approvedContributionSummary } from "../../utils/contributions";
 
 export function MyHistory({ member }) {
   const [statement, setStatement] = useState(null);
   const [error, setError] = useState("");
+  const [transactionFilter, setTransactionFilter] = useState("all");
   useEffect(() => {
     if (!member?.id) return;
     setStatement(null); setError("");
@@ -18,8 +20,10 @@ export function MyHistory({ member }) {
   if (error) return <ErrorState>{error}</ErrorState>;
   if (!statement) return <HistorySkeleton/>;
   const rows=statement.contributions||[];
-  const approved=rows.filter(r=>String(r.status).toLowerCase()==="approved");
-  const total=approved.reduce((sum,r)=>sum+Number(r.amount||0),0);
+  const {approved,total}=approvedContributionSummary(rows);
+  const normalizedStatus=(row)=>String(row?.status||"pending").toLowerCase();
+  const filteredRows=rows.filter((row)=>transactionFilter==="all" || normalizedStatus(row)===transactionFilter);
+  const transactionCounts=rows.reduce((acc,row)=>{const status=normalizedStatus(row);acc.all+=1;if(status in acc)acc[status]+=1;return acc;},{all:0,approved:0,pending:0,rejected:0});
   const statuses=statement.monthly_status||[];
   const outstanding=statuses.reduce((sum,x)=>sum+Number(x.due||0),0);
   const advance=Math.max(0,total-statuses.reduce((sum,x)=>sum+Number(x.paid||0),0));
@@ -43,10 +47,18 @@ export function MyHistory({ member }) {
       {recentStatuses.map(x=><div key={x.month} className="sans member-history-status-row"><span>{monthLabel(x.month)}</span><span style={{textAlign:"right"}}><b className="member-status-badge" style={{color:statusColor(x.status),borderColor:statusColor(x.status)}}>{x.status}</b><div style={{fontSize:10,color:"var(--soft)"}}>Paid MVR {fmt(x.paid)}{Number(x.due)>0?` · Due MVR ${fmt(x.due)}`:""}</div></span></div>)}
     </div>
     <div className="sans member-section-title">CONTRIBUTION TRANSACTIONS</div>
-    {rows.map((h)=><div key={h.id} className="member-history-transaction">
+    <div className="member-history-filters" role="group" aria-label="Filter contribution transactions">
+      {[["all","All"],["approved","Approved"],["pending","Pending"],["rejected","Rejected"]].map(([value,label])=>
+        <button key={value} type="button" onClick={()=>setTransactionFilter(value)}
+          className={`sans member-history-filter${transactionFilter===value?" active":""}`} aria-pressed={transactionFilter===value}>
+          <span>{label}</span><b>{transactionCounts[value]||0}</b>
+        </button>)}
+    </div>
+    {filteredRows.map((h)=><div key={h.id} className="member-history-transaction">
       <div style={{display:"flex",justifyContent:"space-between",gap:10}}><div><div className="sans" style={{fontSize:14,fontWeight:600}}>{monthLabel(h.month)}</div><div className="sans" style={{fontSize:11,color:"var(--soft)",marginTop:3}}>{h.txn_id}{h.ref_number?` · Bank ref: ${h.ref_number}`:""}</div></div><div style={{textAlign:"right"}}><div className="sans" style={{fontSize:14,fontWeight:600}}>MVR {fmt(h.amount)}</div><span className="sans" style={{color:h.status==="approved"?"var(--success)":h.status==="reversed"?"var(--warning)":"var(--muted)",fontSize:10,fontWeight:600,textTransform:"capitalize"}}>{h.status||"pending"}</span></div></div>
     </div>)}
     {rows.length===0&&<EmptyState>No contributions yet — send a slip photo to the bot to get started.</EmptyState>}
+    {rows.length>0&&filteredRows.length===0&&<EmptyState>No {transactionFilter} contributions.</EmptyState>}
   </>;
 }
 

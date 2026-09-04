@@ -3,6 +3,7 @@ import { CalendarDays, Download, FileText, Phone, UserRound } from "lucide-react
 import { api, onDataChange } from "../../api";
 import { ErrorState, smallBtn } from "../../components/Shared";
 import { fmt } from "../../utils/format";
+import { approvedContributionSummary } from "../../utils/contributions";
 
 export function MyProfile({ member, setTab }) {
   const [dashboard, setDashboard] = useState(null);
@@ -29,8 +30,7 @@ export function MyProfile({ member, setTab }) {
   const m=dashboard.member || statement?.member || member || {};
   const c=dashboard.contribution || {};
   const contributions=statement?.contributions || [];
-  const approved=contributions.filter(row=>String(row.status||"").toLowerCase()==="approved");
-  const totalContributed=approved.reduce((sum,row)=>sum+Number(row.amount||0),0);
+  const {approved,total:totalContributed}=approvedContributionSummary(contributions);
   const statuses=statement?.monthly_status || [];
   const outstanding=statuses.reduce((sum,row)=>sum+Number(row.due||0),0);
   const pendingCount=dashboard.pending_payments?.length || 0;
@@ -137,9 +137,16 @@ function MembershipSkeleton(){
 
 function formatJoinedDate(value){
   if(!value)return "—";
+  const raw=String(value).trim();
   try{
-    const date=new Date(String(value).includes("T")?value:String(value).replace(" ","T")+"Z");
-    if(Number.isNaN(date.getTime()))return String(value).slice(0,10);
-    return new Intl.DateTimeFormat("en-GB",{day:"2-digit",month:"short",year:"numeric"}).format(date);
-  }catch{return String(value).slice(0,10);}
+    let date;
+    const dateOnly=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(dateOnly){
+      date=new Date(Date.UTC(Number(dateOnly[1]),Number(dateOnly[2])-1,Number(dateOnly[3])));
+    }else{
+      date=new Date(raw.includes("T")?raw:raw.replace(" ","T")+"Z");
+    }
+    if(Number.isNaN(date.getTime()))return raw.slice(0,10);
+    return new Intl.DateTimeFormat("en-GB",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"}).format(date);
+  }catch{return raw.slice(0,10);}
 }

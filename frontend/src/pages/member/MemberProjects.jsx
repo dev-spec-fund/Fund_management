@@ -10,6 +10,7 @@ export function MemberProjects() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(null);
+  const [detailSections, setDetailSections] = useState({});
 
   const load = ({ silent = false } = {}) => {
     if (!silent) { setData(null); setError(""); }
@@ -24,6 +25,12 @@ export function MemberProjects() {
       load({ silent: true });
     }
   }), []);
+
+  const toggleDetailSection=(projectId,section)=>{
+    const key=`${projectId}:${section}`;
+    setDetailSections((current)=>({...current,[key]:!current[key]}));
+  };
+  const sectionOpen=(projectId,section)=>!!detailSections[`${projectId}:${section}`];
 
   if (error) return <div className="sans" style={{background:"var(--danger-bg-4)",border:"1px solid var(--danger-border-3)",borderRadius:12,padding:16,color:"var(--danger-strong)"}}>
     <div style={{fontWeight:700,marginBottom:5}}>Projects unavailable</div>
@@ -102,27 +109,51 @@ export function MemberProjects() {
               <Detail label="Start" value={p.start_date || "—"}/>
               <Detail label="Target end" value={p.target_end_date || "—"} last/>
 
-              <div className="sans member-project-subtitle">PROJECT DONATIONS</div>
-              {donations.length === 0 ? <div className="sans member-project-empty">No project donations yet.</div> : donations.map((d)=>
-                <div key={d.id} className="member-project-transaction">
-                  <div className="sans"><b>{d.txn_id || "Donation"}</b><div>{d.donation_date || "—"}</div></div>
-                  <strong className="sans" style={{color:"var(--success)"}}>+ MVR {fmt(d.amount)}</strong>
-                </div>
-              )}
+              <ProjectSubsection
+                title="PROJECT DONATIONS"
+                count={donations.length}
+                open={sectionOpen(p.id,"donations")}
+                onToggle={()=>toggleDetailSection(p.id,"donations")}
+              >
+                {donations.length === 0 ? <div className="sans member-project-empty">No project donations yet.</div> : donations.map((d)=>
+                  <div key={d.id} className="member-project-transaction">
+                    <div className="sans"><b>{d.txn_id || "Donation"}</b><div>{d.donation_date || "—"}</div></div>
+                    <strong className="sans" style={{color:"var(--success)"}}>+ MVR {fmt(d.amount)}</strong>
+                  </div>
+                )}
+              </ProjectSubsection>
 
-              <div className="sans member-project-subtitle">APPROVED PROJECT EXPENSES</div>
-              {expenses.length === 0 ? <div className="sans member-project-empty">No expenses yet.</div> : expenses.map((e)=>
-                <div key={e.id} className="member-project-transaction">
-                  <div className="sans"><b>{e.description}</b><div>{e.expense_date || "—"} · {e.category || "Uncategorised"}</div></div>
-                  <strong className="sans" style={{color:"var(--danger)"}}>− MVR {fmt(e.amount)}</strong>
-                </div>
-              )}
+              <ProjectSubsection
+                title="APPROVED PROJECT EXPENSES"
+                count={expenses.length}
+                open={sectionOpen(p.id,"expenses")}
+                onToggle={()=>toggleDetailSection(p.id,"expenses")}
+              >
+                {expenses.length === 0 ? <div className="sans member-project-empty">No expenses yet.</div> : expenses.map((e)=>
+                  <div key={e.id} className="member-project-transaction">
+                    <div className="sans"><b>{e.description}</b><div>{e.expense_date || "—"} · {e.category || "Uncategorised"}</div></div>
+                    <strong className="sans" style={{color:"var(--danger)"}}>− MVR {fmt(e.amount)}</strong>
+                  </div>
+                )}
+              </ProjectSubsection>
             </div>
           </div>
         </div>
       </article>;
     })}
   </>;
+}
+
+function ProjectSubsection({title,count,open,onToggle,children}) {
+  return <div className="member-project-subsection">
+    <button type="button" onClick={onToggle} className="member-project-subsection-toggle" aria-expanded={open}>
+      <span className="sans">{title} <b>{count}</b></span>
+      <span className={`member-project-subsection-chevron${open?" open":""}`}>⌄</span>
+    </button>
+    <div className={`member-project-subsection-body${open?" open":""}`}>
+      <div>{children}</div>
+    </div>
+  </div>;
 }
 
 function Metric({label,value,tone=""}) {
