@@ -33,7 +33,7 @@ export default function Projects({ admin }) {
       <div className="expense-search sans" style={{marginBottom:14}}><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search project name, code or responsible member"/>{query&&<button type="button" onClick={()=>setQuery("")}><X size={14}/></button>}</div>
     </div>
     <MessageBanner>{message}</MessageBanner><MessageBanner tone="error">{error}</MessageBanner>
-    {rows===null?<LoadingState>Loading projects…</LoadingState>:rows.length===0?<EmptyState>No projects found.</EmptyState>:projectPage.rows.map(p=><button type="button" key={p.id} onClick={()=>setSelected(p)} className="expense-row" style={{alignItems:"flex-start"}}>
+    {rows===null?<ProjectsSkeleton/>:rows.length===0?<EmptyState>No projects found.</EmptyState>:projectPage.rows.map(p=><button type="button" key={p.id} onClick={()=>setSelected(p)} className="expense-row" style={{alignItems:"flex-start"}}>
       <div style={{minWidth:0,textAlign:"left",flex:1}}>
         <div className="sans" style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}><strong style={{fontSize:13}}>{p.name}</strong><span style={{fontSize:9,fontWeight:700,color:tone(p.status),textTransform:"uppercase"}}>{p.status}</span></div>
         <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:4}}>{p.project_code}{p.responsible_member_name?` · ${p.responsible_member_name}`:""}</div>
@@ -46,6 +46,12 @@ export default function Projects({ admin }) {
     {showAdd&&<ProjectForm admin={admin} onClose={()=>setShowAdd(false)} onSaved={()=>saved("Project created")}/>} 
     {selected&&<ProjectDetails project={selected} admin={admin} onClose={()=>setSelected(null)} onSaved={saved}/>} 
   </>;
+}
+
+function ProjectsSkeleton(){
+  return <div className="admin-project-skeleton" aria-label="Loading projects" aria-busy="true">
+    {[1,2,3,4].map(i=><div key={i} className="skeleton-block admin-project-skeleton-row"/>)}
+  </div>;
 }
 
 function ProjectForm({admin,onClose,onSaved,project=null}){

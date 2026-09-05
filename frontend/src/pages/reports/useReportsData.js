@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, onDataChange } from "../../api";
 import { currentMonthValue, shiftMonthValue } from "../../utils/date";
+import { getAdminReportMonth, saveAdminReportMonth } from "../../utils/adminReportMonth";
 
 export function useReportsData() {
-  const [month, setMonth] = useState(currentMonthValue());
+  const [month, setMonth] = useState(getAdminReportMonth());
   const [summary, setSummary] = useState(null);
   const [trend, setTrend] = useState([]);
   const [annualYear, setAnnualYear] = useState(String(new Date().getFullYear()));
@@ -64,7 +65,7 @@ export function useReportsData() {
     annual,
     analytics,
     annualBusy,
-    shiftMonth: (delta) => setMonth((value) => shiftMonthValue(value, delta)),
+    shiftMonth: (delta) => setMonth((value) => { const next=shiftMonthValue(value,delta); saveAdminReportMonth(next); return next; }),
     loadMonthly,
     loadAnnual,
   };

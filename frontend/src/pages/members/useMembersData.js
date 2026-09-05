@@ -1,17 +1,23 @@
 import { useEffect, useState } from "react";
 import { api, onDataChange } from "../../api";
 import { currentMonthValue } from "../../utils/date";
+import { getAdminReportMonth, saveAdminReportMonth } from "../../utils/adminReportMonth";
 import { pageSlice } from "../../components/Pagination";
 
 export default function useMembersData(isAdmin) {
   const [members, setMembers] = useState([]);
-  const [month, setMonth] = useState(currentMonthValue());
+  const [month, setMonthState] = useState(getAdminReportMonth());
   const [monthlySummary, setMonthlySummary] = useState(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [defaultMonthly, setDefaultMonthly] = useState(250);
   const [form, setForm] = useState({ name: "", phone: "", monthly_amount: "" });
   const [page, setPage] = useState(1);
+  const setMonth = (value) => {
+    if(!value)return;
+    saveAdminReportMonth(value);
+    setMonthState(value);
+  };
 
   const load = () => Promise.all([
     api.members.list().then(setMembers),

@@ -292,3 +292,22 @@ test('member acceptance polish keeps contribution totals consistent and project 
   assert.match(projectSource, /sectionOpen\(p\.id,"expenses"\)/);
   assert.match(profileSource, /Date\.UTC/);
 });
+
+
+test('admin acceptance polish keeps reporting month consistent and mobile admin views compact', () => {
+  const memberData = fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/useMembersData.js'),'utf8');
+  const reportData = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/useReportsData.js'),'utf8');
+  const monthUtil = fs.readFileSync(path.resolve(root,'../frontend/src/utils/adminReportMonth.js'),'utf8');
+  const projects = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Projects.jsx'),'utf8');
+  const reportSections = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/ReportSections.jsx'),'utf8');
+  const settingsSections = fs.readFileSync(path.resolve(root,'../frontend/src/pages/settings/SettingsSections.jsx'),'utf8');
+
+  assert.match(memberData,/getAdminReportMonth/);
+  assert.match(memberData,/saveAdminReportMonth/);
+  assert.match(reportData,/getAdminReportMonth/);
+  assert.match(reportData,/saveAdminReportMonth/);
+  assert.match(monthUtil,/fund_admin_report_month/);
+  assert.match(projects,/ProjectsSkeleton/);
+  assert.match(reportSections,/annual-top-member/);
+  assert.match(settingsSections,/admin-audit-row/);
+});

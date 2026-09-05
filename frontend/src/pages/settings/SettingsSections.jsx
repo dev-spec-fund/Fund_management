@@ -10,7 +10,17 @@ const auditLabel = (s="") => s.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCas
 const auditValue = (v) => { if (v == null || v === "") return null; if (typeof v === "number" && Number.isFinite(v)) return String(v); if (typeof v === "boolean") return v ? "Yes" : "No"; if (typeof v === "string") return v.length > 90 ? `${v.slice(0,90)}…` : v; return null; };
 function cleanAuditObject(v, depth=0) { if (!v || typeof v !== "object" || depth > 3) return v; if (Array.isArray(v)) return v.slice(0,10).map(x=>cleanAuditObject(x,depth+1)); return Object.fromEntries(Object.entries(v).filter(([k])=>!AUDIT_HIDDEN_KEYS.has(k.toLowerCase())).map(([k,x])=>[k,cleanAuditObject(x,depth+1)])); }
 function auditSummary(detail) { let d=detail; if (typeof d === "string") { try { d=JSON.parse(d); } catch { return [{label:"Details",value:d.slice(0,140)}]; } } d=cleanAuditObject(d); if (!d || typeof d !== "object") return []; const after=d.after && typeof d.after==="object" ? d.after : {}; const before=d.before && typeof d.before==="object" ? d.before : {}; const preferred=["member_code","txn_id","donor_name","description","amount","expense_date","month","transaction_month","ref_number","status","role","name","note","reason"]; const rows=[]; if (d.entity) rows.push({label:"Record",value:`${auditLabel(String(d.entity))}${d.entity_id!=null?` #${d.entity_id}`:""}`}); for (const key of preferred) { const av=auditValue(after[key]), bv=auditValue(before[key]); if (av!=null && bv!=null && av!==bv) rows.push({label:auditLabel(key),value:`${bv} → ${av}`}); else if (av!=null) rows.push({label:auditLabel(key),value:av}); if (rows.length>=5) break; } return rows; }
-function AuditEntry({a}) { const rows=auditSummary(a.detail); return <div className="sans" style={{padding:"11px 0",borderBottom:"1px solid var(--divider)"}}><div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:12}}><b>{auditLabel(a.action)}</b><span style={{color:"var(--soft-4)",fontSize:10,whiteSpace:"nowrap"}}>{formatLocalDateTime(a.created_at)}</span></div>{rows.map((r,i)=><div key={`${r.label}-${i}`} style={{fontSize:11,color:"var(--muted)",marginTop:3}}><span style={{color:"var(--soft-2)"}}>{r.label}:</span> {r.value}</div>)}<div style={{fontSize:10,color:"var(--soft-4)",marginTop:4}}>by {a.admin_name || "system"}</div></div>; }
+function AuditEntry({a}) {
+  const rows=auditSummary(a.detail);
+  return <div className="sans admin-audit-row">
+    <div className="admin-audit-head">
+      <div className="admin-audit-action">{auditLabel(a.action)}</div>
+      <span>{formatLocalDateTime(a.created_at)}</span>
+    </div>
+    <div className="admin-audit-meta">by {a.admin_name || "system"}</div>
+    {rows.length>0&&<div className="admin-audit-details">{rows.map((r,i)=><div key={`${r.label}-${i}`}><span>{r.label}</span><strong>{r.value}</strong></div>)}</div>}
+  </div>;
+}
 
 export function GeneralSettingsSection(ctx) {
   const {settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,closeBusy,shiftCloseMonth,closeMonthValue,setCloseMonthValue,setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage} = ctx;
