@@ -1040,3 +1040,24 @@ test('v58 election detail exposes setup_locked from status or voter snapshot', (
   assert.match(route,/setup_locked:setupLocked/);
   assert.match(route,/const setupLocked=election\.status!=="draft"\|\|eligible>0/);
 });
+
+
+test('v59 new election applications immediately notify admins in Telegram', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/notifyAdmins/);
+  assert.match(route,/New EXCO application/);
+  assert.match(route,/Pending Review/);
+  assert.match(route,/Review Application/);
+  assert.match(route,/web_app:\{url:appUrl\}/);
+  assert.match(route,/member\.member_code/);
+  assert.match(route,/election_application_admin_notified/);
+});
+
+test('v59 election application notification safely escapes member supplied text', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/esc\(member\.name\)/);
+  assert.match(route,/esc\(position\.title\)/);
+  assert.match(route,/esc\(election\.title\)/);
+  assert.match(route,/esc\(statement\)/);
+  assert.match(route,/miniAppUrl/);
+});

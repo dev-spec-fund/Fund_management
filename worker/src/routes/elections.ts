@@ -4,6 +4,7 @@ import { requireSuperAdmin } from "../auth";
 import { auditEntity, ensureOperationalSchema } from "../ops";
 import { sendMessage } from "../telegram";
 import { getBranding } from "../db";
+import { esc, miniAppUrl, notifyAdmins } from "../botSupport";
 
 export const electionsRoute = new Hono<AppEnv>();
 
@@ -709,10 +710,40 @@ electionsRoute.post("/:id/applications", async c=>{
   const position=await c.env.DB.prepare("SELECT * FROM election_positions WHERE id=? AND election_id=?").bind(positionId,id).first<any>();
   if(!position)return c.json({error:"Choose a valid available position"},400);
   try{
+    const statement=text(body.statement,600)||null;
     const r=await c.env.DB.prepare(`INSERT INTO election_applications(election_id,position_id,member_id,statement)
-      VALUES(?,?,?,?)`).bind(id,positionId,member.id,text(body.statement,600)||null).run();
-    if(member.telegram_id) c.executionCtx.waitUntil(sendMessage(c.env,member.telegram_id,`📝 <b>${election.title}</b>\n\nYour application for <b>${position.title}</b> was submitted and is awaiting review.`).catch(()=>null));
-    return c.json({ok:true,id:Number(r.meta.last_row_id),status:"pending"},201);
+      VALUES(?,?,?,?)`).bind(id,positionId,member.id,statement).run();
+    const applicationId=Number(r.meta.last_row_id);
+
+    if(member.telegram_id){
+      c.executionCtx.waitUntil(sendMessage(c.env,member.telegram_id,
+        `📝 <b>${esc(election.title)}</b>\n\nYour application for <b>${esc(position.title)}</b> was submitted and is awaiting review.`
+      ).catch(()=>null));
+    }
+
+    const appUrl=await miniAppUrl(c.env);
+    const adminText=[
+      `🗳 <b>New EXCO application</b>`,
+      ``,
+      `Member: <b>${esc(member.name)}</b> · <code>${esc(member.member_code||"—")}</code>`,
+      `Position: <b>${esc(position.title)}</b>`,
+      `Election: <b>${esc(election.title)}</b>`,
+      `Status: <b>Pending Review</b>`,
+      statement?`Statement: ${esc(statement)}`:"",
+      ``,
+      `Open the Fund App to review this application.`
+    ].filter(Boolean).join("\n");
+
+    c.executionCtx.waitUntil(
+      notifyAdmins(c.env,adminText,{
+        reply_markup:{inline_keyboard:[[{text:"Review Application",web_app:{url:appUrl}}]]}
+      }).catch(()=>null)
+    );
+    await auditEntity(c.env,null,"election_application_admin_notified","election_application",applicationId,null,{
+      election_id:id,position_id:positionId,member_id:member.id,status:"pending"
+    });
+
+    return c.json({ok:true,id:applicationId,status:"pending"},201);
   }catch{return c.json({error:"You have already applied for this position"},409)}
 });
 
