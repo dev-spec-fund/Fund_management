@@ -531,6 +531,103 @@ electionsRoute.get("/exco/current", async c=>{
   return c.json({roles:rows.results});
 });
 
+electionsRoute.get("/dashboard", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  await processElectionLifecycle(c.env);
+  const now=localNow(c.env.FUND_TIMEZONE || "Indian/Maldives");
+  const rows=await c.env.DB.prepare(`SELECT e.*
+    FROM elections e
+    WHERE e.status IN ('draft','open')
+       OR (e.status='closed' AND e.certified_at IS NULL)
+    ORDER BY CASE e.status WHEN 'open' THEN 0 WHEN 'draft' THEN 1 WHEN 'closed' THEN 2 ELSE 3 END,e.id DESC`).all<any>();
+
+  const items:any[]=[];
+  for(const election of rows.results as any[]){
+    const [apps,candidates,voters,runoffs,notifications]=await Promise.all([
+      c.env.DB.prepare(`SELECT
+        COUNT(*) total,
+        SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) pending,
+        SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) approved,
+        SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) rejected,
+        SUM(CASE WHEN status='withdrawn' THEN 1 ELSE 0 END) withdrawn
+        FROM election_applications WHERE election_id=?`).bind(election.id).first<any>(),
+      c.env.DB.prepare(`SELECT COUNT(*) total,
+        SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) active,
+        SUM(CASE WHEN status='withdrawn' THEN 1 ELSE 0 END) withdrawn
+        FROM election_candidates WHERE election_id=?`).bind(election.id).first<any>(),
+      c.env.DB.prepare(`SELECT COUNT(*) eligible,
+        SUM(CASE WHEN voted_at IS NOT NULL THEN 1 ELSE 0 END) voted
+        FROM election_voters WHERE election_id=?`).bind(election.id).first<any>(),
+      c.env.DB.prepare(`SELECT r.*,ep.title position_title,
+        (SELECT COUNT(*) FROM election_runoff_voters rv WHERE rv.runoff_id=r.id) eligible,
+        (SELECT COUNT(*) FROM election_runoff_voters rv WHERE rv.runoff_id=r.id AND rv.voted_at IS NOT NULL) voted
+        FROM election_runoffs r JOIN election_positions ep ON ep.id=r.position_id
+        WHERE r.election_id=? AND r.status='open' ORDER BY r.round_no,r.id`).bind(election.id).all<any>(),
+      c.env.DB.prepare(`SELECT
+        COALESCE(SUM(sent),0) sent,
+        COALESCE(SUM(failed),0) failed,
+        SUM(CASE WHEN failed>0 THEN 1 ELSE 0 END) failed_events
+        FROM election_notification_log WHERE election_id=?`).bind(election.id).first<any>()
+    ]);
+
+    let readiness:any=null;
+    if(election.status==="draft") readiness=await evaluateElectionReadiness(c.env,election);
+
+    const eligible=Number(voters?.eligible||0),voted=Number(voters?.voted||0);
+    const nonVoters=Math.max(0,eligible-voted);
+    const appPhase=applicationPhase(election,now);
+    const activeRunoffs=(runoffs.results as any[]).map((r:any)=>({
+      id:r.id,position_id:r.position_id,position_title:r.position_title,round_no:Number(r.round_no||1),
+      closes_at:r.closes_at,eligible:Number(r.eligible||0),voted:Number(r.voted||0)
+    }));
+
+    let stage="Election setup";
+    if(election.status==="draft"&&appPhase==="open")stage="Applications Open";
+    else if(election.status==="draft"&&appPhase==="upcoming")stage="Applications Open Soon";
+    else if(election.status==="draft"&&appPhase==="closed")stage=readiness?.ready?"Ready to Open Voting":"Pre-Vote Review";
+    else if(election.status==="open")stage="Voting Open";
+    else if(election.status==="closed"&&activeRunoffs.length)stage="Runoff Open";
+    else if(election.status==="closed")stage="Awaiting Certification";
+
+    const warnings:any[]=[];
+    if(Number(apps?.pending||0)>0)warnings.push({key:"pending_applications",level:"warning",text:`${Number(apps.pending)} pending application${Number(apps.pending)===1?" needs":"s need"} review`});
+    if(election.status==="draft"&&readiness&&!readiness.ready)warnings.push({key:"readiness",level:"warning",text:`Pre-vote readiness ${readiness.passed}/${readiness.total} checks passed`});
+    if(election.status==="open"&&election.closes_at){
+      const closeMs=Date.parse(`${election.closes_at}Z`),nowMs=Date.parse(`${now}Z`);
+      if(Number.isFinite(closeMs)&&Number.isFinite(nowMs)&&closeMs>nowMs&&closeMs-nowMs<=24*60*60*1000)
+        warnings.push({key:"voting_closes_soon",level:"warning",text:`Voting closes within 24 hours · ${nonVoters} member${nonVoters===1?"":"s"} have not voted`});
+    }
+    if(activeRunoffs.length)warnings.push({key:"runoff_open",level:"action",text:`${activeRunoffs.length} runoff${activeRunoffs.length===1?" is":"s are"} open`});
+    if(Number(notifications?.failed||0)>0)warnings.push({key:"notification_failures",level:"danger",text:`${Number(notifications.failed)} notification delivery failure${Number(notifications.failed)===1?"":"s"}`});
+    if(election.status==="closed"&&!activeRunoffs.length&&!election.certified_at)warnings.push({key:"certification",level:"action",text:"Results require certification"});
+
+    items.push({
+      id:election.id,title:election.title,term:election.term,status:election.status,stage,
+      applications:{total:Number(apps?.total||0),pending:Number(apps?.pending||0),approved:Number(apps?.approved||0),rejected:Number(apps?.rejected||0),withdrawn:Number(apps?.withdrawn||0),phase:appPhase,closes_at:election.applications_close_at},
+      candidates:{total:Number(candidates?.total||0),active:Number(candidates?.active||0),withdrawn:Number(candidates?.withdrawn||0)},
+      readiness,
+      turnout:{eligible,voted,remaining:nonVoters,percent:eligible?Math.round((voted/eligible)*1000)/10:0},
+      voting:{opens_at:election.opens_at,closes_at:election.closes_at},
+      runoffs:activeRunoffs,
+      notifications:{sent:Number(notifications?.sent||0),failed:Number(notifications?.failed||0),failed_events:Number(notifications?.failed_events||0)},
+      warnings
+    });
+  }
+
+  const warnings=items.flatMap((item:any)=>item.warnings.map((w:any)=>({...w,election_id:item.id,election_title:item.title})));
+  return c.json({
+    items,
+    warnings,
+    totals:{
+      active_elections:items.length,
+      pending_applications:items.reduce((n:number,x:any)=>n+x.applications.pending,0),
+      open_voting:items.filter((x:any)=>x.status==="open").length,
+      open_runoffs:items.reduce((n:number,x:any)=>n+x.runoffs.length,0),
+      notification_failures:items.reduce((n:number,x:any)=>n+x.notifications.failed,0)
+    }
+  });
+});
+
 electionsRoute.get("/archive", async c=>{
   await ensureOperationalSchema(c.env);
   const rows=await c.env.DB.prepare(`SELECT e.id,e.title,e.term,e.certified_at,e.closed_at,e.opens_at,e.closes_at,

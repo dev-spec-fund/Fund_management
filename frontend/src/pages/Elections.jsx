@@ -16,6 +16,7 @@ export default function Elections(){
   const [message,setMessage]=useState("");
   const [currentExco,setCurrentExco]=useState(()=>api.peekCached("/api/elections/exco/current")?.roles||[]);
   const [archive,setArchive]=useState(()=>api.peekCached("/api/elections/archive")?.archive||[]);
+  const [dashboard,setDashboard]=useState(()=>api.peekCached("/api/elections/dashboard"));
   const [form,setForm]=useState({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});
   const [applicationFilter,setApplicationFilter]=useState("all");
   const [position,setPosition]=useState({title:"",seats:"1",min_selections:"1"});
@@ -26,7 +27,8 @@ export default function Elections(){
     api.elections.list().then(setRows),
     api.members.list().then(setMembers),
     api.elections.currentExco().then(r=>setCurrentExco(r.roles||[])),
-    api.elections.archive().then(r=>setArchive(r.archive||[]))
+    api.elections.archive().then(r=>setArchive(r.archive||[])),
+    api.elections.dashboard().then(setDashboard)
   ]).catch(e=>setMessage(e.message));
   const open=async(row)=>{setSelected(row);setReadiness(null);setMessage("");try{setDetail(await api.elections.get(row.id))}catch(e){setMessage(e.message)}};
   useEffect(()=>{load()},[]);
@@ -144,6 +146,31 @@ export default function Elections(){
     <div className="member-page-heading"><div className="sans">EXCO Elections</div><span className="sans">Secret-ballot executive committee elections</span></div>
     <MessageBanner>{message}</MessageBanner>
     <button type="button" style={{...approveBtn,width:"100%",marginBottom:12}} onClick={()=>setShowCreate(true)}>+ Create election</button>
+    {dashboard&&<section className="election-dashboard">
+      <div className="sans election-dashboard-head">
+        <span><b>ELECTION DASHBOARD</b><small>{dashboard.totals?.active_elections||0} active election{Number(dashboard.totals?.active_elections||0)===1?"":"s"}</small></span>
+        <strong>{dashboard.totals?.pending_applications||0}<small>pending</small></strong>
+      </div>
+      {!!dashboard.warnings?.length&&<div className="election-dashboard-alerts">
+        {dashboard.warnings.slice(0,5).map((w,i)=><button type="button" key={`${w.election_id}-${w.key}-${i}`} onClick={()=>{const row=rows?.find(x=>Number(x.id)===Number(w.election_id));if(row)open(row)}} className={`sans election-dashboard-alert ${w.level||"warning"}`}>
+          <span>{w.text}</span><small>{w.election_title} ›</small>
+        </button>)}
+      </div>}
+      {!dashboard.items?.length?<div className="sans election-dashboard-empty">No active election requires attention.</div>:dashboard.items.map(item=><button type="button" key={item.id} onClick={()=>{const row=rows?.find(x=>Number(x.id)===Number(item.id))||item;open(row)}} className="election-dashboard-card">
+        <div className="sans election-dashboard-card-top">
+          <span><b>{item.title}</b><small>{item.term||"No term"}</small></span>
+          <strong>{item.stage}</strong>
+        </div>
+        <div className="election-dashboard-metrics sans">
+          <div><span>Applications</span><b>{item.applications.pending} pending</b><small>{item.applications.approved} approved</small></div>
+          <div><span>Candidates</span><b>{item.candidates.active} active</b><small>{item.candidates.total} total</small></div>
+          <div><span>Turnout</span><b>{item.turnout.voted}/{item.turnout.eligible}</b><small>{item.turnout.remaining} remaining</small></div>
+          <div><span>Notifications</span><b>{item.notifications.sent} sent</b><small className={item.notifications.failed?"fail":""}>{item.notifications.failed} failed</small></div>
+        </div>
+        {item.status==="draft"&&item.readiness&&<div className={`sans election-dashboard-readiness ${item.readiness.ready?"ready":"blocked"}`}><span>{item.readiness.ready?"✓ Ready to Open Voting":"Pre-vote readiness"}</span><b>{item.readiness.passed}/{item.readiness.total}</b></div>}
+        {!!item.runoffs?.length&&<div className="sans election-dashboard-runoff">{item.runoffs.map(r=><span key={r.id}>Runoff · {r.position_title} · {r.voted}/{r.eligible} voted</span>)}</div>}
+      </button>)}
+    </section>}
     {!!currentExco.length&&<section className="official-exco-card">
       <div className="sans member-section-title">CURRENT OFFICIAL EXCO</div>
       {currentExco.map(x=><div key={x.id} className="sans official-exco-row"><span><b>{x.role_title}</b><small>{x.term||x.election_title||""}</small></span><strong>{x.name}</strong></div>)}

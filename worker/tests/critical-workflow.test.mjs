@@ -1123,3 +1123,51 @@ test('v60 election list includes own application status and open-runoff state', 
   assert.match(route,/open_runoffs/);
   assert.match(route,/application_phase:applicationPhase/);
 });
+
+
+test('v61 admin election dashboard aggregates operational election state', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/get\("\/dashboard"/);
+  assert.match(route,/pending_applications/);
+  assert.match(route,/open_voting/);
+  assert.match(route,/open_runoffs/);
+  assert.match(route,/notification_failures/);
+  assert.match(route,/evaluateElectionReadiness/);
+  assert.match(route,/remaining:nonVoters/);
+});
+
+test('v61 dashboard surfaces actionable election warnings', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  for(const key of [
+    'pending_applications',
+    'readiness',
+    'voting_closes_soon',
+    'runoff_open',
+    'notification_failures',
+    'certification'
+  ]) assert.match(route,new RegExp(key));
+  assert.match(route,/Voting closes within 24 hours/);
+  assert.match(route,/Results require certification/);
+});
+
+test('v61 admin UI renders at-a-glance election monitoring cards', () => {
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/dashboard: \(\)/);
+  assert.match(admin,/ELECTION DASHBOARD/);
+  assert.match(admin,/Applications/);
+  assert.match(admin,/Candidates/);
+  assert.match(admin,/Turnout/);
+  assert.match(admin,/Notifications/);
+  assert.match(admin,/Pre-vote readiness/);
+  assert.match(admin,/Runoff ·/);
+});
+
+test('v61 dashboard reuses notification log and readiness as authoritative sources', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const block=route.match(/electionsRoute\.get\("\/dashboard"[\s\S]*?return c\.json\(\{[\s\S]*?\n\}\);/)?.[0]||'';
+  assert.match(block,/election_notification_log/);
+  assert.match(block,/evaluateElectionReadiness/);
+  assert.match(block,/election_runoff_voters/);
+  assert.match(block,/election_voters/);
+});
