@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, onDataChange } from "../../api";
 import { pageSlice } from "../../components/Pagination";
 
@@ -11,15 +11,24 @@ export default function useMembersData(isAdmin, reportMonth, onReportMonthChange
   const [defaultMonthly, setDefaultMonthly] = useState(250);
   const [form, setForm] = useState({ name: "", phone: "", monthly_amount: "" });
   const [page, setPage] = useState(1);
+  const requestIdRef = useRef(0);
   const setMonth = (value) => {
     if(!value)return;
     onReportMonthChange?.(value);
   };
 
-  const load = () => Promise.all([
-    api.members.list().then(setMembers),
-    api.reports.summary(month).then(setMonthlySummary),
-  ]).catch(() => {});
+  const load = async () => {
+    const requestId=++requestIdRef.current;
+    try {
+      const [nextMembers,nextSummary]=await Promise.all([
+        api.members.list(),
+        api.reports.summary(month),
+      ]);
+      if(requestId!==requestIdRef.current)return;
+      setMembers(nextMembers);
+      setMonthlySummary(nextSummary);
+    } catch {}
+  };
 
   useEffect(() => { if (isAdmin) load(); }, [isAdmin, month]);
   useEffect(() => onDataChange(() => { if (isAdmin) load(); }), [isAdmin, month]);

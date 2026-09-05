@@ -381,3 +381,29 @@ test('admin reporting month is owned by App and shared by Members and Reports', 
   assert.doesNotMatch(memberData,/sessionStorage|getAdminReportMonth|saveAdminReportMonth/);
   assert.doesNotMatch(reportData,/sessionStorage|getAdminReportMonth|saveAdminReportMonth/);
 });
+
+
+test('performance stage 5 adds cache, stale-response, resume and lazy-chunk protections', () => {
+  const apiSource = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const appSource = fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
+  const overviewSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Overview.jsx'),'utf8');
+  const membersSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/useMembersData.js'),'utf8');
+  const reportsSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/useReportsData.js'),'utf8');
+  const projectsSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Projects.jsx'),'utf8');
+
+  assert.match(apiSource,/GET_CACHE_TTL_MS = 45_000/);
+  assert.match(apiSource,/inFlightGets/);
+  assert.match(apiSource,/Request timed out/);
+  assert.match(apiSource,/refreshAfterResume/);
+  assert.match(apiSource,/reportMonth/);
+  assert.match(appSource,/resilientImport/);
+  assert.match(appSource,/visibilitychange/);
+  assert.match(appSource,/pageshow/);
+  assert.match(appSource,/reportMonth: adminView \? adminReportMonth/);
+  assert.match(overviewSource,/overviewRequestRef/);
+  assert.match(overviewSource,/memberStatusRequestRef/);
+  assert.match(membersSource,/requestIdRef/);
+  assert.match(reportsSource,/monthlyRequestRef/);
+  assert.match(reportsSource,/annualRequestRef/);
+  assert.match(projectsSource,/requestIdRef/);
+});

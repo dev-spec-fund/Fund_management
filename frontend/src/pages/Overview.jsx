@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { currentMonthValue } from "../utils/date";
@@ -12,6 +12,8 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   const [pendingCount, setPendingCount] = useState(null);
   const [memberStatus, setMemberStatus] = useState(null);
   const [memberStatusLoading, setMemberStatusLoading] = useState(false);
+  const overviewRequestRef = useRef(0);
+  const memberStatusRequestRef = useRef(0);
 
   useEffect(() => {
     if (!bootstrapSummary) return;
@@ -20,19 +22,24 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   }, [bootstrapSummary]);
 
   const refreshOverview = () => {
+    const requestId=++overviewRequestRef.current;
     const summaryRequest = isAdmin ? api.reports.summary() : api.reports.publicSummary();
     summaryRequest.then((data) => {
+      if(requestId!==overviewRequestRef.current)return;
       setSummary(data);
       setActivity(normalizeRecentActivity(data?.recentActivity));
     }).catch(() => {});
     if (canFinance) {
       api.admin.pending().then((p) => {
+        if(requestId!==overviewRequestRef.current)return;
         const count =
           (p?.registrations?.length || 0) +
           (p?.contributions?.length || 0) +
           (p?.expenses?.length || 0);
         setPendingCount(count);
-      }).catch(() => setPendingCount(null));
+      }).catch(() => {
+        if(requestId===overviewRequestRef.current)setPendingCount(null);
+      });
     }
   };
 
@@ -44,16 +51,22 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
   const refreshMemberStatus = () => {
     if (isAdmin || !member?.id) return;
+    const requestId=++memberStatusRequestRef.current;
     setMemberStatusLoading(true);
     api.members.statement(member.id)
       .then((statement) => {
+        if(requestId!==memberStatusRequestRef.current)return;
         const statuses = statement?.monthly_status || [];
         const month = currentMonthValue();
         const current = statuses.find((row) => row.month === month) || statuses[statuses.length - 1] || null;
         setMemberStatus(current);
       })
-      .catch(() => setMemberStatus(null))
-      .finally(() => setMemberStatusLoading(false));
+      .catch(() => {
+        if(requestId===memberStatusRequestRef.current)setMemberStatus(null);
+      })
+      .finally(() => {
+        if(requestId===memberStatusRequestRef.current)setMemberStatusLoading(false);
+      });
   };
 
   useEffect(() => {

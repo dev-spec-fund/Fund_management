@@ -31,15 +31,34 @@ function applyAppTheme(theme = resolveAppTheme()) {
 // truth inside the Mini App; the device/browser preference is fallback only.
 applyAppTheme();
 
+const CHUNK_RELOAD_KEY = "fund_chunk_reload_once";
+
+function resilientImport(loader) {
+  return loader().catch((error) => {
+    const message=String(error?.message||error||"");
+    const chunkFailure=/module script|dynamically imported module|ChunkLoadError|Loading chunk/i.test(message);
+    if(chunkFailure && typeof window!=="undefined"){
+      try{
+        if(sessionStorage.getItem(CHUNK_RELOAD_KEY)!=="1"){
+          sessionStorage.setItem(CHUNK_RELOAD_KEY,"1");
+          window.location.reload();
+          return new Promise(()=>{});
+        }
+      }catch{}
+    }
+    throw error;
+  });
+}
+
 const pageLoaders = {
-  members: () => import("./pages/Members"),
-  reports: () => import("./pages/Reports"),
-  expenses: () => import("./pages/Expenses"),
-  projects: () => import("./pages/Projects"),
-  pending: () => import("./pages/PendingApprovals"),
-  meetings: () => import("./pages/Meetings"),
-  settings: () => import("./pages/Settings"),
-  memberViews: () => import("./pages/MemberViews"),
+  members: () => resilientImport(() => import("./pages/Members")),
+  reports: () => resilientImport(() => import("./pages/Reports")),
+  expenses: () => resilientImport(() => import("./pages/Expenses")),
+  projects: () => resilientImport(() => import("./pages/Projects")),
+  pending: () => resilientImport(() => import("./pages/PendingApprovals")),
+  meetings: () => resilientImport(() => import("./pages/Meetings")),
+  settings: () => resilientImport(() => import("./pages/Settings")),
+  memberViews: () => resilientImport(() => import("./pages/MemberViews")),
 };
 
 const Members = lazy(pageLoaders.members);
@@ -114,6 +133,7 @@ export default function App() {
   const lastWarmRef = useRef({ key: "", at: 0 });
   const [navLabelTab, setNavLabelTab] = useState(tab);
   const bootStartedAt = useRef(typeof performance !== "undefined" ? performance.now() : 0);
+  const backgroundedAtRef = useRef(0);
 
   const isAdmin = !!me?.admin;
   const isMember = !!me?.member;
@@ -204,6 +224,28 @@ export default function App() {
 
   useEffect(() => {
     if (!me) return undefined;
+    const refreshAfterBackground = () => {
+      if (document.visibilityState === "hidden") {
+        backgroundedAtRef.current=Date.now();
+        return;
+      }
+      const hiddenFor=backgroundedAtRef.current ? Date.now()-backgroundedAtRef.current : 0;
+      backgroundedAtRef.current=0;
+      if(hiddenFor>=30_000) api.refreshAfterResume("telegram-resume");
+    };
+    const onPageShow = (event) => {
+      if(event.persisted) api.refreshAfterResume("page-restore");
+    };
+    document.addEventListener("visibilitychange", refreshAfterBackground);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshAfterBackground);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [me]);
+
+  useEffect(() => {
+    if (!me) return undefined;
 
     // Performance Stage 1: preload JavaScript chunks only.
     // API data is fetched on actual navigation, where the shared GET cache and
@@ -254,6 +296,7 @@ export default function App() {
       adminView,
       canFinance,
       memberId: me?.member?.id || null,
+      reportMonth: adminView ? adminReportMonth : "",
     }).catch(() => {});
   };
 
