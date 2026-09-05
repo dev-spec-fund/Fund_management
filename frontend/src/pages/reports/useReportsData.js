@@ -4,8 +4,10 @@ import { shiftMonthValue } from "../../utils/date";
 
 export function useReportsData(sharedMonth, onMonthChange) {
   const month=sharedMonth;
-  const [summary, setSummary] = useState(null);
-  const [trend, setTrend] = useState([]);
+  const summaryPath=`/api/reports/summary?month=${month}`;
+  const trendPath=`/api/reports/trend?month=${month}`;
+  const [summary, setSummary] = useState(()=>api.peekCached(summaryPath));
+  const [trend, setTrend] = useState(()=>api.peekCached(trendPath)||[]);
   const [annualYear, setAnnualYear] = useState(String(new Date().getFullYear()));
   const [annual, setAnnual] = useState(null);
   const [analytics, setAnalytics] = useState(null);
@@ -14,7 +16,10 @@ export function useReportsData(sharedMonth, onMonthChange) {
   const loadMonthly = () => api.reports.summary(month).then(setSummary);
 
   useEffect(() => {
-    setSummary(null);
+    const cachedSummary=api.peekCached(summaryPath);
+    const cachedTrend=api.peekCached(trendPath);
+    setSummary(cachedSummary || null);
+    if(cachedTrend) setTrend(cachedTrend);
     Promise.all([
       api.reports.summary(month).then(setSummary),
       api.reports.trend(month).then(setTrend),

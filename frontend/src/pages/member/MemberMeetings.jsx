@@ -4,12 +4,12 @@ import { api, onDataChange } from "../../api";
 import { EmptyState, ErrorState, primaryBtn, secondaryBtn } from "../../components/Shared";
 
 export function MemberMeetings() {
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(()=>api.peekCached("/api/me/meetings"));
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState("");
 
   const load = ({ silent = false } = {}) => {
-    if (!silent) { setRows(null); setError(""); }
+    if (!silent) { setRows((current)=>current || api.peekCached("/api/me/meetings")); setError(""); }
     return api.myMeetings().then(setRows).catch((e) => { if (!silent) setError(e?.message || "Could not load meetings"); });
   };
 

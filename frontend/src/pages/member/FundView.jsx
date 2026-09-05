@@ -8,7 +8,8 @@ import { fmt } from "../../utils/format";
 
 export function FundView() {
   const [month, setMonth] = useState(currentMonthValue());
-  const [summary, setSummary] = useState(null);
+  const summaryPath=`/api/reports/public-summary?month=${month}`;
+  const [summary, setSummary] = useState(()=>api.peekCached(`/api/reports/public-summary?month=${currentMonthValue()}`));
   const [summaryError, setSummaryError] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [expenseDetail, setExpenseDetail] = useState(null);
@@ -16,7 +17,8 @@ export function FundView() {
   const [expenseError, setExpenseError] = useState("");
 
   const loadSummary = () => {
-    setSummary(null);
+    const cached=api.peekCached(summaryPath);
+    setSummary(cached || null);
     setSummaryError("");
     api.reports.publicSummary(month)
       .then(setSummary)

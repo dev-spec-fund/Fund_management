@@ -509,3 +509,31 @@ test('pending contribution review loads Telegram-backed slip inline with retry a
   assert.match(members,/downloadTelegramFile/);
   assert.match(members,/Content-Disposition.*inline/);
 });
+
+
+test('performance stage v44 deduplicates GETs, uses short lived caches, and preserves warmed tab data', () => {
+  const api = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const app = fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
+  const reports = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/useReportsData.js'),'utf8');
+  const members = fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/useMembersData.js'),'utf8');
+  const pending = fs.readFileSync(path.resolve(root,'../frontend/src/pages/PendingApprovals.jsx'),'utf8');
+
+  assert.match(api,/inFlightGets/);
+  assert.match(api,/cacheTtlFor/);
+  assert.match(api,/peekCached/);
+  assert.match(api,/performanceSnapshot/);
+  assert.match(api,/window\.__FUND_PERF__/);
+  assert.match(api,/preserveStable/);
+  assert.match(app,/adminMonth: adminView \? adminMonth : null/);
+  assert.match(reports,/api\.peekCached\(summaryPath\)/);
+  assert.match(members,/api\.peekCached\("\/api\/members"\)/);
+  assert.match(pending,/api\.peekCached\("\/api\/admin\/pending"\)/);
+});
+
+test('financial write requests remain uncached and invalidate read cache', () => {
+  const api = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/MUTATION_METHODS/);
+  assert.match(api,/invalidateAfterMutation\(path\)/);
+  assert.match(api,/if \(!isGet\) return run\(\)/);
+  assert.match(api,/broadcastDataChange\(path, method\)/);
+});

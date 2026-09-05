@@ -14,25 +14,52 @@ function initData() {
   return window.Telegram?.WebApp?.initData || "";
 }
 
-const GET_CACHE_TTL_MS = 30_000;
-const MAX_GET_CACHE_ENTRIES = 80;
+const DEFAULT_GET_CACHE_TTL_MS = 25_000;
+const MAX_GET_CACHE_ENTRIES = 100;
+const MAX_PERF_METRICS = 40;
 const responseCache = new Map();
 const inFlightGets = new Map();
+const perfMetrics = [];
 let cacheGeneration = 0;
 const PERF_DEBUG = Boolean(import.meta.env.DEV);
 
-function perfLog(label, startedAt, extra = "") {
-  if (!PERF_DEBUG || typeof performance === "undefined") return;
-  const elapsed = Math.round(performance.now() - startedAt);
-  if (elapsed >= 120) console.debug(`[Fund perf] ${label}: ${elapsed}ms${extra ? ` · ${extra}` : ""}`);
+function cacheTtlFor(path) {
+  if (path === "/api/me" || path === "/api/branding" || path === "/api/settings") return 60_000;
+  if (path.startsWith("/api/members/") && path.endsWith("/statement")) return 20_000;
+  if (path.startsWith("/api/reports/summary") || path.startsWith("/api/reports/public-summary")) return 15_000;
+  if (path.startsWith("/api/reports/trend") || path.startsWith("/api/governance/annual/") || path.startsWith("/api/governance/analytics/")) return 30_000;
+  if (path.startsWith("/api/projects") || path === "/api/me/projects") return 25_000;
+  if (path.startsWith("/api/admin/pending")) return 8_000;
+  return DEFAULT_GET_CACHE_TTL_MS;
 }
 
-function clearGetCache() {
+function recordPerf(label, startedAt, extra = "") {
+  if (!startedAt || typeof performance === "undefined") return;
+  const elapsed = Math.round(performance.now() - startedAt);
+  perfMetrics.push({ label, ms: elapsed, at: Date.now(), extra });
+  while (perfMetrics.length > MAX_PERF_METRICS) perfMetrics.shift();
+  if (typeof window !== "undefined") window.__FUND_PERF__ = perfMetrics;
+  if (PERF_DEBUG && elapsed >= 120) console.debug(`[Fund perf] ${label}: ${elapsed}ms${extra ? ` · ${extra}` : ""}`);
+}
+
+function clearGetCache({ preserveStable = false } = {}) {
   cacheGeneration += 1;
-  responseCache.clear();
+  if (!preserveStable) {
+    responseCache.clear();
+  } else {
+    for (const key of [...responseCache.keys()]) {
+      const stable = key.endsWith("::/api/me") || key.endsWith("::/api/branding");
+      if (!stable) responseCache.delete(key);
+    }
+  }
   // Existing GET promises cannot be cancelled, but removing them here ensures a
   // post-mutation refresh does not reuse a request that started before the write.
   inFlightGets.clear();
+}
+
+function invalidateAfterMutation(path) {
+  const affectsIdentity = path.startsWith("/api/settings") || path.startsWith("/api/members");
+  clearGetCache({ preserveStable: !affectsIdentity });
 }
 
 const DATA_CHANGED_EVENT = "fund:data-changed";
@@ -59,9 +86,10 @@ function cacheKey(path) {
   return `${initData()}::${path}`;
 }
 
-function storeGetCache(key, data) {
+function storeGetCache(key, path, data) {
   responseCache.delete(key);
-  responseCache.set(key, { data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
+  const now=Date.now();
+  responseCache.set(key, { data, fetchedAt:now, expiresAt: now + cacheTtlFor(path) });
   while (responseCache.size > MAX_GET_CACHE_ENTRIES) {
     const oldestKey = responseCache.keys().next().value;
     if (oldestKey === undefined) break;
@@ -70,27 +98,30 @@ function storeGetCache(key, data) {
 }
 
 async function request(path, options = {}) {
-  const method = String(options.method || "GET").toUpperCase();
+  const { forceFresh = false, ...fetchOptions } = options;
+  const method = String(fetchOptions.method || "GET").toUpperCase();
   const isGet = method === "GET";
   const key = isGet ? cacheKey(path) : null;
 
-  if (isGet) {
+  if (isGet && !forceFresh) {
     const cached = responseCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) return cached.data;
-    if (cached) responseCache.delete(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      recordPerf(`CACHE ${path}`, typeof performance !== "undefined" ? performance.now() : 0, "hit");
+      return cached.data;
+    }
     const pending = inFlightGets.get(key);
     if (pending) return pending;
   }
 
   const requestGeneration = cacheGeneration;
   const run = async () => {
-    const startedAt = PERF_DEBUG && typeof performance !== "undefined" ? performance.now() : 0;
+    const startedAt = typeof performance !== "undefined" ? performance.now() : 0;
     const res = await fetch(apiUrl(path), {
-      ...options,
+      ...fetchOptions,
       headers: {
         "Content-Type": "application/json",
         "X-Telegram-Init-Data": initData(),
-        ...(options.headers || {}),
+        ...(fetchOptions.headers || {}),
       },
     });
     if (!res.ok) {
@@ -100,13 +131,13 @@ async function request(path, options = {}) {
       throw error;
     }
     const data = await res.json();
-    if (startedAt) perfLog(`${method} ${path}`, startedAt);
+    if (startedAt) recordPerf(`${method} ${path}`, startedAt, "network");
     if (isGet) {
       if (requestGeneration === cacheGeneration) {
-        storeGetCache(key, data);
+        storeGetCache(key, path, data);
       }
     } else {
-      clearGetCache();
+      invalidateAfterMutation(path);
       broadcastDataChange(path, method);
     }
     return data;
@@ -122,6 +153,21 @@ async function request(path, options = {}) {
 }
 
 
+export function peekCached(path, { allowExpired = true } = {}) {
+  const cached=responseCache.get(cacheKey(path));
+  if(!cached)return null;
+  if(!allowExpired && cached.expiresAt<=Date.now())return null;
+  return cached.data;
+}
+
+export function refreshCached(path) {
+  return request(path,{forceFresh:true});
+}
+
+export function performanceSnapshot() {
+  return [...perfMetrics];
+}
+
 function currentMaldivesPeriod() {
   const parts = new Intl.DateTimeFormat("en", {
     timeZone: "Indian/Maldives",
@@ -133,8 +179,10 @@ function currentMaldivesPeriod() {
   return { year, month: `${year}-${month}` };
 }
 
-async function prefetchTabData({ tab, adminView = false, canFinance = false, memberId = null } = {}) {
-  const { year, month } = currentMaldivesPeriod();
+async function prefetchTabData({ tab, adminView = false, canFinance = false, memberId = null, adminMonth = null } = {}) {
+  const current = currentMaldivesPeriod();
+  const month = adminView && /^\d{4}-\d{2}$/.test(String(adminMonth||"")) ? String(adminMonth) : current.month;
+  const year = month.slice(0,4) || current.year;
   let paths = [];
 
   if (adminView) {
@@ -178,7 +226,7 @@ async function upload(path, formData) {
     throw new Error(body.error || `Request failed: ${res.status}`);
   }
   const data = await res.json();
-  clearGetCache();
+  invalidateAfterMutation(path);
   broadcastDataChange(path, "POST");
   return data;
 }
@@ -219,6 +267,9 @@ export const api = {
   me: () => request("/api/me"),
   reportClientError,
   prefetchTabData,
+  peekCached,
+  refreshCached,
+  performanceSnapshot,
   branding: () => request("/api/branding"),
   myDashboard: () => request("/api/me/dashboard"),
   myContributions: () => request("/api/me/contributions"),

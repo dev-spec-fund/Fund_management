@@ -5,12 +5,13 @@ import { fmt } from "../../utils/format";
 import { approvedContributionSummary } from "../../utils/contributions";
 
 export function MyHistory({ member }) {
-  const [statement, setStatement] = useState(null);
+  const [statement, setStatement] = useState(()=>member?.id ? api.peekCached(`/api/members/${member.id}/statement`) : null);
   const [error, setError] = useState("");
   const [transactionFilter, setTransactionFilter] = useState("all");
   useEffect(() => {
     if (!member?.id) return;
-    setStatement(null); setError("");
+    const cached=api.peekCached(`/api/members/${member.id}/statement`);
+    setStatement(cached || null); setError("");
     api.members.statement(member.id).then(setStatement).catch((e) => setError(e?.message || "Could not load your statement"));
   }, [member?.id]);
   useEffect(() => onDataChange(() => {

@@ -4,12 +4,12 @@ import { api, onDataChange } from "../../api";
 import { EmptyState, ErrorState } from "../../components/Shared";
 
 export function MyActions() {
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(()=>api.peekCached("/api/me/actions"));
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState("");
 
   const load = ({ silent = false } = {}) => {
-    if (!silent) { setRows(null); setError(""); }
+    if (!silent) { setRows((current)=>current || api.peekCached("/api/me/actions")); setError(""); }
     return api.myActions().then(setRows).catch((e)=>{ if(!silent) setError(e?.message || "Could not load action items"); });
   };
 

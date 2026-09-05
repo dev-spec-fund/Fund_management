@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Pencil, CheckCircle2, RotateCcw, X, History, WalletCards, Paperclip, ChevronDown } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
@@ -14,23 +14,10 @@ const tone = (status) => status === "active" ? "var(--success-strong)" : status 
 const adjustmentStatuses = new Set(["voided","reversed","rejected","cancelled"]);
 
 export default function Projects({ admin }) {
-  const [filter,setFilter]=useState("all"), [query,setQuery]=useState(""), [rows,setRows]=useState(null);
+  const [filter,setFilter]=useState("all"), [query,setQuery]=useState(""), [rows,setRows]=useState(()=>api.peekCached("/api/projects"));
   const [selected,setSelected]=useState(null), [showAdd,setShowAdd]=useState(false), [message,setMessage]=useState(""), [error,setError]=useState("");
   const [page,setPage]=useState(1);
-  const requestIdRef=useRef(0);
-  const load=async()=>{
-    const requestId=++requestIdRef.current;
-    setError("");
-    try{
-      const nextRows=await api.projects.list({status:filter==="all"?"":filter,q:query.trim()});
-      if(requestId!==requestIdRef.current)return;
-      setRows(nextRows);
-    }catch(e){
-      if(requestId!==requestIdRef.current)return;
-      setError(e.message);
-      setRows([]);
-    }
-  };
+  const load=async()=>{setError("");try{setRows(await api.projects.list({status:filter==="all"?"":filter,q:query.trim()}));}catch(e){setError(e.message);setRows([]);}};
   useEffect(()=>{setPage(1);const t=setTimeout(load,220);return()=>clearTimeout(t);},[filter,query]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses")||path?.startsWith("/api/donations"))load();}),[filter,query]);
   const totalSpent=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.spent||0),0),[rows]);
@@ -85,7 +72,7 @@ function ProjectForm({admin,onClose,onSaved,project=null}){
 }
 
 function ProjectDetails({project,admin,onClose,onSaved}){
-  const [data,setData]=useState(null),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[selectedDonation,setSelectedDonation]=useState(null);
+  const [data,setData]=useState(()=>api.peekCached(`/api/projects/${project.id}`)),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[selectedDonation,setSelectedDonation]=useState(null);
   const [showDonations,setShowDonations]=useState(true),[showExpenses,setShowExpenses]=useState(true),[showAdjustments,setShowAdjustments]=useState(false),[showHistory,setShowHistory]=useState(false);
   const load=()=>api.projects.get(project.id).then(setData).catch(e=>setError(e.message));
   useEffect(()=>{load();},[project.id]);

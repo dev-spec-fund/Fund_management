@@ -7,13 +7,13 @@ import { fmt } from "../../utils/format";
 const statusTone = (status) => status === "active" ? "var(--success)" : "var(--muted)";
 
 export function MemberProjects() {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(()=>api.peekCached("/api/me/projects"));
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [detailSections, setDetailSections] = useState({});
 
   const load = ({ silent = false } = {}) => {
-    if (!silent) { setData(null); setError(""); }
+    if (!silent) { setData((current)=>current || api.peekCached("/api/me/projects")); setError(""); }
     return api.myProjects().then(setData).catch((e) => {
       if (!silent) setError(e?.message || "Could not load projects.");
     });

@@ -37,7 +37,10 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   };
 
   useEffect(() => {
-    if (isAdmin) setSummary(null);
+    if (isAdmin) {
+      const path=adminMonth ? `/api/reports/summary?month=${adminMonth}` : "/api/reports/summary";
+      setSummary(api.peekCached(path) || null);
+    }
     refreshOverview();
   }, [isAdmin, canFinance, adminMonth]);
 

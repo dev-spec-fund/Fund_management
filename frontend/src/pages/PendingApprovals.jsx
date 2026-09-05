@@ -6,7 +6,7 @@ import { formatLocalDateTime } from "../utils/date";
 import { fmt } from "../utils/format";
 
 export default function PendingApprovals() {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(()=>api.peekCached("/api/admin/pending"));
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");

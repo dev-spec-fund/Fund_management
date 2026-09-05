@@ -3,9 +3,10 @@ import { api, onDataChange } from "../../api";
 import { pageSlice } from "../../components/Pagination";
 
 export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
-  const [members, setMembers] = useState([]);
   const month=sharedMonth;
-  const [monthlySummary, setMonthlySummary] = useState(null);
+  const summaryPath=`/api/reports/summary?month=${month}`;
+  const [members, setMembers] = useState(()=>api.peekCached("/api/members")||[]);
+  const [monthlySummary, setMonthlySummary] = useState(()=>api.peekCached(summaryPath));
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [defaultMonthly, setDefaultMonthly] = useState(250);
@@ -21,7 +22,14 @@ export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
     api.reports.summary(month).then(setMonthlySummary),
   ]).catch(() => {});
 
-  useEffect(() => { if (isAdmin) load(); }, [isAdmin, month]);
+  useEffect(() => {
+    if (!isAdmin) return;
+    const cachedMembers=api.peekCached("/api/members");
+    const cachedSummary=api.peekCached(summaryPath);
+    if(cachedMembers) setMembers(cachedMembers);
+    setMonthlySummary(cachedSummary || null);
+    load();
+  }, [isAdmin, month]);
   useEffect(() => onDataChange(() => { if (isAdmin) load(); }), [isAdmin, month]);
   useEffect(() => {
     if (!isAdmin) return;

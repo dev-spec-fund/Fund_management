@@ -259,6 +259,7 @@ export default function App() {
       adminView,
       canFinance,
       memberId: me?.member?.id || null,
+      adminMonth: adminView ? adminMonth : null,
     }).catch(() => {});
   };
 
