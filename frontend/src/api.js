@@ -14,8 +14,8 @@ function initData() {
   return window.Telegram?.WebApp?.initData || "";
 }
 
-const GET_CACHE_TTL_MS = 45_000;
-const MAX_GET_CACHE_ENTRIES = 100;
+const GET_CACHE_TTL_MS = 30_000;
+const MAX_GET_CACHE_ENTRIES = 80;
 const responseCache = new Map();
 const inFlightGets = new Map();
 let cacheGeneration = 0;
@@ -33,24 +33,6 @@ function clearGetCache() {
   // Existing GET promises cannot be cancelled, but removing them here ensures a
   // post-mutation refresh does not reuse a request that started before the write.
   inFlightGets.clear();
-}
-
-function purgeExpiredGetCache() {
-  const now=Date.now();
-  for (const [key,value] of responseCache) {
-    if (!value || value.expiresAt <= now) responseCache.delete(key);
-  }
-}
-
-function notifyDataRefresh(reason = "refresh") {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(DATA_CHANGED_EVENT, { detail: { path: "", method: "REFRESH", reason, at: Date.now() } }));
-}
-
-function refreshAfterResume(reason = "resume") {
-  purgeExpiredGetCache();
-  clearGetCache();
-  notifyDataRefresh(reason);
 }
 
 const DATA_CHANGED_EVENT = "fund:data-changed";
@@ -103,29 +85,14 @@ async function request(path, options = {}) {
   const requestGeneration = cacheGeneration;
   const run = async () => {
     const startedAt = PERF_DEBUG && typeof performance !== "undefined" ? performance.now() : 0;
-    const controller = typeof AbortController !== "undefined" && !options.signal ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), 15_000) : null;
-    let res;
-    try {
-      res = await fetch(apiUrl(path), {
-        ...options,
-        signal: options.signal || controller?.signal,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Telegram-Init-Data": initData(),
-          ...(options.headers || {}),
-        },
-      });
-    } catch (error) {
-      if (error?.name === "AbortError") {
-        const timeoutError = new Error("Request timed out. Please try again.");
-        timeoutError.code = "REQUEST_TIMEOUT";
-        throw timeoutError;
-      }
-      throw error;
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
+    const res = await fetch(apiUrl(path), {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Init-Data": initData(),
+        ...(options.headers || {}),
+      },
+    });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       const error = new Error(body.error || `Request failed: ${res.status}`);
@@ -166,14 +133,12 @@ function currentMaldivesPeriod() {
   return { year, month: `${year}-${month}` };
 }
 
-async function prefetchTabData({ tab, adminView = false, canFinance = false, memberId = null, reportMonth = "" } = {}) {
-  const current = currentMaldivesPeriod();
-  const month = /^\d{4}-\d{2}$/.test(reportMonth) ? reportMonth : current.month;
-  const year = month.slice(0,4) || current.year;
+async function prefetchTabData({ tab, adminView = false, canFinance = false, memberId = null } = {}) {
+  const { year, month } = currentMaldivesPeriod();
   let paths = [];
 
   if (adminView) {
-    if (tab === "members") paths = ["/api/members", `/api/reports/summary?month=${month}`];
+    if (tab === "members") paths = ["/api/members"];
     else if (tab === "pending" && canFinance) paths = ["/api/admin/pending"];
     else if (tab === "activity") paths = ["/api/reports/activity"];
     else if (tab === "expenses" && canFinance) paths = ["/api/expenses", "/api/expenses/categories", "/api/projects"];
@@ -254,7 +219,6 @@ export const api = {
   me: () => request("/api/me"),
   reportClientError,
   prefetchTabData,
-  refreshAfterResume,
   branding: () => request("/api/branding"),
   myDashboard: () => request("/api/me/dashboard"),
   myContributions: () => request("/api/me/contributions"),
@@ -418,6 +382,7 @@ export const api = {
     rejectContribution: (id, reason) => request(`/api/admin/pending/contributions/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
     health: () => request("/api/admin/health"),
     errors: () => request("/api/admin/errors"),
+    retryError: (id) => request(`/api/admin/errors/${id}/retry`, { method: "POST" }),
     resolveError: (id) => request(`/api/admin/errors/${id}/resolve`, { method: "POST" }),
     resolveAllErrors: () => request("/api/admin/errors/resolve-all", { method: "POST" }),
     backup: () => request("/api/admin/backup"),

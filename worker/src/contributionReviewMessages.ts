@@ -1,6 +1,7 @@
 import type { Env } from "./types";
 import { editMessageCaption, editMessageText } from "./telegram";
 import { esc } from "./botSupport";
+import { safeLogError } from "./ops";
 
 export async function recordContributionReviewMessage(
   env:Env,
@@ -58,11 +59,42 @@ export async function syncContributionReviewMessages(
       ? await editMessageText(env,message.telegram_chat_id,Number(message.telegram_message_id),caption,extra)
       : await editMessageCaption(env,message.telegram_chat_id,Number(message.telegram_message_id),caption,extra);
     const ok=!!result?.ok;
-    if(ok)updated++; else failed++;
+    if(ok)updated++; else {
+      failed++;
+      await safeLogError(env,"telegram.contribution_review_sync",new Error(String(result?.description||"Telegram review message update failed")),{
+        contribution_id:contributionId,
+        review_message_id:message.id,
+        telegram_chat_id:message.telegram_chat_id,
+        telegram_message_id:message.telegram_message_id,
+        decision
+      });
+    }
     await env.DB.prepare(`UPDATE contribution_review_messages
       SET last_synced_at=datetime('now'),last_sync_status=? WHERE id=?`)
       .bind(ok?"updated":"failed",message.id).run().catch(()=>{});
   }));
 
   return {updated,failed,total:messages.results.length};
+}
+
+export async function retryContributionReviewMessage(env:Env, reviewMessageId:number){
+  const message=await env.DB.prepare("SELECT * FROM contribution_review_messages WHERE id=?").bind(reviewMessageId).first<any>();
+  if(!message)return {ok:false,error:"Review message not found"};
+  const contribution=await env.DB.prepare(`SELECT c.*,a.name admin_name FROM contributions c
+    LEFT JOIN admins a ON a.id=c.approved_by WHERE c.id=?`).bind(message.contribution_id).first<any>();
+  if(!contribution)return {ok:false,error:"Contribution not found"};
+  if(contribution.status!=="approved" && contribution.status!=="rejected")return {ok:false,error:"Contribution is still pending"};
+  await env.DB.prepare("UPDATE contribution_review_messages SET last_sync_status='failed' WHERE id=?").bind(reviewMessageId).run();
+  const result=await syncContributionReviewMessages(env,Number(message.contribution_id),contribution.status,contribution.admin_name||"Admin",contribution.void_reason||null);
+  const refreshed=await env.DB.prepare("SELECT last_sync_status FROM contribution_review_messages WHERE id=?").bind(reviewMessageId).first<any>();
+  return {ok:refreshed?.last_sync_status==="updated",...result};
+}
+
+export async function cleanupContributionReviewMessages(env:Env, retentionDays=180){
+  const days=Math.max(30,Math.min(730,Math.floor(Number(retentionDays)||180)));
+  const result=await env.DB.prepare(`DELETE FROM contribution_review_messages
+    WHERE created_at < datetime('now', ?) AND contribution_id IN (
+      SELECT id FROM contributions WHERE status IN ('approved','rejected')
+    )`).bind(`-${days} days`).run();
+  return Number(result.meta?.changes||0);
 }

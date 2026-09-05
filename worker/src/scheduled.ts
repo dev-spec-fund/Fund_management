@@ -4,10 +4,13 @@ import { currentDayOfMonth, currentMonth, getSetting, getBranding } from "./db";
 import { isMonthClosed, safeLogError } from "./ops";
 import { allocatedPaidSql } from "./allocations";
 import { contributionDueForMonth } from "./contributionRates";
+import { cleanupContributionReviewMessages } from "./contributionReviewMessages";
 
 /** Runs daily and evaluates reminder dates in FUND_TIMEZONE (Indian/Maldives by default). */
 export async function runScheduled(env: Env) {
   try {
+    // Best-effort retention cleanup; never block financial/reminder processing.
+    await cleanupContributionReviewMessages(env,180).catch((e)=>safeLogError(env,"scheduled.review_message_cleanup",e));
     const reminderDay = await getSetting(env, "reminder_day");
     if (!reminderDay || reminderDay === "off") return;
     const timeZone = env.FUND_TIMEZONE || "Indian/Maldives";

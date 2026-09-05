@@ -468,3 +468,27 @@ test('Telegram callback can self-heal a legacy stale contribution review message
   assert.match(callbacks,/contribution\.status==="rejected"/);
   assert.match(callbacks,/Already \$\{contribution\.status\}/);
 });
+
+
+test('contribution review UX reports Telegram sync and prevents duplicate review taps', () => {
+  const pending = fs.readFileSync(path.resolve(root,'../frontend/src/pages/PendingApprovals.jsx'),'utf8');
+  const api = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(pending,/const \[busy, setBusy\]/);
+  assert.match(pending,/finishContribution/);
+  assert.match(pending,/Telegram review messages updated/);
+  assert.match(pending,/could not be updated/);
+  assert.match(pending,/disabled=\{!!busy\}/);
+  assert.match(api,/retryError/);
+});
+
+test('failed Telegram contribution review sync is logged, retryable, and retained only temporarily', () => {
+  const helper = fs.readFileSync(path.join(root,'src/contributionReviewMessages.ts'),'utf8');
+  const system = fs.readFileSync(path.join(root,'src/routes/admin/system.ts'),'utf8');
+  const scheduled = fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
+  assert.match(helper,/telegram\.contribution_review_sync/);
+  assert.match(helper,/retryContributionReviewMessage/);
+  assert.match(helper,/cleanupContributionReviewMessages/);
+  assert.match(system,/errors\/:id\/retry/);
+  assert.match(system,/telegram_review_sync_retried/);
+  assert.match(scheduled,/cleanupContributionReviewMessages\(env,180\)/);
+});

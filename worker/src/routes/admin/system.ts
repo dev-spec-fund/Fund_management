@@ -3,6 +3,7 @@ import type { AppEnv } from "../../types";
 import { requireAdmin, requireSuperAdmin, requireBackup } from "../../auth";
 import { auditEntity, ensureOperationalSchema, safeLogError } from "../../ops";
 import { currentMonth, getSetting, getBranding } from "../../db";
+import { retryContributionReviewMessage } from "../../contributionReviewMessages";
 
 export function registerSystemAdminRoutes(route: Hono<AppEnv>) {
 route.get('/health', requireAdmin, async c => {
@@ -17,6 +18,21 @@ route.get('/health', requireAdmin, async c => {
 });
 
 route.get('/errors', requireSuperAdmin, async c => { await ensureOperationalSchema(c.env); return c.json((await c.env.DB.prepare("SELECT * FROM error_log ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, created_at DESC LIMIT 200").all()).results); });
+route.post('/errors/:id/retry', requireSuperAdmin, async c => {
+  const admin=c.get('admin')!; const id=Number(c.req.param('id'));
+  const row=await c.env.DB.prepare("SELECT * FROM error_log WHERE id=?").bind(id).first<any>();
+  if(!row)return c.json({error:'Not found'},404);
+  if(row.source!=='telegram.contribution_review_sync')return c.json({error:'This error does not support retry'},400);
+  let detail:any={}; try{detail=JSON.parse(row.detail||'{}')}catch{}
+  const reviewMessageId=Number(detail.review_message_id||0);
+  if(!reviewMessageId)return c.json({error:'Review message reference is missing'},400);
+  const result=await retryContributionReviewMessage(c.env,reviewMessageId);
+  if(!result.ok)return c.json({error:'Telegram message could not be updated',retry:result},502);
+  await c.env.DB.prepare("UPDATE error_log SET status='resolved',resolved_at=datetime('now'),resolved_by=? WHERE id=?").bind(admin.id,id).run();
+  await auditEntity(c.env,admin.id,'telegram_review_sync_retried','error_log',id,row,{...row,status:'resolved'});
+  return c.json({ok:true,retry:result});
+});
+
 route.post('/errors/:id/resolve', requireSuperAdmin, async c => { const admin=c.get('admin')!; const id=Number(c.req.param('id')); const before=await c.env.DB.prepare("SELECT * FROM error_log WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:'Not found'},404); await c.env.DB.prepare("UPDATE error_log SET status='resolved',resolved_at=datetime('now'),resolved_by=? WHERE id=?").bind(admin.id,id).run(); await auditEntity(c.env,admin.id,'error_resolved','error_log',id,before,{...before,status:'resolved'}); return c.json({ok:true}); });
 route.post('/errors/resolve-all', requireSuperAdmin, async c => { const admin=c.get('admin')!; const row=await c.env.DB.prepare("SELECT COUNT(*) n FROM error_log WHERE status='open'").first<any>(); await c.env.DB.prepare("UPDATE error_log SET status='resolved',resolved_at=datetime('now'),resolved_by=? WHERE status='open'").bind(admin.id).run(); await auditEntity(c.env,admin.id,'errors_resolved','error_log','open',null,{resolved:Number(row?.n||0)}); return c.json({ok:true,resolved:Number(row?.n||0)}); });
 

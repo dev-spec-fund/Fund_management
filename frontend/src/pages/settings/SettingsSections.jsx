@@ -366,7 +366,10 @@ export function SystemSettingsSection(ctx) {
             <div style={{color:"var(--muted)",marginTop:2}}>{e.message}</div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:3}}>
               <span style={{color:"var(--soft-4)"}}>{formatLocalDateTime(e.created_at)}</span>
-              {e.status!=="resolved"&&<button type="button" onClick={async()=>{try{await api.admin.resolveError(e.id);setErrors(await api.admin.errors())}catch(err){setMessage(err.message)}}} style={{...compactBtn,padding:"4px 7px",fontSize:9}}>Resolve</button>}
+              {e.status!=="resolved"&&<div style={{display:"flex",gap:5}}>
+                {e.source==="telegram.contribution_review_sync"&&<button type="button" onClick={async()=>{try{const r=await api.admin.retryError(e.id);setErrors(await api.admin.errors());setMessage(r?.ok?"Telegram review message updated":"Retry failed")}catch(err){setMessage(err.message)}}} style={{...compactBtn,padding:"4px 7px",fontSize:9}}>Retry Telegram</button>}
+                <button type="button" onClick={async()=>{try{await api.admin.resolveError(e.id);setErrors(await api.admin.errors())}catch(err){setMessage(err.message)}}} style={{...compactBtn,padding:"4px 7px",fontSize:9}}>Resolve</button>
+              </div>}
             </div>
           </div>)}
           {!filteredErrors.length&&<EmptyLine>No errors in this view.</EmptyLine>}

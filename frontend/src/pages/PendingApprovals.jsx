@@ -11,6 +11,8 @@ export default function PendingApprovals() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
   const [lastChecked, setLastChecked] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
 
   const load = () => api.admin.pending()
     .then((d) => { setData(d); setLastChecked(new Date()); })
@@ -26,14 +28,36 @@ export default function PendingApprovals() {
   const contributions = data.contributions || [];
   const count = registrations.length + contributions.length;
 
-  const act = async (fn) => {
+  const act = async (fn, key="action") => {
+    if(busy)return null;
     try {
-      setError("");
-      await fn();
+      setError(""); setMessage(""); setBusy(key);
+      const result=await fn();
       await load();
+      return result;
     } catch (e) {
       setError(e.message);
+      return null;
+    } finally {
+      setBusy("");
     }
+  };
+
+  const finishContribution = async (decision) => {
+    const id=editing.id;
+    const result=await act(async()=>{
+      if(decision==="approved"){
+        await api.admin.correctContribution(id,{amount:editing.amount,ref_number:editing.ref_number||null,bank_date:editing.bank_date||null,month:editing.month});
+        return api.admin.approveContribution(id);
+      }
+      return api.admin.rejectContribution(id,"Rejected by admin");
+    },`contribution-${id}`);
+    if(!result)return;
+    setData(prev=>prev?{...prev,contributions:(prev.contributions||[]).filter(x=>Number(x.id)!==Number(id)),slips:(prev.slips||[]).filter(x=>Number(x.id)!==Number(id))}:prev);
+    setEditing(null);
+    const sync=result.review_messages;
+    if(sync?.failed>0)setMessage(`${decision==="approved"?"Contribution approved":"Contribution rejected"} · ${sync.failed} Telegram message${sync.failed===1?"":"s"} could not be updated`);
+    else setMessage(`${decision==="approved"?"Contribution approved":"Contribution rejected"} · Telegram review messages updated`);
   };
 
   const filters = [
@@ -61,6 +85,7 @@ export default function PendingApprovals() {
     </div>
 
     {error && <div className="sans" style={{background:"var(--danger-bg)",color:"var(--danger)",padding:10,borderRadius:10,fontSize:12,marginBottom:12}}>{error}</div>}
+    {message && <div className="sans" style={{background:"var(--success-bg)",color:"var(--success)",padding:10,borderRadius:10,fontSize:12,marginBottom:12,fontWeight:600}}>{message}</div>}
 
     {count === 0 ? (
       <div style={{background:"var(--card)",border:"1px solid var(--success-bg-3)",borderRadius:16,padding:"34px 20px",textAlign:"center",marginTop:18}}>
@@ -157,16 +182,9 @@ export default function PendingApprovals() {
           await api.admin.correctContribution(editing.id,{amount:editing.amount,ref_number:editing.ref_number||null,bank_date:editing.bank_date||null,month:editing.month});
           setEditing(null);
         })}>Save correction</button>
-        <button type="button" style={{...approveBtn,flex:1}} onClick={() => act(async()=>{
-          await api.admin.correctContribution(editing.id,{amount:editing.amount,ref_number:editing.ref_number||null,bank_date:editing.bank_date||null,month:editing.month});
-          await api.admin.approveContribution(editing.id);
-          setEditing(null);
-        })}>Approve</button>
+        <button type="button" disabled={!!busy} style={{...approveBtn,flex:1,opacity:busy?.7:1}} onClick={() => finishContribution("approved")}>{busy===`contribution-${editing.id}`?"Approving…":"Approve"}</button>
       </div>
-      <button type="button" style={{...rejectBtn,width:"100%",marginTop:8}} onClick={() => act(async()=>{
-        await api.admin.rejectContribution(editing.id,"Rejected by admin");
-        setEditing(null);
-      })}>Reject contribution</button>
+      <button type="button" disabled={!!busy} style={{...rejectBtn,width:"100%",marginTop:8,opacity:busy?.7:1}} onClick={() => finishContribution("rejected")}>{busy===`contribution-${editing.id}`?"Working…":"Reject contribution"}</button>
     </Modal>}
   </>;
 }
