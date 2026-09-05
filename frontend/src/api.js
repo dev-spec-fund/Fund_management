@@ -29,6 +29,10 @@ function cacheTtlFor(path) {
   if (path.startsWith("/api/reports/summary") || path.startsWith("/api/reports/public-summary")) return 15_000;
   if (path.startsWith("/api/reports/trend") || path.startsWith("/api/governance/annual/") || path.startsWith("/api/governance/analytics/")) return 30_000;
   if (path.startsWith("/api/projects") || path === "/api/me/projects") return 25_000;
+  if (path.startsWith("/api/elections/exco/") || path === "/api/elections/archive") return 60_000;
+  if (path === "/api/elections" || path.startsWith("/api/elections/")) return 20_000;
+  if (path === "/api/admin/meetings" || path === "/api/me/meetings") return 20_000;
+  if (path === "/api/me/governance-archive") return 60_000;
   if (path.startsWith("/api/admin/pending")) return 8_000;
   return DEFAULT_GET_CACHE_TTL_MS;
 }
@@ -57,9 +61,82 @@ function clearGetCache({ preserveStable = false } = {}) {
   inFlightGets.clear();
 }
 
+function invalidateCacheMatching(matchers = []) {
+  cacheGeneration += 1;
+  const tests=matchers.map((m)=>typeof m==="function"?m:(path)=>path.startsWith(m));
+  for(const [key,entry] of [...responseCache.entries()]){
+    const path=entry?.path || key.slice(key.indexOf("::")+2);
+    if(tests.some((test)=>test(path))) responseCache.delete(key);
+  }
+  for(const [key] of [...inFlightGets.entries()]){
+    const path=key.slice(key.indexOf("::")+2);
+    if(tests.some((test)=>test(path))) inFlightGets.delete(key);
+  }
+}
+
 function invalidateAfterMutation(path) {
-  const affectsIdentity = path.startsWith("/api/settings") || path.startsWith("/api/members");
-  clearGetCache({ preserveStable: !affectsIdentity });
+  const p=String(path||"");
+
+  if(p.startsWith("/api/elections")){
+    invalidateCacheMatching([
+      "/api/elections",
+      "/api/me/governance-archive",
+      "/api/me/dashboard"
+    ]);
+    return;
+  }
+
+  if(p.startsWith("/api/admin/meetings") || p.startsWith("/api/governance/meetings") || p.startsWith("/api/governance/meeting-")){
+    invalidateCacheMatching([
+      "/api/admin/meetings",
+      "/api/governance/meetings",
+      "/api/governance/meeting-",
+      "/api/me/meetings",
+      "/api/me/actions",
+      "/api/me/dashboard",
+      "/api/elections/exco/"
+    ]);
+    return;
+  }
+
+  if(p.startsWith("/api/contributions") || p.startsWith("/api/donations") || p.startsWith("/api/expenses")){
+    invalidateCacheMatching([
+      "/api/reports/",
+      "/api/admin/pending",
+      "/api/members/",
+      "/api/me/dashboard",
+      "/api/me/contributions",
+      "/api/expenses",
+      "/api/projects",
+      "/api/me/projects"
+    ]);
+    return;
+  }
+
+  if(p.startsWith("/api/projects")){
+    invalidateCacheMatching(["/api/projects","/api/me/projects","/api/reports/"]);
+    return;
+  }
+
+  if(p.startsWith("/api/members")){
+    invalidateCacheMatching([
+      "/api/members",
+      "/api/me",
+      "/api/me/dashboard",
+      "/api/reports/",
+      "/api/admin/pending",
+      "/api/elections"
+    ]);
+    return;
+  }
+
+  if(p.startsWith("/api/settings")){
+    clearGetCache({preserveStable:false});
+    return;
+  }
+
+  // Unknown writes remain conservative.
+  clearGetCache({preserveStable:true});
 }
 
 const DATA_CHANGED_EVENT = "fund:data-changed";
@@ -82,6 +159,29 @@ export function onDataChange(listener) {
   return () => window.removeEventListener(DATA_CHANGED_EVENT, handler);
 }
 
+export function onDataChangeDebounced(listener, delay = 120) {
+  if (typeof window === "undefined") return () => {};
+  let timer=null;
+  let latest={};
+  const paths=new Set();
+  const handler=(event)=>{
+    latest=event.detail||{};
+    if(latest.path)paths.add(latest.path);
+    if(timer)clearTimeout(timer);
+    timer=setTimeout(()=>{
+      timer=null;
+      const batch={...latest,paths:[...paths]};
+      paths.clear();
+      listener(batch);
+    },Math.max(0,Number(delay)||0));
+  };
+  window.addEventListener(DATA_CHANGED_EVENT,handler);
+  return ()=>{
+    if(timer)clearTimeout(timer);
+    window.removeEventListener(DATA_CHANGED_EVENT,handler);
+  };
+}
+
 function cacheKey(path) {
   return `${initData()}::${path}`;
 }
@@ -89,7 +189,7 @@ function cacheKey(path) {
 function storeGetCache(key, path, data) {
   responseCache.delete(key);
   const now=Date.now();
-  responseCache.set(key, { data, fetchedAt:now, expiresAt: now + cacheTtlFor(path) });
+  responseCache.set(key, { path, data, fetchedAt:now, expiresAt: now + cacheTtlFor(path) });
   while (responseCache.size > MAX_GET_CACHE_ENTRIES) {
     const oldestKey = responseCache.keys().next().value;
     if (oldestKey === undefined) break;

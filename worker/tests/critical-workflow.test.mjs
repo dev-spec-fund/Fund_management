@@ -1492,3 +1492,50 @@ test('v68 mobile polish does not replace functional navigation or modal controls
   assert.match(modal,/role="dialog"/);
   assert.match(modal,/aria-modal="true"/);
 });
+
+
+test('v69 GET cache invalidation is targeted by feature family instead of globally clearing every write', () => {
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/function invalidateCacheMatching/);
+  assert.match(api,/if\(p\.startsWith\("\/api\/elections"\)\)/);
+  assert.match(api,/if\(p\.startsWith\("\/api\/admin\/meetings"\)/);
+  assert.match(api,/if\(p\.startsWith\("\/api\/contributions"\)/);
+  assert.match(api,/responseCache\.set\(key, \{ path, data/);
+  assert.match(api,/Unknown writes remain conservative/);
+});
+
+test('v69 data-change events can be coalesced to avoid duplicate refresh bursts', () => {
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/export function onDataChangeDebounced/);
+  assert.match(api,/const paths=new Set\(\)/);
+  assert.match(api,/paths:\[\.\.\.paths\]/);
+  assert.match(api,/clearTimeout\(timer\)/);
+});
+
+test('v69 heavy overview elections and meetings pages use debounced path-aware refreshes', () => {
+  const overview=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Overview.jsx'),'utf8');
+  const elections=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const meetings=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Meetings.jsx'),'utf8');
+  assert.match(overview,/onDataChangeDebounced/);
+  assert.match(overview,/paths\.some/);
+  assert.match(elections,/onDataChangeDebounced/);
+  assert.match(elections,/paths\.some/);
+  assert.match(meetings,/onDataChangeDebounced/);
+  assert.match(meetings,/api\.peekCached\("\/api\/admin\/meetings"\)/);
+});
+
+test('v69 keeps a bounded four-tab warm window and idle-prefetches only one likely next screen', () => {
+  const app=fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
+  assert.match(app,/while \(ordered\.length > 4\)/);
+  assert.match(app,/requestIdleCallback/);
+  assert.match(app,/const next=likelyNext\.find/);
+  assert.match(app,/api\.prefetchTabData/);
+  assert.match(app,/cancelIdleCallback/);
+});
+
+test('v69 extends cache life for stable election governance data while keeping pending data short-lived', () => {
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/\/api\/elections\/exco\/.*60_000/);
+  assert.match(api,/\/api\/me\/governance-archive.*60_000/);
+  assert.match(api,/\/api\/admin\/pending.*8_000/);
+});

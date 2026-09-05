@@ -1,5 +1,5 @@
 import React,{useEffect,useState} from "react";
-import { api,onDataChange } from "../api";
+import { api,onDataChangeDebounced } from "../api";
 import { Modal,Field,useConfirmDialog } from "../components/FormControls";
 import { LoadingState,EmptyState,MessageBanner,approveBtn,compactBtn,rejectBtn } from "../components/Shared";
 
@@ -41,7 +41,9 @@ export default function Elections(){
   ]).catch(e=>setMessage(e.message));
   const open=async(row)=>{setSelected(row);setReadiness(null);setMessage("");try{setDetail(await api.elections.get(row.id))}catch(e){setMessage(e.message)}};
   useEffect(()=>{load()},[]);
-  useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
+  useEffect(()=>onDataChangeDebounced(({paths=[]})=>{
+    if(paths.some((path)=>path?.startsWith("/api/elections")))load();
+  },140),[]);
   useEffect(()=>{
     if(!detail?.id||detail.status!=="draft"){setReadiness(null);return;}
     let active=true;

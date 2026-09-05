@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
-import { api, onDataChange } from "../api";
+import { api, onDataChangeDebounced } from "../api";
 import { currentMonthValue } from "../utils/date";
 import { fmt } from "../utils/format";
 import { LoadingState } from "../components/Shared";
@@ -45,7 +45,16 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
     refreshOverview();
   }, [isAdmin, canFinance, adminMonth]);
 
-  useEffect(() => onDataChange(() => refreshOverview()), [isAdmin, canFinance, adminMonth]);
+  useEffect(() => onDataChangeDebounced(({paths=[]}) => {
+    const relevant=paths.some((path)=>
+      path?.startsWith("/api/contributions") ||
+      path?.startsWith("/api/donations") ||
+      path?.startsWith("/api/expenses") ||
+      path?.startsWith("/api/members") ||
+      path?.startsWith("/api/projects")
+    );
+    if(relevant)refreshOverview();
+  },140), [isAdmin, canFinance, adminMonth]);
 
   const refreshMemberStatus = () => {
     if (isAdmin || !member?.id) return;
@@ -65,7 +74,9 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
     refreshMemberStatus();
   }, [isAdmin, member?.id]);
 
-  useEffect(() => onDataChange(() => refreshMemberStatus()), [isAdmin, member?.id]);
+  useEffect(() => onDataChangeDebounced(({paths=[]}) => {
+    if(paths.some((path)=>path?.startsWith("/api/contributions")||path?.startsWith("/api/members")))refreshMemberStatus();
+  },140), [isAdmin, member?.id]);
 
   const refreshMemberElection = () => {
     if (isAdmin || !member?.id) { setMemberElection(null); return; }
@@ -80,7 +91,9 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   };
 
   useEffect(() => { refreshMemberElection(); }, [isAdmin, member?.id]);
-  useEffect(() => onDataChange(({path}) => { if (path?.startsWith("/api/elections")) refreshMemberElection(); }), [isAdmin, member?.id]);
+  useEffect(() => onDataChangeDebounced(({paths=[]}) => {
+    if(paths.some((path)=>path?.startsWith("/api/elections")))refreshMemberElection();
+  },120), [isAdmin, member?.id]);
 
   if (!summary) return <OverviewSkeleton memberView={!isAdmin} />;
 

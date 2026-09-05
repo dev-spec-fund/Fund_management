@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, onDataChange } from "../api";
+import { api, onDataChangeDebounced } from "../api";
 import { Modal, Field, useConfirmDialog } from "../components/FormControls";
 import { LoadingState, EmptyState, MessageBanner, PageHeader, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
@@ -9,7 +9,7 @@ import { MoreHorizontal, Bell, Pencil, XCircle } from "lucide-react";
 
 export default function Meetings({admin}){
   const emptyForm={title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:""};
-  const [rows,setRows]=useState(null);
+  const [rows,setRows]=useState(()=>api.peekCached("/api/admin/meetings"));
   const [showCreate,setShowCreate]=useState(false);
   const [selected,setSelected]=useState(null);
   const [details,setDetails]=useState(null);
@@ -31,9 +31,14 @@ export default function Meetings({admin}){
 
   const load=()=>api.admin.meetings().then(setRows).catch(e=>setMessage(e.message));
   useEffect(()=>{load();api.members.list().then(setMemberOptions).catch(()=>{});api.elections.currentExco().then(r=>setExcoOptions(r.roles||[])).catch(()=>{})},[]);
-  useEffect(()=>onDataChange(({path})=>{
-    if(path?.startsWith("/api/admin/meetings") || path?.startsWith("/api/governance/meetings") || path?.startsWith("/api/governance/meeting-actions") || path?.startsWith("/api/me/meetings")) load();
-  }),[]);
+  useEffect(()=>onDataChangeDebounced(({paths=[]})=>{
+    if(paths.some((path)=>
+      path?.startsWith("/api/admin/meetings") ||
+      path?.startsWith("/api/governance/meetings") ||
+      path?.startsWith("/api/governance/meeting-") ||
+      path?.startsWith("/api/me/meetings")
+    ))load();
+  },140),[]);
 
   const meetingPage=pageSlice(rows||[],page);
 

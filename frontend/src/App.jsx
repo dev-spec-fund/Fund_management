@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { api, onDataChange } from "./api";
+import { api } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
 import { adminCan } from "./utils/permissions";
@@ -87,7 +87,7 @@ const NAV_ITEMS = {
   profile: { label: "Profile", icon: UserRound },
 };
 
-function NavItem({ name, active, labelVisible, onWarm, onOpen, attention = false }) {
+function NavItem({ name, active, labelVisible, onWarm, onOpen }) {
   const meta = NAV_ITEMS[name] || { label: name, icon: Home };
   const Icon = meta.icon;
   return (
@@ -102,7 +102,6 @@ function NavItem({ name, active, labelVisible, onWarm, onOpen, attention = false
     >
       <Icon size={16} strokeWidth={active ? 2.25 : 1.9} aria-hidden="true" />
       <span className={`app-nav-label${labelVisible ? " visible" : ""}`}>{meta.label}</span>
-      {attention && <span className="app-nav-attention" aria-label="Applications open" />}
     </button>
   );
 }
@@ -112,7 +111,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [bootstrapSummary, setBootstrapSummary] = useState(null);
-  const [electionAttention, setElectionAttention] = useState(null);
   const [adminMonth, setAdminMonthState] = useState(getAdminReportMonth());
   const setAdminMonth = (value) => {
     if(!/^\d{4}-\d{2}$/.test(String(value||""))) return;
@@ -178,16 +176,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!me?.member) { setElectionAttention(null); return undefined; }
-    const loadElectionAttention=()=>api.elections.list().then((rows)=>{
-      const open=(rows||[]).find((e)=>e.status==="draft" && e.application_phase==="open");
-      setElectionAttention(open||null);
-    }).catch(()=>{});
-    loadElectionAttention();
-    return onDataChange(({path})=>{ if(path?.startsWith("/api/elections")) loadElectionAttention(); });
-  }, [me?.member?.id]);
-
-  useEffect(() => {
     if (!me) return undefined;
 
     const context = () => ({
@@ -227,9 +215,9 @@ export default function App() {
   useEffect(() => {
     if (!me) return undefined;
 
-    // Performance Stage 1: preload JavaScript chunks only.
-    // API data is fetched on actual navigation, where the shared GET cache and
-    // in-flight de-duplication let the page reuse the request started on touch.
+    // v69: preload JavaScript chunks, then warm only the single most likely
+    // next screen's data while the browser is idle. Shared GET cache and
+    // in-flight de-duplication prevent this from causing duplicate navigation fetches.
     const likelyNext = adminView
       ? (canFinance ? ["pending", "members", "expenses", "projects"] : ["members", "reports"])
       : ["history", "fund", "activity", ...(memberProjectsEnabled ? ["projects"] : []), "meetings"];
@@ -250,8 +238,31 @@ export default function App() {
       setTimeout(() => warmCode(later), 2800),
     ];
 
-    return () => timers.forEach(clearTimeout);
-  }, [me, adminView, canFinance, tabs, memberProjectsEnabled]);
+    const warmLikelyData=()=>{
+      const next=likelyNext.find((name)=>tabs.includes(name));
+      if(!next)return;
+      api.prefetchTabData({
+        tab:next,
+        adminView,
+        canFinance,
+        memberId:me?.member?.id||null,
+        adminMonth:adminView?adminMonth:null,
+      }).catch(()=>{});
+    };
+    let idleHandle=null;
+    let idleTimer=null;
+    if(typeof window.requestIdleCallback==="function"){
+      idleHandle=window.requestIdleCallback(warmLikelyData,{timeout:1800});
+    }else{
+      idleTimer=setTimeout(warmLikelyData,900);
+    }
+
+    return () => {
+      timers.forEach(clearTimeout);
+      if(idleHandle!==null)window.cancelIdleCallback?.(idleHandle);
+      if(idleTimer!==null)clearTimeout(idleTimer);
+    };
+  }, [me, adminView, canFinance, tabs, memberProjectsEnabled, adminMonth]);
 
   // All normal screens share one scroll root. Reset it when the user intentionally
   // changes the active tab/mode so every screen opens from a predictable position.
@@ -283,13 +294,13 @@ export default function App() {
   const openTab = (nextTab) => {
     warmTab(nextTab);
 
-    // Keep a very small warm-page window for smooth back-and-forth navigation.
-    // This avoids the old unlimited hidden-page listener buildup while allowing
-    // the three most recently visited screens to remain instantly available.
+    // Keep a bounded warm-page window for smooth back-and-forth navigation.
+    // Four recent screens preserve local UI state without returning to the old
+    // unlimited hidden-page/listener buildup.
     setMountedTabs((current) => {
       const ordered = [...current].filter((page) => page !== nextTab);
       ordered.push(nextTab);
-      while (ordered.length > 3) ordered.shift();
+      while (ordered.length > 4) ordered.shift();
       return new Set(ordered);
     });
     setTab(nextTab);
@@ -302,7 +313,7 @@ export default function App() {
   };
 
   const renderPage = (page) => {
-    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} adminMonth={adminView ? adminMonth : null} electionAttention={memberView ? electionAttention : null} />;
+    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} adminMonth={adminView ? adminMonth : null} />;
     if (page === "pending" && canFinance) return <PendingApprovals />;
     if (page === "members" && adminView) return <Members isAdmin admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} />;
     if (page === "history" && memberView) return <MyHistory member={me.member} />;
@@ -350,7 +361,6 @@ export default function App() {
             labelVisible={navLabelTab === t}
             onWarm={() => warmTab(t)}
             onOpen={() => openTab(t)}
-            attention={memberView && t === "elections" && !!electionAttention}
           />
         ))}
       </nav>
