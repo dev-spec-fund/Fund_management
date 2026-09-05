@@ -21,14 +21,16 @@ export default function Meetings({admin}){
   const [minutesData,setMinutesData]=useState(null);
   const [minutesDraft,setMinutesDraft]=useState({minutes:"",decisions:""});
   const [actionDraft,setActionDraft]=useState({description:"",assigned_member_id:"",due_date:""});
+  const [resolutionDraft,setResolutionDraft]=useState({title:"",decision_text:"",proposer_member_id:"",seconder_member_id:"",vote_result:"",status:"adopted",create_followup:false,owner_member_id:"",followup_due_date:""});
   const [memberOptions,setMemberOptions]=useState([]);
+  const [excoOptions,setExcoOptions]=useState([]);
   const [page,setPage]=useState(1);
   const [showMeetingActions,setShowMeetingActions]=useState(false);
   const canFinance=adminCan(admin, "finance");
   const { confirm, confirmationDialog } = useConfirmDialog();
 
   const load=()=>api.admin.meetings().then(setRows).catch(e=>setMessage(e.message));
-  useEffect(()=>{load();api.members.list().then(setMemberOptions).catch(()=>{})},[]);
+  useEffect(()=>{load();api.members.list().then(setMemberOptions).catch(()=>{});api.elections.currentExco().then(r=>setExcoOptions(r.roles||[])).catch(()=>{})},[]);
   useEffect(()=>onDataChange(({path})=>{
     if(path?.startsWith("/api/admin/meetings") || path?.startsWith("/api/governance/meetings") || path?.startsWith("/api/governance/meeting-actions") || path?.startsWith("/api/me/meetings")) load();
   }),[]);
@@ -158,6 +160,31 @@ export default function Meetings({admin}){
       setMinutesDraft({minutes:result.minutes.minutes||"",decisions:result.minutes.decisions||""});
       setMessage(`Meeting minutes saved${result.minutes.updated_at?` · ${formatLocalDateTime(result.minutes.updated_at)}`:""}`);
     }catch(e){setMessage(e.message||"Could not save meeting minutes")}finally{setBusy(false)}
+  };
+  const addResolution=async()=>{
+    if(!details||!canFinance||!resolutionDraft.title.trim()||!resolutionDraft.decision_text.trim())return;
+    setBusy(true);setMessage("");
+    try{
+      const payload={
+        ...resolutionDraft,
+        proposer_member_id:resolutionDraft.proposer_member_id?Number(resolutionDraft.proposer_member_id):null,
+        seconder_member_id:resolutionDraft.seconder_member_id?Number(resolutionDraft.seconder_member_id):null,
+        owner_member_id:resolutionDraft.owner_member_id?Number(resolutionDraft.owner_member_id):null,
+        followup_due_date:resolutionDraft.followup_due_date||null
+      };
+      const result=await api.governance.addMeetingResolution(details.id,payload);
+      setMinutesData(await api.governance.meetingMinutes(details.id));
+      setResolutionDraft({title:"",decision_text:"",proposer_member_id:"",seconder_member_id:"",vote_result:"",status:"adopted",create_followup:false,owner_member_id:"",followup_due_date:""});
+      setMessage(result.responsibility_id?`Resolution ${result.resolution_no} saved · follow-up added to EXCO Workboard.`:`Resolution ${result.resolution_no} saved.`);
+    }catch(e){setMessage(e.message||"Could not save resolution")}finally{setBusy(false)}
+  };
+  const setResolutionStatus=async(resolution,status)=>{
+    if(!canFinance)return;
+    setBusy(true);try{
+      await api.governance.updateMeetingResolution(resolution.id,{status});
+      setMinutesData(await api.governance.meetingMinutes(details.id));
+      setMessage(`Resolution ${resolution.resolution_no||resolution.id} updated to ${status}.`);
+    }catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const addAction=async()=>{
     if(!details||!canFinance||!actionDraft.description.trim())return;
@@ -301,6 +328,34 @@ export default function Meetings({admin}){
                 <label className="sans" style={{display:"block",fontSize:10,color:"var(--soft)",marginBottom:8}}>Decisions<textarea rows={3} value={minutesDraft.decisions} onChange={e=>setMinutesDraft({...minutesDraft,decisions:e.target.value})} style={{width:"100%",marginTop:5,padding:9,border:"1px solid var(--border-strong)",borderRadius:8,background:"var(--bg)",resize:"vertical"}}/></label>
                 <button type="button" disabled={busy} onClick={saveMinutes} style={{...approveBtn,width:"100%",padding:9}}>Save minutes</button>
               </>:<div className="sans" style={{fontSize:11,lineHeight:1.5,color:"var(--muted)",whiteSpace:"pre-wrap"}}>{minutesData?.minutes?.minutes||"No minutes recorded."}{minutesData?.minutes?.decisions?`\n\nDecisions\n${minutesData.minutes.decisions}`:""}</div>}
+              <div className="sans" style={{fontSize:12,fontWeight:700,letterSpacing:.7,color:"var(--muted)",margin:"14px 0 7px"}}>FORMAL RESOLUTIONS</div>
+              {minutesData?.exco_term&&<div className="meeting-resolution-term sans">EXCO term: <b>{minutesData.exco_term.term_label||minutesData.exco_term.election_title}</b></div>}
+              {(minutesData?.resolutions||[]).map(r=><div key={r.id} className={`meeting-resolution-card ${r.status}`}>
+                <div className="sans meeting-resolution-top"><span><b>{r.resolution_no||`Resolution ${r.id}`} · {r.title}</b><small>{r.term_label||r.election_title} · {r.status}</small></span><strong>{r.vote_result||"Decision recorded"}</strong></div>
+                <div className="sans meeting-resolution-text">{r.decision_text}</div>
+                <div className="sans meeting-resolution-meta">{r.proposer_name?`Proposed by ${r.proposer_name}`:"No proposer recorded"}{r.seconder_name?` · Seconded by ${r.seconder_name}`:""}{r.responsibility_id?<span> · Follow-up: <b>{r.responsibility_title||"EXCO responsibility"}</b> ({r.responsibility_status||"todo"})</span>:""}</div>
+                {canFinance&&<div className="meeting-resolution-actions sans">
+                  {r.status!=="adopted"&&<button type="button" disabled={busy} onClick={()=>setResolutionStatus(r,"adopted")}>Adopt</button>}
+                  {r.status!=="rejected"&&<button type="button" disabled={busy} onClick={()=>setResolutionStatus(r,"rejected")}>Reject</button>}
+                  {r.status==="adopted"&&<button type="button" disabled={busy} onClick={()=>setResolutionStatus(r,"superseded")}>Supersede</button>}
+                </div>}
+              </div>)}
+              {canFinance&&<div className="meeting-resolution-create">
+                <input className="sans" placeholder="Resolution title" value={resolutionDraft.title} onChange={e=>setResolutionDraft({...resolutionDraft,title:e.target.value})}/>
+                <textarea className="sans" rows={4} placeholder="Formal decision / resolution text" value={resolutionDraft.decision_text} onChange={e=>setResolutionDraft({...resolutionDraft,decision_text:e.target.value})}/>
+                <div className="meeting-resolution-grid">
+                  <select className="sans" value={resolutionDraft.proposer_member_id} onChange={e=>setResolutionDraft({...resolutionDraft,proposer_member_id:e.target.value})}><option value="">Proposer (optional)</option>{memberOptions.filter(m=>m.active!==0).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select>
+                  <select className="sans" value={resolutionDraft.seconder_member_id} onChange={e=>setResolutionDraft({...resolutionDraft,seconder_member_id:e.target.value})}><option value="">Seconder (optional)</option>{memberOptions.filter(m=>m.active!==0).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select>
+                </div>
+                <input className="sans" placeholder="Vote / result e.g. Passed 7–1, Unanimous" value={resolutionDraft.vote_result} onChange={e=>setResolutionDraft({...resolutionDraft,vote_result:e.target.value})}/>
+                <label className="sans meeting-resolution-followup"><input type="checkbox" checked={resolutionDraft.create_followup} onChange={e=>setResolutionDraft({...resolutionDraft,create_followup:e.target.checked})}/><span>Create follow-up on EXCO Workboard</span></label>
+                {resolutionDraft.create_followup&&<div className="meeting-resolution-grid">
+                  <select className="sans" value={resolutionDraft.owner_member_id} onChange={e=>setResolutionDraft({...resolutionDraft,owner_member_id:e.target.value})}><option value="">Follow-up owner (optional)</option>{excoOptions.map(x=><option key={x.member_id||x.id} value={x.member_id}>{x.role_title} · {x.name}</option>)}</select>
+                  <input className="sans" type="date" value={resolutionDraft.followup_due_date} onChange={e=>setResolutionDraft({...resolutionDraft,followup_due_date:e.target.value})}/>
+                </div>}
+                <button type="button" className="sans" disabled={busy||!resolutionDraft.title.trim()||!resolutionDraft.decision_text.trim()||!minutesData?.exco_term} onClick={addResolution} style={{...approveBtn,width:"100%",padding:8,marginTop:7,fontSize:12}}>Record formal resolution</button>
+                {!minutesData?.exco_term&&<div className="sans meeting-resolution-warning">No EXCO term covers this meeting date, so a formal resolution cannot be recorded yet.</div>}
+              </div>}
               <div className="sans" style={{fontSize:12,fontWeight:700,letterSpacing:.7,color:"var(--muted)",margin:"14px 0 7px"}}>ACTION ITEMS</div>
               {(minutesData?.actions||[]).map(a=><div key={a.id} className="sans" style={{borderTop:"1px solid var(--divider)",padding:"9px 0",fontSize:12,lineHeight:1.4}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}><span style={{fontWeight:600,textDecoration:a.status==="done"?"line-through":"none"}}>{a.description}</span><span className="sans" style={{fontSize:10,fontWeight:700,textTransform:"capitalize",color:a.status==="done"?"var(--success)":"var(--warning)"}}>{a.status}</span></div><div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:3,lineHeight:1.35}}>{a.member_name?`Assigned: ${a.member_name}`:"Unassigned"}{a.due_date?` · Due ${a.due_date}`:""}</div>{canFinance&&a.status==="open"&&<button type="button" className="sans" onClick={()=>setActionStatus(a,"done")} style={{...compactBtn,padding:"5px 8px",marginTop:6,fontSize:10,fontWeight:600}}>Mark done</button>}</div>)}
               {canFinance&&<div style={{borderTop:"1px solid var(--divider)",marginTop:8,paddingTop:9}}><input className="sans" placeholder="New action item" value={actionDraft.description} onChange={e=>setActionDraft({...actionDraft,description:e.target.value})} style={{width:"100%",padding:9,border:"1px solid var(--border-strong)",borderRadius:8,background:"var(--bg)",marginBottom:6,fontSize:12}}/><div style={{display:"grid",gridTemplateColumns:"1fr 110px",gap:6}}><select className="sans" value={actionDraft.assigned_member_id} onChange={e=>setActionDraft({...actionDraft,assigned_member_id:e.target.value})} style={{minWidth:0,padding:8,border:"1px solid var(--border-strong)",borderRadius:8,background:"var(--bg)",fontSize:12}}><option value="">Unassigned</option>{memberOptions.filter(m=>m.active!==0).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select><input className="sans" type="date" value={actionDraft.due_date} onChange={e=>setActionDraft({...actionDraft,due_date:e.target.value})} style={{minWidth:0,padding:8,border:"1px solid var(--border-strong)",borderRadius:8,background:"var(--bg)",fontSize:12}}/></div><button type="button" className="sans" disabled={busy||!actionDraft.description.trim()} onClick={addAction} style={{...approveBtn,width:"100%",padding:8,marginTop:6,fontSize:12}}>Add action item</button></div>}

@@ -179,12 +179,48 @@ governanceRoute.get('/reversals', requireAdmin, async c=>{
   return c.json(rows.results);
 });
 
+async function ensureResolutionExcoTerms(env:any){
+  const certified=await env.DB.prepare(`SELECT id,term,certified_at FROM elections
+    WHERE certified_at IS NOT NULL ORDER BY certified_at,id`).all<any>();
+  const rows=certified.results as any[];
+  for(let i=0;i<rows.length;i++){
+    const e=rows[i],next=rows[i+1];
+    await env.DB.prepare(`INSERT OR IGNORE INTO exco_terms(election_id,term_label,status,started_at,ended_at)
+      VALUES(?,?,?,date(?),?)`).bind(e.id,e.term||null,next?"completed":"current",e.certified_at,next?String(next.certified_at).slice(0,10):null).run();
+  }
+}
+async function excoTermForMeeting(env:any,meetingDate:string){
+  await ensureResolutionExcoTerms(env);
+  return env.DB.prepare(`SELECT t.*,e.title election_title FROM exco_terms t
+    JOIN elections e ON e.id=t.election_id
+    WHERE date(t.started_at)<=date(?)
+      AND (t.ended_at IS NULL OR date(t.ended_at)>=date(?))
+    ORDER BY date(t.started_at) DESC,t.id DESC LIMIT 1`).bind(meetingDate,meetingDate).first<any>();
+}
+
+async function nextResolutionNo(env:any,termId:number){
+  const row=await env.DB.prepare("SELECT COUNT(*) n FROM meeting_resolutions WHERE term_id=?").bind(termId).first<any>();
+  return `RES-${String(Number(row?.n||0)+1).padStart(3,'0')}`;
+}
+
 governanceRoute.get('/meetings/:id/minutes', requireAdmin, async c=>{
   const id=Number(c.req.param('id')); const meeting=await c.env.DB.prepare("SELECT id,title,meeting_date,status FROM meetings WHERE id=?").bind(id).first<any>();
   if(!meeting) return c.json({error:'Meeting not found'},404);
   const minutes=await c.env.DB.prepare("SELECT mm.*,a.name recorded_by_name FROM meeting_minutes mm LEFT JOIN admins a ON a.id=mm.recorded_by WHERE meeting_id=?").bind(id).first<any>();
   const actions=await c.env.DB.prepare(`SELECT ai.*,m.name member_name,m.member_code,a.name admin_name FROM meeting_action_items ai LEFT JOIN members m ON m.id=ai.assigned_member_id LEFT JOIN admins a ON a.id=ai.assigned_admin_id WHERE ai.meeting_id=? ORDER BY CASE ai.status WHEN 'open' THEN 0 ELSE 1 END, ai.due_date, ai.id`).bind(id).all<any>();
-  return c.json({meeting,minutes:minutes||null,actions:actions.results});
+  const resolutions=await c.env.DB.prepare(`SELECT r.*,p.name proposer_name,s.name seconder_name,x.title responsibility_title,x.status responsibility_status,
+    t.term_label,e.title election_title,cb.name created_by_name,ub.name updated_by_name
+    FROM meeting_resolutions r
+    LEFT JOIN members p ON p.id=r.proposer_member_id
+    LEFT JOIN members s ON s.id=r.seconder_member_id
+    LEFT JOIN exco_responsibilities x ON x.id=r.responsibility_id
+    JOIN exco_terms t ON t.id=r.term_id
+    JOIN elections e ON e.id=t.election_id
+    LEFT JOIN admins cb ON cb.id=r.created_by
+    LEFT JOIN admins ub ON ub.id=r.updated_by
+    WHERE r.meeting_id=? ORDER BY r.id`).bind(id).all<any>();
+  const term=await excoTermForMeeting(c.env,String(meeting.meeting_date));
+  return c.json({meeting,minutes:minutes||null,actions:actions.results,resolutions:resolutions.results,exco_term:term||null});
 });
 
 governanceRoute.put('/meetings/:id/minutes', requireFinance, async c=>{
@@ -215,6 +251,89 @@ governanceRoute.put('/meetings/:id/minutes', requireFinance, async c=>{
 
   await auditEntity(c.env,admin.id,'meeting_minutes_saved','meeting',id,null,{minutes_length:minutes.length,decisions_length:decisions.length});
   return c.json({ok:true,minutes:saved});
+});
+
+governanceRoute.post('/meetings/:id/resolutions', requireFinance, async c=>{
+  await ensureOperationalSchema(c.env);
+  const admin=c.get('admin')!,meetingId=Number(c.req.param('id'));
+  const meeting=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(meetingId).first<any>();
+  if(!meeting)return c.json({error:'Meeting not found'},404);
+  const term=await excoTermForMeeting(c.env,String(meeting.meeting_date));
+  if(!term)return c.json({error:'No EXCO term covers this meeting date'},409);
+
+  const b=await c.req.json().catch(()=>({})) as any;
+  const title=String(b.title||'').trim().slice(0,180);
+  const decision=String(b.decision_text||'').trim().slice(0,5000);
+  if(!title||!decision)return c.json({error:'Resolution title and decision text are required'},400);
+  const status=['draft','adopted','rejected','superseded'].includes(String(b.status))?String(b.status):'adopted';
+  const proposerId=b.proposer_member_id?Number(b.proposer_member_id):null;
+  const seconderId=b.seconder_member_id?Number(b.seconder_member_id):null;
+  for(const memberId of [proposerId,seconderId].filter(Boolean)){
+    const member=await c.env.DB.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(memberId).first<any>();
+    if(!member)return c.json({error:'Proposer and seconder must be registered active members'},400);
+  }
+
+  let responsibilityId:number|null=null;
+  if(b.create_followup && status!=='adopted')return c.json({error:'Only an adopted resolution can create an EXCO Workboard follow-up'},400);
+  if(b.create_followup){
+    if(term.status!=='current')return c.json({error:'Follow-up workboard tasks can only be created for the current EXCO term'},409);
+    const ownerMemberId=b.owner_member_id?Number(b.owner_member_id):null;
+    let owner:any=null;
+    if(ownerMemberId){
+      owner=await c.env.DB.prepare(`SELECT m.id,x.role_title FROM members m JOIN exco_role_assignments x ON x.member_id=m.id
+        WHERE m.id=? AND x.election_id=? LIMIT 1`).bind(ownerMemberId,term.election_id).first<any>();
+      if(!owner)return c.json({error:'Follow-up owner must be a member of the current EXCO'},400);
+    }
+    const rr=await c.env.DB.prepare(`INSERT INTO exco_responsibilities(term_id,owner_member_id,owner_role_title,title,description,due_date,status,created_by)
+      VALUES(?,?,?,?,?,?, 'todo',?)`).bind(term.id,ownerMemberId,owner?.role_title||null,
+        String(b.followup_title||title).trim().slice(0,160),
+        String(b.followup_description||decision).trim().slice(0,1000),
+        b.followup_due_date?String(b.followup_due_date).slice(0,10):null,admin.id).run();
+    responsibilityId=Number(rr.meta.last_row_id);
+    await c.env.DB.prepare(`INSERT INTO exco_responsibility_history(responsibility_id,action,to_status,note,admin_id)
+      VALUES(?, 'created','todo','Created from meeting resolution',?)`).bind(responsibilityId,admin.id).run();
+  }
+
+  const resolutionNo=String(b.resolution_no||'').trim().slice(0,60)||await nextResolutionNo(c.env,Number(term.id));
+  const r=await c.env.DB.prepare(`INSERT INTO meeting_resolutions(meeting_id,term_id,resolution_no,title,decision_text,proposer_member_id,seconder_member_id,vote_result,status,responsibility_id,created_by)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?)`).bind(meetingId,term.id,resolutionNo,title,decision,proposerId,seconderId,
+      String(b.vote_result||'').trim().slice(0,300)||null,status,responsibilityId,admin.id).run();
+  const id=Number(r.meta.last_row_id);
+  await c.env.DB.prepare(`INSERT INTO meeting_resolution_history(resolution_id,action,to_status,note,admin_id)
+    VALUES(?, 'created',?,?,?)`).bind(id,status,String(b.note||'').trim().slice(0,500)||null,admin.id).run();
+  await auditEntity(c.env,admin.id,'meeting_resolution_created','meeting_resolution',id,null,{
+    meeting_id:meetingId,term_id:term.id,resolution_no:resolutionNo,title,status,responsibility_id:responsibilityId
+  });
+  return c.json({ok:true,id,resolution_no:resolutionNo,responsibility_id:responsibilityId},201);
+});
+
+governanceRoute.patch('/meeting-resolutions/:id', requireFinance, async c=>{
+  await ensureOperationalSchema(c.env);
+  const admin=c.get('admin')!,id=Number(c.req.param('id')),b=await c.req.json().catch(()=>({})) as any;
+  const before=await c.env.DB.prepare("SELECT * FROM meeting_resolutions WHERE id=?").bind(id).first<any>();
+  if(!before)return c.json({error:'Resolution not found'},404);
+  const title=b.title===undefined?before.title:String(b.title||'').trim().slice(0,180);
+  const decision=b.decision_text===undefined?before.decision_text:String(b.decision_text||'').trim().slice(0,5000);
+  if(!title||!decision)return c.json({error:'Resolution title and decision text are required'},400);
+  const status=b.status===undefined?String(before.status):String(b.status);
+  if(!['draft','adopted','rejected','superseded'].includes(status))return c.json({error:'Invalid resolution status'},400);
+  const voteResult=b.vote_result===undefined?before.vote_result:(String(b.vote_result||'').trim().slice(0,300)||null);
+  await c.env.DB.prepare(`UPDATE meeting_resolutions SET title=?,decision_text=?,vote_result=?,status=?,updated_by=?,updated_at=datetime('now') WHERE id=?`)
+    .bind(title,decision,voteResult,status,admin.id,id).run();
+  if(status!==before.status || b.note){
+    await c.env.DB.prepare(`INSERT INTO meeting_resolution_history(resolution_id,action,from_status,to_status,note,admin_id)
+      VALUES(?, 'updated',?,?,?,?)`).bind(id,before.status,status,String(b.note||'').trim().slice(0,500)||null,admin.id).run();
+  }
+  const after=await c.env.DB.prepare("SELECT * FROM meeting_resolutions WHERE id=?").bind(id).first<any>();
+  await auditEntity(c.env,admin.id,'meeting_resolution_updated','meeting_resolution',id,before,after);
+  return c.json({ok:true,resolution:after});
+});
+
+governanceRoute.get('/meeting-resolutions/:id/history', requireAdmin, async c=>{
+  const id=Number(c.req.param('id'));
+  const rows=await c.env.DB.prepare(`SELECT h.*,a.name admin_name FROM meeting_resolution_history h
+    LEFT JOIN admins a ON a.id=h.admin_id WHERE h.resolution_id=? ORDER BY h.id DESC`).bind(id).all<any>();
+  return c.json({history:rows.results});
 });
 
 governanceRoute.post('/meetings/:id/actions', requireFinance, async c=>{
