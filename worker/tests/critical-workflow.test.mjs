@@ -295,6 +295,16 @@ test('donation idempotency retries must match the original donation payload', ()
   assert.match(source,/different donation/);
 });
 
+test('exact donation retries bypass mutable month and project lifecycle locks', () => {
+  const source = fs.readFileSync(path.join(root,'src/routes/donations.ts'),'utf8');
+  const retryLookup = source.indexOf('SELECT id,txn_id,status,donor_name,member_id,project_id,amount,note,donation_date FROM donations WHERE idempotency_key=?');
+  const monthLock = source.indexOf('requireOpenMonth(c.env,month)');
+  const projectLock = source.indexOf("Donations can only be linked to planned or active projects");
+  assert.ok(retryLookup >= 0 && retryLookup < monthLock, 'idempotent retry lookup must happen before month-close rejection');
+  assert.ok(retryLookup < projectLock, 'idempotent retry lookup must happen before project lifecycle rejection');
+  assert.match(source,/Exact idempotent retries return the original transaction/);
+});
+
 
 
 test('member fund can open Uncategorised expenses', () => {

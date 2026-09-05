@@ -83,18 +83,18 @@ donationsRoute.post("/",requireFinance,async c=>{
   if(!validDate(donationDate))return c.json({error:'Donation date must use YYYY-MM-DD'},400);
   const month=donationDate.slice(0,7);
   if(b.month&&b.month!==month)return c.json({error:'Donation month must match donation date'},400);
-  try{await requireOpenMonth(c.env,month)}catch(e:any){return c.json({error:e.message},409)}
-  const member=await donationMember(c,b.member_id); if(b.member_id!=null&&b.member_id!==''&&!member)return c.json({error:'Member not found'},404);
-  const project=await donationProject(c,b.project_id); if(b.project_id!=null&&b.project_id!==''&&!project)return c.json({error:'Project not found'},404);
-  if(project&&!['planned','active'].includes(String(project.status)))return c.json({error:'Donations can only be linked to planned or active projects'},409);
+  const requestedMemberId=b.member_id===null||b.member_id===undefined||b.member_id===''?0:Number(b.member_id);
+  const requestedProjectId=b.project_id===null||b.project_id===undefined||b.project_id===''?0:Number(b.project_id);
   const idempotencyKey=boundedText(b.idempotency_key,120);
   const idempotencyMatches=(existing:any)=>
     String(existing?.donor_name||'')===donor &&
     Number(existing?.amount||0)===Number(amount) &&
     String(existing?.donation_date||'')===donationDate &&
-    Number(existing?.member_id||0)===Number(member?.id||0) &&
-    Number(existing?.project_id||0)===Number(project?.id||0) &&
+    Number(existing?.member_id||0)===requestedMemberId &&
+    Number(existing?.project_id||0)===requestedProjectId &&
     String(existing?.note||'')===String(note||'');
+  // Exact idempotent retries return the original transaction before re-checking
+  // mutable current-state rules such as month closure or project lifecycle.
   if(idempotencyKey){
     const existing=await c.env.DB.prepare("SELECT id,txn_id,status,donor_name,member_id,project_id,amount,note,donation_date FROM donations WHERE idempotency_key=?").bind(idempotencyKey).first<any>();
     if(existing){
@@ -102,6 +102,10 @@ donationsRoute.post("/",requireFinance,async c=>{
       return c.json({id:existing.id,txn_id:existing.txn_id,status:existing.status,project_id:existing.project_id,idempotent:true},200);
     }
   }
+  try{await requireOpenMonth(c.env,month)}catch(e:any){return c.json({error:e.message},409)}
+  const member=await donationMember(c,b.member_id); if(b.member_id!=null&&b.member_id!==''&&!member)return c.json({error:'Member not found'},404);
+  const project=await donationProject(c,b.project_id); if(b.project_id!=null&&b.project_id!==''&&!project)return c.json({error:'Project not found'},404);
+  if(project&&!['planned','active'].includes(String(project.status)))return c.json({error:'Donations can only be linked to planned or active projects'},409);
   const txn=await generateTxnId(c.env,"D");
   let r:any;
   try{
