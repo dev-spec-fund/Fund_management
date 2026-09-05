@@ -154,6 +154,11 @@ test("project lifecycle keeps read-only controls and distinct audit actions", ()
   assert.match(projects,/project_cancelled/);
   assert.match(projects,/project_reopened/);
   assert.match(projects,/Only Super Admin can edit or reopen a completed\/cancelled project/);
+  assert.match(projects,/INVALID_PROJECT_TRANSITION/);
+  assert.match(projects,/planned:new Set\(\['planned','active','cancelled'\]\)/);
+  assert.match(projects,/active:new Set\(\['active','completed','cancelled'\]\)/);
+  assert.match(projects,/completed:new Set\(\['completed','planned','active'\]\)/);
+  assert.match(projects,/cancelled:new Set\(\['cancelled','planned','active'\]\)/);
   assert.match(projects,/audit_history/);
 });
 

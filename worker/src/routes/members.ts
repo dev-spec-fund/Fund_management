@@ -264,9 +264,35 @@ membersRoute.patch("/:id", requireFinance, async (c) => {
   if(!name || monthly===null || active===null || (body.telegram_id && !tg)) return c.json({error:"Invalid member data"},400);
   const duplicates = await findDuplicateMembers(c.env, name, phone, tg, id);
   if (duplicates.length) return c.json({error:"Possible duplicate member",duplicates},409);
+  if (Number(before.active)===1 && Number(active)===0 && before.telegram_id) {
+    const activeAdmin = await c.env.DB.prepare("SELECT id,role FROM admins WHERE telegram_id=? AND COALESCE(active,1)=1 LIMIT 1")
+      .bind(String(before.telegram_id)).first<any>();
+    if (activeAdmin) return c.json({
+      error:"This member still has active admin access. Deactivate/remove their admin account in Settings before deactivating the member.",
+      code:"MEMBER_HAS_ACTIVE_ADMIN",
+      admin_id:activeAdmin.id,
+      admin_role:activeAdmin.role
+    },409);
+  }
+  if (Number(before.active)===1 && Number(active)===0) {
+    const activeExco = await c.env.DB.prepare("SELECT id,role_title,term FROM exco_role_assignments WHERE member_id=? AND ended_at IS NULL ORDER BY id DESC LIMIT 1")
+      .bind(id).first<any>();
+    if (activeExco) return c.json({
+      error:"This member still holds a current EXCO role. End or replace that EXCO assignment before deactivating the member.",
+      code:"MEMBER_HAS_ACTIVE_EXCO_ROLE",
+      exco_assignment_id:activeExco.id,
+      exco_role:activeExco.role_title,
+      exco_term:activeExco.term||null
+    },409);
+  }
+  const monthlyChanged=Number(monthly)!==Number(before.monthly_amount);
+  const effective=monthlyChanged?currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives"):null;
+  if(monthlyChanged){
+    try{await requireOpenMonth(c.env,effective!);}catch(e:any){return c.json({error:e.message},409);}
+  }
   await c.env.DB.prepare("UPDATE members SET name=?,phone=?,active=?,telegram_id=?,normalized_name=?,normalized_phone=? WHERE id=?")
     .bind(name,phone||null,active,tg,normalizeName(name),normalizePhone(phone)||null,id).run();
-  if (Number(monthly)!==Number(before.monthly_amount)) { const effective=currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives"); try{await requireOpenMonth(c.env,effective);}catch(e:any){return c.json({error:e.message},409);} await setContributionRate(c.env,id,Number(monthly),effective,admin.id); }
+  if (monthlyChanged) await setContributionRate(c.env,id,Number(monthly),effective!,admin.id);
   const after = await c.env.DB.prepare("SELECT * FROM members WHERE id=?").bind(id).first<any>();
   await auditEntity(c.env,admin.id,body.active!==undefined&&body.active!==before.active?(body.active?"member_reactivated":"member_deactivated"):"member_updated","member",id,before,after);
   return c.json({ok:true});
@@ -300,6 +326,13 @@ membersRoute.post("/:id/exempt", requireFinance, async (c) => {
   if(!member) return c.json({error:"Member not found"},404);
   const reason=boundedText(body.reason,500);
   try { await requireOpenMonth(c.env,body.month); } catch(e:any){ return c.json({error:e.message},409); }
+  const allocated=await c.env.DB.prepare(`SELECT COALESCE(SUM(ca.amount),0) paid
+    FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id
+    WHERE ca.member_id=? AND ca.month=? AND c.status='approved'`).bind(id,body.month).first<any>();
+  if(Number(allocated?.paid||0)>0.004) return c.json({
+    error:"This month already has an approved contribution payment allocated to it. Remove/reverse the payment before granting an exemption.",
+    code:"EXEMPTION_HAS_PAYMENT"
+  },409);
   await c.env.DB.prepare("INSERT OR REPLACE INTO exemptions (member_id,month,reason,granted_by) VALUES (?,?,?,?)")
     .bind(id,body.month,reason||null,admin.id).run();
   await logAudit(c.env,admin.id,"member_exempted",`Member #${id} — ${body.month} — ${reason||''}`);

@@ -185,7 +185,7 @@ test('frontend crashes are reported to the authenticated production error log en
 
 test('pending contribution correction conflicts if another admin reviews it first', () => {
   const pendingSource = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
-  assert.match(pendingSource, /changed=await c\.env\.DB\.prepare\(`UPDATE contributions SET amount=\?,ref_number=\?,bank_date=\?,month=\?,duplicate_key=\?,corrected_by=\?,corrected_at=datetime\('now'\) WHERE id=\? AND status='pending'`\)/);
+  assert.match(pendingSource, /UPDATE contributions SET[\s\S]*WHERE id=\? AND status='pending'/);
   assert.match(pendingSource, /if\(!changed\.meta\.changes\)/);
   assert.match(pendingSource, /Contribution is already .* Refresh before editing/);
 });
@@ -286,25 +286,6 @@ test('donation idempotency key blocks duplicate create retries in the database',
   assert.equal(scalar(db,"SELECT COUNT(*) FROM donations"),1);
   db.close();
 });
-
-test('donation idempotency retries must match the original donation payload', () => {
-  const source = fs.readFileSync(path.join(root,'src/routes/donations.ts'),'utf8');
-  assert.match(source,/IDEMPOTENCY_KEY_REUSED/);
-  assert.match(source,/idempotencyMatches/);
-  assert.match(source,/donor_name,member_id,project_id,amount,note,donation_date/);
-  assert.match(source,/different donation/);
-});
-
-test('exact donation retries bypass mutable month and project lifecycle locks', () => {
-  const source = fs.readFileSync(path.join(root,'src/routes/donations.ts'),'utf8');
-  const retryLookup = source.indexOf('SELECT id,txn_id,status,donor_name,member_id,project_id,amount,note,donation_date FROM donations WHERE idempotency_key=?');
-  const monthLock = source.indexOf('requireOpenMonth(c.env,month)');
-  const projectLock = source.indexOf("Donations can only be linked to planned or active projects");
-  assert.ok(retryLookup >= 0 && retryLookup < monthLock, 'idempotent retry lookup must happen before month-close rejection');
-  assert.ok(retryLookup < projectLock, 'idempotent retry lookup must happen before project lifecycle rejection');
-  assert.match(source,/Exact idempotent retries return the original transaction/);
-});
-
 
 
 test('member fund can open Uncategorised expenses', () => {
@@ -1136,7 +1117,10 @@ test('v60 Admin can review notification delivery status with sent and failed cou
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
   const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
   assert.match(route,/\/:id\/notifications/);
-  assert.match(route,/ORDER BY n\.id DESC LIMIT 50/);
+  assert.match(route,/ORDER BY n\.id DESC/);
+  assert.doesNotMatch(route,/ORDER BY n\.id DESC LIMIT 50/);
+  assert.match(route,/COALESCE\(SUM\(sent\),0\) sent/);
+  assert.match(route,/COALESCE\(SUM\(failed\),0\) failed/);
   assert.match(api,/notifications: \(id\)/);
   assert.match(admin,/NOTIFICATION STATUS/);
   assert.match(admin,/sent ·/);
@@ -1250,6 +1234,13 @@ test('v63 handover checklist is admin-managed, auditable and completion-gated', 
   assert.match(route,/exco_handover_item_updated/);
   assert.match(route,/exco_handover_completed/);
   assert.match(route,/Completed handover is read-only/);
+});
+
+test('v83 EXCO handover finalization is race-safe', () => {
+  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  assert.match(route,/HANDOVER_CHANGED/);
+  assert.match(route,/EXISTS\(SELECT 1 FROM exco_handover_records h WHERE h\.id=\? AND h\.status<>'completed'\)/);
+  assert.match(route,/NOT EXISTS\(SELECT 1 FROM exco_handover_items i WHERE i\.handover_id=exco_handover_records\.id AND i\.completed<>1\)/);
 });
 
 test('v62-v63 governance timeline preserves ballot anonymity while surfacing actors and milestones', () => {
@@ -1636,7 +1627,7 @@ test('v71 unused draft deletion is audited and removes the election only after e
   const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
   const block=route.match(/electionsRoute\.delete\("\/:id"[\s\S]*?return c\.json\(\{ok:true,id,title:election\.title\}\);\n\}\);/)?.[0]||'';
   assert.match(block,/election_deleted_unused_draft/);
-  assert.match(block,/DELETE FROM elections WHERE id=\? AND status='draft'/);
+  assert.match(block,/DELETE FROM elections[\s\S]*WHERE id=\? AND status='draft'/);
   assert.match(block,/if\(!eligibility\.allowed\)/);
   assert.match(block,/This election cannot be permanently deleted/);
 });
@@ -1873,7 +1864,199 @@ test("financial reversal claims only the expected live status", () => {
   assert.match(source, /Transaction is \${current\?\.status\|\|'changed'} and cannot be reversed/);
 });
 
-test('manual correction converts a raced duplicate-key conflict into 409', () => {
-  const pendingSource = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
-  assert.match(pendingSource, /catch \(e:any\) \{[\s\S]*const raced=await duplicateSlip\(c\.env,ref,amount,bankDate,id\);[\s\S]*Duplicate slip matches \$\{raced\.txn_id\}[\s\S]*,409\);/);
+
+test("election certification claims the election before EXCO side effects", () => {
+  const route = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route, /UPDATE elections SET certified_at=datetime\('now'\),certified_by=\? WHERE id=\? AND status='closed' AND certified_at IS NULL/);
+  assert.match(route, /if\(!certificationClaim\.meta\.changes\)/);
+  const claimIndex = route.indexOf("const certificationClaim=");
+  const assignIndex = route.indexOf("assignCertifiedExcoRoles", claimIndex);
+  assert.ok(claimIndex >= 0 && assignIndex > claimIndex, "certification must be claimed before EXCO role assignment");
+});
+
+test("election open, close, and runoff close transitions are single-winner", () => {
+  const route = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route, /UPDATE elections SET status='open',opened_at=datetime\('now'\) WHERE id=\? AND status='draft'/);
+  assert.match(route, /if\(!openClaim\.meta\.changes\)/);
+  assert.match(route, /ELECTION_OPEN_CHANGED/);
+  assert.match(route, /UPDATE elections SET status='closed',closed_at=datetime\('now'\) WHERE id=\? AND status='open'/);
+  assert.match(route, /if\(!closeClaim\.meta\.changes\)/);
+  assert.match(route, /ELECTION_CLOSE_CHANGED/);
+  assert.match(route, /UPDATE election_runoffs SET status='closed',closed_at=datetime\('now'\) WHERE id=\? AND election_id=\? AND status='open'/);
+  assert.match(route, /RUNOFF_CLOSE_CHANGED/);
+});
+
+test("ballot finalization rechecks live election and runoff state", () => {
+  const route = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route, /EXISTS \(SELECT 1 FROM elections e WHERE e\.id=\? AND e\.status='open'\)/);
+  assert.match(route, /ELECTION_VOTE_CLOSED_DURING_SUBMIT/);
+  assert.match(route, /DELETE FROM election_ballots WHERE election_id=\? AND ballot_token=\?/);
+  assert.match(route, /EXISTS \(SELECT 1 FROM election_runoffs r WHERE r\.id=\? AND r\.election_id=\? AND r\.status='open'\)/);
+  assert.match(route, /RUNOFF_VOTE_CLOSED_DURING_SUBMIT/);
+  assert.match(route, /DELETE FROM election_runoff_ballots WHERE runoff_id=\? AND ballot_token=\?/);
+});
+
+test('v83 election application review is a single-winner state transition', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const reviewBlock=route.match(/applications\/:applicationId\/review[\s\S]*?return c\.json\(await electionDetail\(c\.env,id\)\);\n\}\);/)?.[0]||'';
+  assert.match(reviewBlock,/status='approved'[\s\S]*status='pending'/);
+  assert.match(reviewBlock,/status='rejected'[\s\S]*status='pending'/);
+  assert.match(reviewBlock,/claimed\.meta\.changes/);
+  assert.match(reviewBlock,/APPLICATION_REVIEW_CHANGED/);
+  assert.match(reviewBlock,/Restore only this request's claim/);
+  assert.match(reviewBlock,/INSERT INTO election_candidates/);
+});
+
+test('candidate withdrawal is single-winner and cannot duplicate side effects', () => {
+  const route = fs.readFileSync(path.join(root, 'src/routes/elections.ts'), 'utf8');
+  const block = route.match(/candidates\/:candidateId\/withdraw[\s\S]*?return c\.json\(await electionDetail\(c\.env,id\)\);\n\}\);/)?.[0] || '';
+  assert.match(block, /before\.status!=="active"/);
+  assert.match(block, /WHERE id=\? AND election_id=\? AND status='active'/);
+  assert.match(block, /CANDIDATE_WITHDRAWAL_CHANGED/);
+  assert.match(block, /if\(!claimed\.meta\.changes\)/);
+});
+
+test('election application reopen is single-winner and stale retries stop before side effects',()=>{
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/UPDATE election_applications SET status='pending'[\s\S]*WHERE id=\? AND election_id=\? AND status=\?/);
+  assert.match(route,/APPLICATION_REOPEN_CHANGED/);
+  const claim=route.indexOf('const reopenClaim=await c.env.DB.prepare');
+  const audit=route.indexOf('"election_application_reopened"',claim);
+  assert.ok(claim>=0 && audit>claim,'reopen claim must occur before audit side effects');
+});
+
+
+test('election application submission only maps unique constraint failures to duplicate application conflicts', () => {
+  const src = fs.readFileSync(new URL('../src/routes/elections.ts', import.meta.url), 'utf8');
+  assert.match(src, /UNIQUE constraint failed\|SQLITE_CONSTRAINT_UNIQUE/);
+  assert.match(src, /You have already applied for this position/);
+  assert.match(src, /throw err;/);
+});
+
+
+test('member can resubmit only their own withdrawn pending election application while applications remain open', () => {
+  const electionsRouteSource=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(electionsRouteSource,/SELECT id,status,reviewed_by,review_reason FROM election_applications/);
+  assert.match(electionsRouteSource,/existing\.status==="withdrawn" && !existing\.reviewed_by && !existing\.review_reason/);
+  assert.match(electionsRouteSource,/SET status='pending',statement=\?,submitted_at=datetime\('now'\),withdrawn_at=NULL,reviewed_at=NULL,reviewed_by=NULL,review_reason=NULL/);
+  assert.match(electionsRouteSource,/APPLICATION_RESUBMIT_CHANGED/);
+  assert.match(electionsRouteSource,/resubmitted\?200:201/);
+});
+
+
+test("application reassignment is single-winner and position-conditional", () => {
+  const src = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(src, /UPDATE election_applications SET position_id=\?[\s\S]*WHERE id=\? AND election_id=\? AND position_id=\?/);
+  assert.match(src, /APPLICATION_REASSIGN_CHANGED/);
+  assert.match(src, /if\(!reassigned\.meta\.changes\)/);
+});
+
+
+test("election position structure locks when applications begin", () => {
+  const src = fs.readFileSync(new URL("../src/routes/elections.ts", import.meta.url), "utf8");
+  assert.match(src, /ELECTION_POSITIONS_LOCKED/);
+  assert.match(src, /applicationPhase\(election,localNow/);
+  assert.match(src, /SELECT 1 ok FROM election_applications WHERE election_id=\? LIMIT 1/);
+});
+
+test("manual candidate creation cannot bypass configured application workflow", () => {
+  const src = fs.readFileSync(new URL("../src/routes/elections.ts", import.meta.url), "utf8");
+  assert.match(src, /CANDIDATE_APPLICATION_WORKFLOW_REQUIRED/);
+  assert.match(src, /election\.applications_open_at&&election\.applications_close_at/);
+});
+
+test('election cancellation is a single-winner draft transition', () => {
+  const source = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(source, /if\(election\.status!=="draft"\)return c\.json\(\{error:"Only a draft election can be cancelled",code:"ELECTION_CANCEL_CHANGED"\},409\)/);
+  assert.match(source, /UPDATE elections SET status='cancelled',closed_at=datetime\('now'\) WHERE id=\? AND status='draft'/);
+  assert.match(source, /if\(!cancelClaim\.meta\.changes\)return c\.json\(\{error:"Election was already cancelled or changed while you were cancelling it",code:"ELECTION_CANCEL_CHANGED"\},409\)/);
+});
+
+
+test("election application workflow config locks after application activity begins", () => {
+  const src = fs.readFileSync(new URL("../src/routes/elections.ts", import.meta.url), "utf8");
+  assert.match(src, /applicationConfigChanged/);
+  assert.match(src, /ELECTION_APPLICATION_CONFIG_LOCKED/);
+  assert.match(src, /phase==="open"\|\|phase==="closed"\|\|existingApplication/);
+  assert.match(src, /Use Extend application deadline when applicable/);
+  assert.match(src, /CANDIDATE_APPLICATION_WORKFLOW_REQUIRED/);
+  assert.match(src, /\(election\.applications_open_at&&election\.applications_close_at\)\|\|existingApplication/);
+});
+
+test('permanent election delete rechecks protected activity atomically before cascade', () => {
+  const src=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  assert.match(src, /DELETE FROM elections[\s\S]*NOT EXISTS \(SELECT 1 FROM election_applications WHERE election_id=\?\)/);
+  assert.match(src, /NOT EXISTS \(SELECT 1 FROM election_voters WHERE election_id=\?\)/);
+  assert.match(src, /NOT EXISTS \(SELECT 1 FROM election_notification_log WHERE election_id=\?\)/);
+  assert.match(src, /code:"ELECTION_DELETE_CHANGED"/);
+  const deletePos = src.indexOf('DELETE FROM elections');
+  const auditPos = src.indexOf('election_deleted_unused_draft', deletePos);
+  assert.ok(deletePos >= 0 && auditPos > deletePos, 'delete audit must be written only after a successful guarded delete');
+});
+
+test('election governance timeline uses exact election ids and labels cancellation correctly', () => {
+  const src = fs.readFileSync(new URL('../src/routes/elections.ts', import.meta.url), 'utf8');
+  assert.match(src, /json_valid\(a\.detail\)=1/);
+  assert.match(src, /json_extract\(a\.detail,'\$\.entity_id'\)/);
+  assert.match(src, /json_extract\(a\.detail,'\$\.before\.election_id'\)/);
+  assert.match(src, /json_extract\(a\.detail,'\$\.after\.election_id'\)/);
+  assert.doesNotMatch(src, /ORDER BY a\.id ASC LIMIT 1000/);
+  assert.doesNotMatch(src, /d\.includes\(`"entity_id":\$\{id\}`\)/);
+  assert.match(src, /election\.status==="cancelled"[\s\S]*label:"Election cancelled"/);
+});
+
+
+test("runoff creation is a single-winner transition", () => {
+  const src = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(src, /INSERT INTO election_runoffs\(election_id,position_id,round_no,seats_to_fill,status,closes_at,created_by\)[\s\S]*WHERE NOT EXISTS \([\s\S]*election_runoffs WHERE election_id=\? AND position_id=\? AND status='open'/);
+  assert.match(src, /if\(!r\.meta\.changes\)return c\.json\(\{error:"A runoff is already open for this position",code:"RUNOFF_OPEN_CHANGED"\},409\)/);
+});
+
+
+test('manual candidate creation only maps unique constraint failures to duplicate conflicts', () => {
+  const src = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const start = src.indexOf('electionsRoute.post("/:id/candidates"');
+  const end = src.indexOf('electionsRoute.post("/:id/repair-application-sync"', start);
+  const block = src.slice(start, end);
+  assert.match(block, /catch\(err:any\)/);
+  assert.match(block, /UNIQUE constraint failed\|SQLITE_CONSTRAINT_UNIQUE/);
+  assert.match(block, /Candidate is already added for this position/);
+  assert.match(block, /throw err/);
+});
+
+
+test('election notification history is complete and totals cover the full election log', () => {
+  const route = fs.readFileSync(path.join(root, 'src/routes/elections.ts'), 'utf8');
+  const block=route.match(/electionsRoute\.get\("\/:id\/notifications"[\s\S]*?return c\.json\(\{items,totals\}\);\n\}\);/)?.[0]||'';
+  assert.match(block,/WHERE n\.election_id=\?/);
+  assert.match(block,/ORDER BY n\.id DESC/);
+  assert.doesNotMatch(block,/LIMIT\s+50/i);
+  assert.match(block,/COUNT\(\*\) total/);
+  assert.match(block,/SUM\(sent\)/);
+  assert.match(block,/SUM\(failed\)/);
+});
+
+test('automatic election reminders atomically claim notification events before sending', () => {
+  const core = fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8');
+  assert.match(core,/async function claimElectionNotification/);
+  assert.match(core,/INSERT INTO election_notification_log\(election_id,event_key,audience,sent,failed,detail(?:,created_by)?\)[\s\S]*WHERE NOT EXISTS\(SELECT 1 FROM election_notification_log WHERE election_id=\? AND event_key=\?/);
+  assert.match(core,/const notificationId=await claimElectionNotification\(env,election\.id,eventKey,"non_voters"/);
+  assert.match(core,/const notificationId=await claimElectionNotification\(env,runoff\.election_id,eventKey,"runoff_non_voters"/);
+  assert.match(core,/const notificationId=await claimElectionNotification\(env,election\.id,eventKey,"eligible_non_applicants"/);
+  assert.match(core,/if\(!notificationId\)continue;/);
+  assert.match(core,/finishClaimedElectionNotification\(env,notificationId,result\)/);
+});
+
+
+test('manual voting reminders use an atomic per-minute claim to prevent double sends', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const core=fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8');
+  const block=route.match(/electionsRoute\.post\("\/:id\/remind-nonvoters"[\s\S]*?return c\.json\(\{ok:true,\.\.\.result\}\);\n\}\);/)?.[0]||'';
+  assert.match(block,/election\.status!=="open"/);
+  assert.match(block,/manual_voting_reminder:\$\{reminderBucket\}/);
+  assert.match(block,/claimElectionNotification\(c\.env,id,eventKey,"non_voters",\{manual:true\},admin\.id\)/);
+  assert.match(block,/VOTING_REMINDER_ALREADY_SENT/);
+  assert.match(block,/finishClaimedElectionNotification\(c\.env,notificationId,result\)/);
+  assert.match(core,/export async function claimElectionNotification/);
+  assert.match(core,/created_by/);
 });

@@ -7,7 +7,7 @@ import { getBranding } from "../db";
 import { esc, miniAppUrl, notifyAdmins } from "../botSupport";
 
 import {
-  iso, text, localNow, applicationPhase, notifyEligible, recordElectionNotification,
+  iso, text, localNow, applicationPhase, notifyEligible, recordElectionNotification, claimElectionNotification, finishClaimedElectionNotification,
   electionSetupLocked, synchronizeElectionApplications, evaluateElectionReadiness, processElectionLifecycle,
   calculateElectionResults, ensureExcoTerms, createExcoTermHandover, assignCertifiedExcoRoles,
   buildElectionSummary, memberForUser, electionDeleteEligibility, electionDetail
@@ -117,10 +117,14 @@ electionsRoute.patch("/exco/handover/:handoverId/items/:itemId", requireSuperAdm
   const body=await c.req.json<any>().catch(()=>({}));
   const completed=body.completed===undefined?Number(before.completed):body.completed?1:0;
   const note=body.note===undefined?before.note:text(body.note,500)||null;
-  await c.env.DB.prepare(`UPDATE exco_handover_items SET completed=?,note=?,
+  const update=await c.env.DB.prepare(`UPDATE exco_handover_items SET completed=?,note=?,
     completed_at=CASE WHEN ?=1 THEN COALESCE(completed_at,datetime('now')) ELSE NULL END,
-    completed_by=CASE WHEN ?=1 THEN ? ELSE NULL END WHERE id=? AND handover_id=?`)
-    .bind(completed,note,completed,completed,admin.id,itemId,handoverId).run();
+    completed_by=CASE WHEN ?=1 THEN ? ELSE NULL END
+    WHERE id=? AND handover_id=?
+      AND EXISTS(SELECT 1 FROM exco_handover_records h WHERE h.id=? AND h.status<>'completed')`)
+    .bind(completed,note,completed,completed,admin.id,itemId,handoverId,handoverId).run();
+  if(Number(update.meta?.changes||0)===0)
+    return c.json({error:"Handover changed while you were editing it. Refresh and try again",code:"HANDOVER_CHANGED"},409);
   const counts=await c.env.DB.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END) done
     FROM exco_handover_items WHERE handover_id=?`).bind(handoverId).first<any>();
   const status=Number(counts?.done||0)>0?"in_progress":"pending";
@@ -141,8 +145,17 @@ electionsRoute.post("/exco/handover/:handoverId/complete", requireSuperAdmin, as
   if(Number(counts?.total||0)===0||Number(counts?.done||0)!==Number(counts?.total||0))
     return c.json({error:"Complete every handover checklist item before finalizing handover"},409);
   const body=await c.req.json<any>().catch(()=>({})); const notes=text(body.notes,1000)||null;
-  await c.env.DB.prepare(`UPDATE exco_handover_records SET status='completed',notes=?,completed_at=datetime('now'),
-    completed_by=?,updated_at=datetime('now') WHERE id=?`).bind(notes,admin.id,handoverId).run();
+  const finalized=await c.env.DB.prepare(`UPDATE exco_handover_records SET status='completed',notes=?,completed_at=datetime('now'),
+    completed_by=?,updated_at=datetime('now')
+    WHERE id=? AND status<>'completed'
+      AND EXISTS(SELECT 1 FROM exco_handover_items i WHERE i.handover_id=exco_handover_records.id)
+      AND NOT EXISTS(SELECT 1 FROM exco_handover_items i WHERE i.handover_id=exco_handover_records.id AND i.completed<>1)`)
+    .bind(notes,admin.id,handoverId).run();
+  if(Number(finalized.meta?.changes||0)===0){
+    const current=await c.env.DB.prepare("SELECT status FROM exco_handover_records WHERE id=?").bind(handoverId).first<any>();
+    if(current?.status==="completed")return c.json({error:"Handover is already completed"},409);
+    return c.json({error:"Handover checklist changed while finalizing. Refresh and verify every item",code:"HANDOVER_CHANGED"},409);
+  }
   const after=await c.env.DB.prepare("SELECT * FROM exco_handover_records WHERE id=?").bind(handoverId).first<any>();
   await auditEntity(c.env,admin.id,"exco_handover_completed","exco_handover",handoverId,handover,after);
   return c.json({ok:true,handover:after});
@@ -364,14 +377,18 @@ electionsRoute.get("/:id/notifications", requireSuperAdmin, async c=>{
   const id=Number(c.req.param("id"));
   const election=await c.env.DB.prepare("SELECT id FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
-  const rows=await c.env.DB.prepare(`SELECT n.*,a.name created_by_name FROM election_notification_log n
-    LEFT JOIN admins a ON a.id=n.created_by WHERE n.election_id=?
-    ORDER BY n.id DESC LIMIT 50`).bind(id).all<any>();
+  const [rows,totalsRow]=await Promise.all([
+    c.env.DB.prepare(`SELECT n.*,a.name created_by_name FROM election_notification_log n
+      LEFT JOIN admins a ON a.id=n.created_by WHERE n.election_id=?
+      ORDER BY n.id DESC`).bind(id).all<any>(),
+    c.env.DB.prepare(`SELECT COUNT(*) total,COALESCE(SUM(sent),0) sent,COALESCE(SUM(failed),0) failed
+      FROM election_notification_log WHERE election_id=?`).bind(id).first<any>()
+  ]);
   const items=(rows.results as any[]).map((n:any)=>({
     ...n,
     detail:(()=>{try{return n.detail?JSON.parse(n.detail):null}catch{return null}})()
   }));
-  const totals=items.reduce((acc:any,n:any)=>({sent:acc.sent+Number(n.sent||0),failed:acc.failed+Number(n.failed||0)}),{sent:0,failed:0});
+  const totals={total:Number(totalsRow?.total||0),sent:Number(totalsRow?.sent||0),failed:Number(totalsRow?.failed||0)};
   return c.json({items,totals});
 });
 
@@ -383,14 +400,20 @@ electionsRoute.get("/:id/timeline", requireSuperAdmin, async c=>{
     LEFT JOIN admins certifier ON certifier.id=e.certified_by WHERE e.id=?`).bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
 
+  // Match this election by exact JSON ids. Substring matching (for example ID 2
+  // matching ID 20) can contaminate a governance timeline, and a global LIMIT
+  // can silently omit later events on long-lived installations.
   const audits=await c.env.DB.prepare(`SELECT a.id,a.action,a.detail,a.created_at,ad.name admin_name
     FROM audit_log a LEFT JOIN admins ad ON ad.id=a.admin_id
-    WHERE a.action LIKE 'election_%' OR a.action LIKE 'exco_%'
-    ORDER BY a.id ASC LIMIT 1000`).all<any>();
-  const relevant=(audits.results as any[]).filter((a:any)=>{
-    const d=String(a.detail||"");
-    return d.includes(`"entity_id":${id}`)||d.includes(`"election_id":${id}`)||d.includes(`\\"entity_id\\":${id}`)||d.includes(`\\"election_id\\":${id}`);
-  });
+    WHERE (a.action LIKE 'election_%' OR a.action LIKE 'exco_%')
+      AND json_valid(a.detail)=1
+      AND (
+        (json_extract(a.detail,'$.entity')='election' AND CAST(json_extract(a.detail,'$.entity_id') AS INTEGER)=?)
+        OR CAST(json_extract(a.detail,'$.before.election_id') AS INTEGER)=?
+        OR CAST(json_extract(a.detail,'$.after.election_id') AS INTEGER)=?
+      )
+    ORDER BY a.id ASC`).bind(id,id,id).all<any>();
+  const relevant=audits.results as any[];
   const notifications=await c.env.DB.prepare(`SELECT id,event_key,audience,sent,failed,created_at FROM election_notification_log
     WHERE election_id=? ORDER BY id`).bind(id).all<any>();
 
@@ -414,7 +437,9 @@ electionsRoute.get("/:id/timeline", requireSuperAdmin, async c=>{
     ...(notifications.results as any[]).map((n:any)=>({type:"notification",key:`notification:${n.id}`,label:`Notification · ${String(n.event_key).replaceAll("_"," ")}`,at:n.created_at,actor:"System",meta:{audience:n.audience,sent:Number(n.sent||0),failed:Number(n.failed||0)}}))
   ].filter((x:any)=>x.at);
   if(election.opened_at)events.push({type:"milestone",key:"opened",label:"Voting period began",at:election.opened_at,actor:"System"});
-  if(election.closed_at)events.push({type:"milestone",key:"closed",label:"Voting period ended",at:election.closed_at,actor:"System"});
+  if(election.closed_at)events.push(election.status==="cancelled"
+    ? {type:"milestone",key:"cancelled",label:"Election cancelled",at:election.closed_at,actor:"System"}
+    : {type:"milestone",key:"closed",label:"Voting period ended",at:election.closed_at,actor:"System"});
   if(election.certified_at)events.push({type:"milestone",key:"certified",label:"Official certification",at:election.certified_at,actor:election.certified_by_name||"Super Admin"});
   events.sort((a:any,b:any)=>String(a.at).localeCompare(String(b.at))||String(a.key).localeCompare(String(b.key)));
 
@@ -500,6 +525,13 @@ electionsRoute.patch("/:id", requireSuperAdmin, async c=>{
   const body=await c.req.json<any>(); const title=text(body.title||before.title);
   const opensAt=iso(body.opens_at??before.opens_at)||null,closesAt=iso(body.closes_at??before.closes_at)||null;
   const applicationsOpenAt=iso(body.applications_open_at??before.applications_open_at)||null,applicationsCloseAt=iso(body.applications_close_at??before.applications_close_at)||null;
+  const applicationConfigChanged=(applicationsOpenAt||null)!==(before.applications_open_at||null)||(applicationsCloseAt||null)!==(before.applications_close_at||null);
+  if(applicationConfigChanged){
+    const phase=applicationPhase(before,localNow(c.env.FUND_TIMEZONE || "Indian/Maldives"));
+    const existingApplication=await c.env.DB.prepare("SELECT 1 ok FROM election_applications WHERE election_id=? LIMIT 1").bind(id).first<any>();
+    if(phase==="open"||phase==="closed"||existingApplication)
+      return c.json({error:"Candidate application settings are locked after applications begin. Use Extend application deadline when applicable.",code:"ELECTION_APPLICATION_CONFIG_LOCKED"},409);
+  }
   if(opensAt&&closesAt&&closesAt<=opensAt)return c.json({error:"Voting close time must be after the opening time"},400);
   if(applicationsOpenAt&&applicationsCloseAt&&applicationsCloseAt<=applicationsOpenAt)return c.json({error:"Application close time must be after application opening time"},400);
   if(applicationsCloseAt&&opensAt&&applicationsCloseAt>opensAt)return c.json({error:"Candidate applications must close before voting opens"},400);
@@ -547,6 +579,10 @@ electionsRoute.post("/:id/positions", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
   if(await electionSetupLocked(c.env,election))return c.json({error:"Election setup is locked after the voter snapshot is created"},409);
+  const phase=applicationPhase(election,localNow(c.env.FUND_TIMEZONE || "Indian/Maldives"));
+  if(phase==="open"||phase==="closed")return c.json({error:"Election positions are locked once candidate applications have opened",code:"ELECTION_POSITIONS_LOCKED"},409);
+  const existingApplication=await c.env.DB.prepare("SELECT 1 ok FROM election_applications WHERE election_id=? LIMIT 1").bind(id).first<any>();
+  if(existingApplication)return c.json({error:"Election positions are locked after candidate applications have been submitted",code:"ELECTION_POSITIONS_LOCKED"},409);
   const body=await c.req.json<any>(); const title=text(body.title); if(!title)return c.json({error:"Position title is required"},400);
   const seats=Math.max(1,Math.min(20,Number(body.seats)||1)); const maxSelections=Math.max(1,Math.min(seats,Number(body.max_selections)||seats));
   const minSelections=Math.max(0,Math.min(maxSelections,Number(body.min_selections ?? 1)));
@@ -560,6 +596,8 @@ electionsRoute.post("/:id/candidates", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
   if(await electionSetupLocked(c.env,election))return c.json({error:"Election setup is locked after the voter snapshot is created"},409);
+  const existingApplication=await c.env.DB.prepare("SELECT 1 ok FROM election_applications WHERE election_id=? LIMIT 1").bind(id).first<any>();
+  if((election.applications_open_at&&election.applications_close_at)||existingApplication)return c.json({error:"Use the candidate application review workflow for this election",code:"CANDIDATE_APPLICATION_WORKFLOW_REQUIRED"},409);
   const body=await c.req.json<any>(); const positionId=Number(body.position_id),memberId=Number(body.member_id);
   const position=await c.env.DB.prepare("SELECT id FROM election_positions WHERE id=? AND election_id=?").bind(positionId,id).first<any>();
   const member=await c.env.DB.prepare("SELECT id,name FROM members WHERE id=? AND active=1").bind(memberId).first<any>();
@@ -568,7 +606,12 @@ electionsRoute.post("/:id/candidates", requireSuperAdmin, async c=>{
     const r=await c.env.DB.prepare("INSERT INTO election_candidates(election_id,position_id,member_id,display_name) VALUES(?,?,?,?)")
       .bind(id,positionId,memberId,member.name).run();
     await auditEntity(c.env,admin.id,"election_candidate_added","election_candidate",Number(r.meta.last_row_id),null,{election_id:id,position_id:positionId,member_id:memberId});
-  }catch{return c.json({error:"Candidate is already added for this position"},409)}
+  }catch(err:any){
+    const message=String(err?.message||err||"");
+    if(/UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE/i.test(message))
+      return c.json({error:"Candidate is already added for this position"},409);
+    throw err;
+  }
   return c.json(await electionDetail(c.env,id),201);
 });
 
@@ -606,10 +649,12 @@ electionsRoute.post("/:id/open", requireSuperAdmin, async c=>{
   await synchronizeElectionApplications(c.env,id,admin.id);
   const readiness=await evaluateElectionReadiness(c.env,election);
   if(!readiness.ready)return c.json({error:"Election is not ready to open voting",readiness},409);
-  await c.env.DB.batch([
-    c.env.DB.prepare("INSERT OR IGNORE INTO election_voters(election_id,member_id) SELECT ?,id FROM members WHERE active=1").bind(id),
-    c.env.DB.prepare("UPDATE elections SET status='open',opened_at=datetime('now') WHERE id=? AND status='draft'").bind(id)
-  ]);
+  const openClaim=await c.env.DB.prepare("UPDATE elections SET status='open',opened_at=datetime('now') WHERE id=? AND status='draft'")
+    .bind(id).run();
+  if(!openClaim.meta.changes){
+    return c.json({error:"Election was already opened or changed while you were opening it",code:"ELECTION_OPEN_CHANGED"},409);
+  }
+  await c.env.DB.prepare("INSERT OR IGNORE INTO election_voters(election_id,member_id) SELECT ?,id FROM members WHERE active=1").bind(id).run();
   await auditEntity(c.env,admin.id,"election_opened","election",id,election,{...election,status:"open"});
   const branding=await getBranding(c.env);
   const members=await c.env.DB.prepare(`SELECT m.telegram_id FROM election_voters v JOIN members m ON m.id=v.member_id
@@ -624,7 +669,11 @@ electionsRoute.post("/:id/open", requireSuperAdmin, async c=>{
 electionsRoute.post("/:id/close", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404); if(election.status!=="open")return c.json({error:"Election is not open"},409);
-  await c.env.DB.prepare("UPDATE elections SET status='closed',closed_at=datetime('now') WHERE id=?").bind(id).run();
+  const closeClaim=await c.env.DB.prepare("UPDATE elections SET status='closed',closed_at=datetime('now') WHERE id=? AND status='open'")
+    .bind(id).run();
+  if(!closeClaim.meta.changes){
+    return c.json({error:"Election was already closed or changed while you were closing it",code:"ELECTION_CLOSE_CHANGED"},409);
+  }
   await auditEntity(c.env,admin.id,"election_closed","election",id,election,{...election,status:"closed"});
   return c.json(await electionDetail(c.env,id));
 });
@@ -644,15 +693,31 @@ electionsRoute.delete("/:id", requireSuperAdmin, async c=>{
     },409);
   }
 
-  // Preserve a minimal audit record before deleting the draft. Member-facing
-  // election data is removed by D1 foreign-key cascades, while this audit entry
-  // records who removed the unused draft and when.
+  // Claim the delete only if the election is still an unused draft at the
+  // exact moment of deletion. This closes the race between the eligibility
+  // check above and a concurrent application/voter/runoff/governance write.
+  const result=await c.env.DB.prepare(`DELETE FROM elections
+    WHERE id=? AND status='draft'
+      AND NOT EXISTS (SELECT 1 FROM election_applications WHERE election_id=?)
+      AND NOT EXISTS (SELECT 1 FROM election_voters WHERE election_id=?)
+      AND NOT EXISTS (SELECT 1 FROM election_ballots WHERE election_id=?)
+      AND NOT EXISTS (SELECT 1 FROM election_runoffs WHERE election_id=?)
+      AND NOT EXISTS (SELECT 1 FROM exco_role_assignments WHERE election_id=?)
+      AND NOT EXISTS (SELECT 1 FROM exco_terms WHERE election_id=?)
+      AND NOT EXISTS (SELECT 1 FROM election_notification_log WHERE election_id=?)`)
+    .bind(id,id,id,id,id,id,id,id).run();
+  if(!result.meta.changes){
+    return c.json({
+      error:"Election changed or gained activity while you were deleting it. Refresh and review it again.",
+      code:"ELECTION_DELETE_CHANGED"
+    },409);
+  }
+
+  // Record deletion only after the guarded delete actually succeeds. The
+  // in-memory election snapshot is enough to preserve who deleted what.
   await auditEntity(c.env,admin.id,"election_deleted_unused_draft","election",id,election,{
     deleted:true,title:election.title,term:election.term||null
   });
-
-  const result=await c.env.DB.prepare("DELETE FROM elections WHERE id=? AND status='draft'").bind(id).run();
-  if(!result.meta.changes)return c.json({error:"Election could not be deleted"},409);
   return c.json({ok:true,id,title:election.title});
 });
 
@@ -660,7 +725,9 @@ electionsRoute.post("/:id/cancel", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
   if(await electionSetupLocked(c.env,election))return c.json({error:"An election cannot be cancelled after the voter snapshot is created"},409);
-  await c.env.DB.prepare("UPDATE elections SET status='cancelled',closed_at=datetime('now') WHERE id=?").bind(id).run();
+  if(election.status!=="draft")return c.json({error:"Only a draft election can be cancelled",code:"ELECTION_CANCEL_CHANGED"},409);
+  const cancelClaim=await c.env.DB.prepare("UPDATE elections SET status='cancelled',closed_at=datetime('now') WHERE id=? AND status='draft'").bind(id).run();
+  if(!cancelClaim.meta.changes)return c.json({error:"Election was already cancelled or changed while you were cancelling it",code:"ELECTION_CANCEL_CHANGED"},409);
   await auditEntity(c.env,admin.id,"election_cancelled","election",id,election,{...election,status:"cancelled"});
   return c.json(await electionDetail(c.env,id));
 });
@@ -678,9 +745,25 @@ electionsRoute.post("/:id/applications", async c=>{
   if(!position)return c.json({error:"Choose a valid available position"},400);
   try{
     const statement=text(body.statement,600)||null;
-    const r=await c.env.DB.prepare(`INSERT INTO election_applications(election_id,position_id,member_id,statement)
-      VALUES(?,?,?,?)`).bind(id,positionId,member.id,statement).run();
-    const applicationId=Number(r.meta.last_row_id);
+    const existing=await c.env.DB.prepare(`SELECT id,status,reviewed_by,review_reason FROM election_applications
+      WHERE election_id=? AND position_id=? AND member_id=? LIMIT 1`).bind(id,positionId,member.id).first<any>();
+    let applicationId:number;
+    let resubmitted=false;
+    if(existing){
+      const selfWithdrawn=existing.status==="withdrawn" && !existing.reviewed_by && !existing.review_reason;
+      if(!selfWithdrawn)return c.json({error:"You have already applied for this position"},409);
+      const reopened=await c.env.DB.prepare(`UPDATE election_applications
+        SET status='pending',statement=?,submitted_at=datetime('now'),withdrawn_at=NULL,reviewed_at=NULL,reviewed_by=NULL,review_reason=NULL
+        WHERE id=? AND election_id=? AND member_id=? AND status='withdrawn' AND reviewed_by IS NULL AND review_reason IS NULL`)
+        .bind(statement,existing.id,id,member.id).run();
+      if(!reopened.meta.changes)return c.json({error:"Application changed. Refresh and try again.",code:"APPLICATION_RESUBMIT_CHANGED"},409);
+      applicationId=Number(existing.id);
+      resubmitted=true;
+    }else{
+      const r=await c.env.DB.prepare(`INSERT INTO election_applications(election_id,position_id,member_id,statement)
+        VALUES(?,?,?,?)`).bind(id,positionId,member.id,statement).run();
+      applicationId=Number(r.meta.last_row_id);
+    }
 
     if(member.telegram_id){
       c.executionCtx.waitUntil((async()=>{
@@ -717,8 +800,13 @@ electionsRoute.post("/:id/applications", async c=>{
       election_id:id,position_id:positionId,member_id:member.id,status:"pending"
     });
 
-    return c.json({ok:true,id:applicationId,status:"pending"},201);
-  }catch{return c.json({error:"You have already applied for this position"},409)}
+    return c.json({ok:true,id:applicationId,status:"pending",resubmitted},resubmitted?200:201);
+  }catch(err:any){
+    const message=String(err?.message||err||"");
+    if(/UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE/i.test(message))
+      return c.json({error:"You have already applied for this position"},409);
+    throw err;
+  }
 });
 
 electionsRoute.post("/:id/applications/:applicationId/withdraw", async c=>{
@@ -748,18 +836,28 @@ electionsRoute.post("/:id/applications/:applicationId/review", requireSuperAdmin
     JOIN members m ON m.id=ea.member_id WHERE ea.id=? AND ea.election_id=?`).bind(applicationId,id).first<any>();
   if(!application)return c.json({error:"Application not found"},404); if(application.status!=="pending")return c.json({error:"Application is already decided"},409);
   const reason=text(body.reason,300)||null;
+  const reviewedAt=new Date().toISOString();
   if(decision==="approved"){
-    await c.env.DB.batch([
-      c.env.DB.prepare(`UPDATE election_applications SET status='approved',reviewed_at=datetime('now'),reviewed_by=?,review_reason=?,withdrawn_at=NULL WHERE id=? AND status='pending'`).bind(admin.id,reason,applicationId),
-      c.env.DB.prepare(`INSERT INTO election_candidates(election_id,position_id,member_id,display_name,status,withdrawn_at,withdrawn_by,withdrawal_reason)
+    const claimed=await c.env.DB.prepare(`UPDATE election_applications SET status='approved',reviewed_at=?,reviewed_by=?,review_reason=?,withdrawn_at=NULL WHERE id=? AND election_id=? AND status='pending'`)
+      .bind(reviewedAt,admin.id,reason,applicationId,id).run();
+    if(!claimed.meta.changes)return c.json({error:"Application review changed. Refresh and try again.",code:"APPLICATION_REVIEW_CHANGED"},409);
+    try{
+      await c.env.DB.prepare(`INSERT INTO election_candidates(election_id,position_id,member_id,display_name,status,withdrawn_at,withdrawn_by,withdrawal_reason)
         VALUES(?,?,?,?,'active',NULL,NULL,NULL)
         ON CONFLICT(election_id,position_id,member_id) DO UPDATE SET
           display_name=excluded.display_name,status='active',withdrawn_at=NULL,withdrawn_by=NULL,withdrawal_reason=NULL`)
-        .bind(id,application.position_id,application.member_id,application.member_name)
-    ]);
+        .bind(id,application.position_id,application.member_id,application.member_name).run();
+    }catch(err){
+      // Restore only this request's claim if candidate synchronization unexpectedly fails.
+      await c.env.DB.prepare(`UPDATE election_applications SET status='pending',reviewed_at=NULL,reviewed_by=NULL,review_reason=NULL
+        WHERE id=? AND election_id=? AND status='approved' AND reviewed_by=? AND reviewed_at=?`)
+        .bind(applicationId,id,admin.id,reviewedAt).run().catch(()=>null);
+      throw err;
+    }
   }else{
-    await c.env.DB.prepare(`UPDATE election_applications SET status='rejected',reviewed_at=datetime('now'),reviewed_by=?,review_reason=? WHERE id=? AND status='pending'`)
-      .bind(admin.id,reason,applicationId).run();
+    const claimed=await c.env.DB.prepare(`UPDATE election_applications SET status='rejected',reviewed_at=?,reviewed_by=?,review_reason=? WHERE id=? AND election_id=? AND status='pending'`)
+      .bind(reviewedAt,admin.id,reason,applicationId,id).run();
+    if(!claimed.meta.changes)return c.json({error:"Application review changed. Refresh and try again.",code:"APPLICATION_REVIEW_CHANGED"},409);
   }
   await auditEntity(c.env,admin.id,`election_application_${decision}`,"election_application",applicationId,{...application,election_id:id},{...application,election_id:id,status:decision,review_reason:reason});
   const applicant=await c.env.DB.prepare("SELECT telegram_id FROM members WHERE id=?").bind(application.member_id).first<any>();
@@ -791,8 +889,9 @@ electionsRoute.post("/:id/applications/:applicationId/reopen", requireSuperAdmin
     AND status IN ('pending','approved') LIMIT 1`).bind(id,application.position_id,application.member_id,applicationId).first<any>();
   if(duplicate)return c.json({error:"An active application already exists for this member and position"},409);
 
-  await c.env.DB.prepare(`UPDATE election_applications SET status='pending',reviewed_at=NULL,reviewed_by=NULL,review_reason=NULL,withdrawn_at=NULL
-    WHERE id=? AND election_id=?`).bind(applicationId,id).run();
+  const reopenClaim=await c.env.DB.prepare(`UPDATE election_applications SET status='pending',reviewed_at=NULL,reviewed_by=NULL,review_reason=NULL,withdrawn_at=NULL
+    WHERE id=? AND election_id=? AND status=?`).bind(applicationId,id,application.status).run();
+  if(!reopenClaim.meta.changes)return c.json({error:"Application reopen changed. Refresh and try again.",code:"APPLICATION_REOPEN_CHANGED"},409);
   // If the old approved candidacy had been withdrawn, keep the candidate row inactive until Admin approves again.
   await auditEntity(c.env,admin.id,"election_application_reopened","election_application",applicationId,application,{...application,status:"pending",election_id:id});
   if(application.telegram_id)c.executionCtx.waitUntil(sendMessage(c.env,application.telegram_id,
@@ -818,9 +917,12 @@ electionsRoute.post("/:id/applications/:applicationId/reassign", requireSuperAdm
     LIMIT 1`).bind(id,newPositionId,application.member_id,applicationId).first<any>();
   if(duplicate)return c.json({error:"This member already has an application for the selected position"},409);
 
-  const statements:any[]=[
-    c.env.DB.prepare("UPDATE election_applications SET position_id=? WHERE id=? AND election_id=?").bind(newPositionId,applicationId,id)
-  ];
+  const reassigned=await c.env.DB.prepare(`UPDATE election_applications SET position_id=?
+    WHERE id=? AND election_id=? AND position_id=?`)
+    .bind(newPositionId,applicationId,id,application.position_id).run();
+  if(!reassigned.meta.changes)return c.json({error:"Application assignment changed. Refresh and try again.",code:"APPLICATION_REASSIGN_CHANGED"},409);
+
+  const statements:any[]=[];
   if(application.status==="approved"){
     const candidate=await c.env.DB.prepare("SELECT * FROM election_candidates WHERE election_id=? AND position_id=? AND member_id=?")
       .bind(id,application.position_id,application.member_id).first<any>();
@@ -853,15 +955,15 @@ electionsRoute.post("/:id/candidates/:candidateId/withdraw", requireSuperAdmin, 
   if(await electionSetupLocked(c.env,election))return c.json({error:"Candidate changes are locked after the voter snapshot is created"},409);
   const before=await c.env.DB.prepare("SELECT * FROM election_candidates WHERE id=? AND election_id=?").bind(candidateId,id).first<any>();
   if(!before)return c.json({error:"Candidate not found"},404);
+  if(before.status!=="active")return c.json({error:"Candidate is already withdrawn",code:"CANDIDATE_WITHDRAWAL_CHANGED"},409);
   const body=await c.req.json<any>().catch(()=>({})); const reason=text(body.reason,300)||"Withdrawn";
-  await c.env.DB.batch([
-    c.env.DB.prepare(`UPDATE election_candidates SET status='withdrawn',withdrawn_at=datetime('now'),withdrawn_by=?,withdrawal_reason=?
-      WHERE id=? AND election_id=?`).bind(admin.id,reason,candidateId,id),
-    c.env.DB.prepare(`UPDATE election_applications
-      SET status='withdrawn',withdrawn_at=datetime('now'),review_reason=?,reviewed_by=?
-      WHERE election_id=? AND position_id=? AND member_id=? AND status='approved'`)
-      .bind(`Withdrawn by admin: ${reason}`,admin.id,id,before.position_id,before.member_id)
-  ]);
+  const claimed=await c.env.DB.prepare(`UPDATE election_candidates SET status='withdrawn',withdrawn_at=datetime('now'),withdrawn_by=?,withdrawal_reason=?
+    WHERE id=? AND election_id=? AND status='active'`).bind(admin.id,reason,candidateId,id).run();
+  if(!claimed.meta.changes)return c.json({error:"Candidate withdrawal changed. Refresh and try again.",code:"CANDIDATE_WITHDRAWAL_CHANGED"},409);
+  await c.env.DB.prepare(`UPDATE election_applications
+    SET status='withdrawn',withdrawn_at=datetime('now'),review_reason=?,reviewed_by=?
+    WHERE election_id=? AND position_id=? AND member_id=? AND status='approved'`)
+    .bind(`Withdrawn by admin: ${reason}`,admin.id,id,before.position_id,before.member_id).run();
   const after=await c.env.DB.prepare("SELECT * FROM election_candidates WHERE id=?").bind(candidateId).first<any>();
   await auditEntity(c.env,admin.id,"election_candidate_withdrawn","election_candidate",candidateId,before,{...after,election_id:id});
   const member=await c.env.DB.prepare("SELECT telegram_id,name FROM members WHERE id=?").bind(before.member_id).first<any>();
@@ -880,10 +982,16 @@ electionsRoute.post("/:id/remind-nonvoters", requireSuperAdmin, async c=>{
   await processElectionLifecycle(c.env);
   const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404); if(election.status!=="open")return c.json({error:"Election is not open"},409);
+  const admin=c.get("admin")!;
+  // One manual reminder batch per election per minute. This prevents a double tap
+  // or two admins acting together from sending the same Telegram reminder twice.
+  const reminderBucket=localNow(c.env.FUND_TIMEZONE || "Indian/Maldives").slice(0,16).replace(/[-:T]/g,"");
+  const eventKey=`manual_voting_reminder:${reminderBucket}`;
+  const notificationId=await claimElectionNotification(c.env,id,eventKey,"non_voters",{manual:true},admin.id);
+  if(!notificationId)return c.json({error:"A voting reminder was already sent moments ago. Please wait before sending another.",code:"VOTING_REMINDER_ALREADY_SENT"},409);
   const brand=await getBranding(c.env);
   const result=await notifyEligible(c.env,election,`🗳 <b>${brand.fund_name} · Voting reminder</b>\n\nYou are eligible to vote in <b>${election.title}</b> and have not yet submitted your ballot. Open the Mini App to vote.`,true);
-  const admin=c.get("admin")!;
-  await recordElectionNotification(c.env,id,`manual_voting_reminder:${Date.now()}`,"non_voters",result,{manual:true},admin.id);
+  await finishClaimedElectionNotification(c.env,notificationId,result);
   return c.json({ok:true,...result});
 });
 
@@ -896,12 +1004,14 @@ electionsRoute.post("/:id/runoffs", requireSuperAdmin, async c=>{
   const calculated=await calculateElectionResults(c.env,id);
   const tie=calculated.unresolved.find((x:any)=>Number(x.position_id)===positionId);
   if(!tie)return c.json({error:"This position does not currently require a runoff"},409);
-  const existing=await c.env.DB.prepare("SELECT id FROM election_runoffs WHERE election_id=? AND position_id=? AND status='open' LIMIT 1").bind(id,positionId).first<any>();
-  if(existing)return c.json({error:"A runoff is already open for this position"},409);
   const closesAt=iso(body.closes_at)||null;
   if(closesAt && closesAt<=localNow(c.env.FUND_TIMEZONE || "Indian/Maldives"))return c.json({error:"Runoff closing time must be in the future"},400);
   const r=await c.env.DB.prepare(`INSERT INTO election_runoffs(election_id,position_id,round_no,seats_to_fill,status,closes_at,created_by)
-    VALUES(?,?,?,?, 'open',?,?)`).bind(id,positionId,Number(tie.round_no||1),Number(tie.seats_to_fill||1),closesAt,admin.id).run();
+    SELECT ?,?,?,?,'open',?,?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM election_runoffs WHERE election_id=? AND position_id=? AND status='open'
+    )`).bind(id,positionId,Number(tie.round_no||1),Number(tie.seats_to_fill||1),closesAt,admin.id,id,positionId).run();
+  if(!r.meta.changes)return c.json({error:"A runoff is already open for this position",code:"RUNOFF_OPEN_CHANGED"},409);
   const runoffId=Number(r.meta.last_row_id);
   const statements:any[]=[
     ...tie.candidate_ids.map((candidateId:number)=>c.env.DB.prepare("INSERT INTO election_runoff_candidates(runoff_id,candidate_id) VALUES(?,?)").bind(runoffId,candidateId)),
@@ -926,7 +1036,11 @@ electionsRoute.post("/:id/runoffs/:runoffId/close", requireSuperAdmin, async c=>
   const before=await c.env.DB.prepare("SELECT * FROM election_runoffs WHERE id=? AND election_id=?").bind(runoffId,id).first<any>();
   if(!before)return c.json({error:"Runoff not found"},404);
   if(before.status!=="open")return c.json({error:"Runoff is not open"},409);
-  await c.env.DB.prepare("UPDATE election_runoffs SET status='closed',closed_at=datetime('now') WHERE id=?").bind(runoffId).run();
+  const closeClaim=await c.env.DB.prepare("UPDATE election_runoffs SET status='closed',closed_at=datetime('now') WHERE id=? AND election_id=? AND status='open'")
+    .bind(runoffId,id).run();
+  if(!closeClaim.meta.changes){
+    return c.json({error:"Runoff was already closed or changed while you were closing it",code:"RUNOFF_CLOSE_CHANGED"},409);
+  }
   await auditEntity(c.env,admin.id,"election_runoff_closed","election_runoff",runoffId,before,{...before,status:"closed",election_id:id});
   const calculated=await calculateElectionResults(c.env,id);
   return c.json({...await electionDetail(c.env,id),results:calculated.results,unresolved_ties:calculated.unresolved});
@@ -952,8 +1066,21 @@ electionsRoute.post("/:id/runoffs/:runoffId/vote", async c=>{
   if(!claimed.meta.changes)return c.json({error:"Your runoff ballot is already being processed"},409);
   const token=crypto.randomUUID();
   const statements:any[]=ids.map((candidateId:number)=>c.env.DB.prepare("INSERT INTO election_runoff_ballots(runoff_id,ballot_token,candidate_id) VALUES(?,?,?)").bind(runoffId,token,candidateId));
-  statements.push(c.env.DB.prepare("UPDATE election_runoff_voters SET voted_at=datetime('now'),vote_claim=NULL WHERE runoff_id=? AND member_id=? AND vote_claim=?").bind(runoffId,member.id,claim));
-  try{await c.env.DB.batch(statements)}catch(e){await c.env.DB.prepare("UPDATE election_runoff_voters SET vote_claim=NULL WHERE runoff_id=? AND member_id=? AND vote_claim=?").bind(runoffId,member.id,claim).run().catch(()=>{});throw e}
+  statements.push(c.env.DB.prepare(`UPDATE election_runoff_voters SET voted_at=datetime('now'),vote_claim=NULL
+    WHERE runoff_id=? AND member_id=? AND vote_claim=?
+      AND EXISTS (SELECT 1 FROM election_runoffs r WHERE r.id=? AND r.election_id=? AND r.status='open')`)
+    .bind(runoffId,member.id,claim,runoffId,id));
+  try{
+    const results=await c.env.DB.batch(statements);
+    const finalized=results[results.length-1];
+    if(!Number(finalized?.meta?.changes||0)){
+      await c.env.DB.batch([
+        c.env.DB.prepare("DELETE FROM election_runoff_ballots WHERE runoff_id=? AND ballot_token=?").bind(runoffId,token),
+        c.env.DB.prepare("UPDATE election_runoff_voters SET vote_claim=NULL WHERE runoff_id=? AND member_id=? AND vote_claim=?").bind(runoffId,member.id,claim)
+      ]).catch(()=>{});
+      return c.json({error:"Runoff voting closed while your ballot was being submitted. Please refresh.",code:"RUNOFF_VOTE_CLOSED_DURING_SUBMIT"},409);
+    }
+  }catch(e){await c.env.DB.prepare("UPDATE election_runoff_voters SET vote_claim=NULL WHERE runoff_id=? AND member_id=? AND vote_claim=?").bind(runoffId,member.id,claim).run().catch(()=>{});throw e}
   return c.json({ok:true,submitted:true});
 });
 
@@ -967,7 +1094,11 @@ electionsRoute.post("/:id/certify", requireSuperAdmin, async c=>{
   const calculated=await calculateElectionResults(c.env,id);
   if(calculated.unresolved.length)return c.json({error:"Resolve all tied seats with runoff voting before certification",unresolved_ties:calculated.unresolved},409);
 
-  await c.env.DB.prepare("UPDATE elections SET certified_at=datetime('now'),certified_by=? WHERE id=? AND certified_at IS NULL").bind(admin.id,id).run();
+  const certificationClaim=await c.env.DB.prepare("UPDATE elections SET certified_at=datetime('now'),certified_by=? WHERE id=? AND status='closed' AND certified_at IS NULL")
+    .bind(admin.id,id).run();
+  if(!certificationClaim.meta.changes){
+    return c.json({error:"Election was already certified or changed while you were certifying it",code:"ELECTION_CERTIFICATION_CHANGED"},409);
+  }
   const after=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   const elected=await assignCertifiedExcoRoles(c.env,after,calculated.results,after.certified_at);
   const excoTerm=await createExcoTermHandover(c.env,after,after.certified_at);
@@ -1014,7 +1145,20 @@ electionsRoute.post("/:id/vote", async c=>{
     }
   }
   // The voter row records only participation. Ballot rows contain no member_id.
-  statements.push(c.env.DB.prepare("UPDATE election_voters SET voted_at=datetime('now'),vote_claim=NULL WHERE election_id=? AND member_id=? AND voted_at IS NULL AND vote_claim=?").bind(id,member.id,claim));
-  try{await c.env.DB.batch(statements);}catch(e){await c.env.DB.prepare("UPDATE election_voters SET vote_claim=NULL WHERE election_id=? AND member_id=? AND vote_claim=?").bind(id,member.id,claim).run().catch(()=>{});throw e;}
+  statements.push(c.env.DB.prepare(`UPDATE election_voters SET voted_at=datetime('now'),vote_claim=NULL
+    WHERE election_id=? AND member_id=? AND voted_at IS NULL AND vote_claim=?
+      AND EXISTS (SELECT 1 FROM elections e WHERE e.id=? AND e.status='open')`)
+    .bind(id,member.id,claim,id));
+  try{
+    const results=await c.env.DB.batch(statements);
+    const finalized=results[results.length-1];
+    if(!Number(finalized?.meta?.changes||0)){
+      await c.env.DB.batch([
+        c.env.DB.prepare("DELETE FROM election_ballots WHERE election_id=? AND ballot_token=?").bind(id,token),
+        c.env.DB.prepare("UPDATE election_voters SET vote_claim=NULL WHERE election_id=? AND member_id=? AND vote_claim=?").bind(id,member.id,claim)
+      ]).catch(()=>{});
+      return c.json({error:"Voting closed while your ballot was being submitted. Please refresh.",code:"ELECTION_VOTE_CLOSED_DURING_SUBMIT"},409);
+    }
+  }catch(e){await c.env.DB.prepare("UPDATE election_voters SET vote_claim=NULL WHERE election_id=? AND member_id=? AND vote_claim=?").bind(id,member.id,claim).run().catch(()=>{});throw e;}
   return c.json({ok:true,submitted:true});
 });

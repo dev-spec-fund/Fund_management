@@ -65,10 +65,16 @@ function ProjectForm({admin,onClose,onSaved,project=null}){
     <div className="sans" style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Budget (optional)</div><input className="sans" type="number" min="0" step="0.01" value={form.budget} onChange={e=>setForm({...form,budget:e.target.value})} placeholder="Leave blank for open-cost project" style={inputStyle}/>
     <Field label="Start date" type="date" value={form.start_date} onChange={v=>setForm({...form,start_date:v})}/><Field label="Target end date (optional)" type="date" value={form.target_end_date} onChange={v=>setForm({...form,target_end_date:v})}/>
     <div className="sans" style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Responsible member (optional)</div><select className="sans" value={form.responsible_member_id} onChange={e=>setForm({...form,responsible_member_id:e.target.value})} style={inputStyle}><option value="">Not assigned</option>{members.filter(m=>Number(m.active)!==0).map(m=><option key={m.id} value={m.id}>{m.member_code} · {m.name}</option>)}</select>
-    <div className="sans" style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Status</div><select className="sans" value={form.status} onChange={e=>setForm({...form,status:e.target.value})} style={inputStyle}><option value="planned">Planned</option><option value="active">Active</option>{project&&<><option value="completed">Completed</option><option value="cancelled">Cancelled</option></>}</select>
+    <div className="sans" style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Status</div><select className="sans" value={form.status} onChange={e=>setForm({...form,status:e.target.value})} style={inputStyle}>{project?projectStatusOptions(project.status).map(([value,label])=><option key={value} value={value}>{label}</option>):<><option value="planned">Planned</option><option value="active">Active</option></>}</select>
     {locked&&<div className="sans" style={{fontSize:10,color:"var(--warning)",marginBottom:10}}>This project is read-only. Only Super Admin can edit or reopen it.</div>}
     <PrimaryButton onClick={busy||locked?undefined:save}>{locked?"Read only":busy?"Saving…":project?"Save changes":"Create project"}</PrimaryButton>
   </Modal>;
+}
+
+function projectStatusOptions(current){
+  const labels={planned:"Planned",active:"Active",completed:"Completed",cancelled:"Cancelled"};
+  const allowed={planned:["planned","active","cancelled"],active:["active","completed","cancelled"],completed:["completed","planned","active"],cancelled:["cancelled","planned","active"]};
+  return (allowed[current]||[current]).map(value=>[value,labels[value]||value]);
 }
 
 function ProjectDetails({project,admin,onClose,onSaved}){

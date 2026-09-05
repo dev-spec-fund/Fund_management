@@ -123,16 +123,27 @@ projectsRoute.patch('/:id', requireFinance, async c=>{
   const targetEnd=b.target_end_date===undefined?before.target_end_date:(String(b.target_end_date||'').trim()||null);
   if(startDate&&!validDate(startDate))return c.json({error:'Start date must use YYYY-MM-DD'},400); if(targetEnd&&!validDate(targetEnd))return c.json({error:'Target end date must use YYYY-MM-DD'},400); if(startDate&&targetEnd&&targetEnd<startDate)return c.json({error:'Target end date cannot be before the start date'},400);
   const status=requestedStatus; if(!['planned','active','completed','cancelled'].includes(status))return c.json({error:'Invalid project status'},400);
+  const allowedTransitions:any={
+    planned:new Set(['planned','active','cancelled']),
+    active:new Set(['active','completed','cancelled']),
+    completed:new Set(['completed','planned','active']),
+    cancelled:new Set(['cancelled','planned','active']),
+  };
+  if(!allowedTransitions[String(before.status)]?.has(status)) return c.json({error:`Invalid project status transition: ${before.status} → ${status}`,code:'INVALID_PROJECT_TRANSITION'},409);
   const responsible=b.responsible_member_id===undefined?before.responsible_member_id:(b.responsible_member_id?Number(b.responsible_member_id):null);
   if(responsible){const member=await c.env.DB.prepare('SELECT id FROM members WHERE id=? AND active=1').bind(responsible).first();if(!member)return c.json({error:'Responsible member not found or inactive'},409);}
   const completing=status==='completed'&&before.status!=='completed'; const cancelling=status==='cancelled'&&before.status!=='cancelled';
-  await c.env.DB.prepare(`UPDATE projects SET name=?,description=?,budget=?,start_date=?,target_end_date=?,status=?,responsible_member_id=?,updated_at=datetime('now'),
+  const update=await c.env.DB.prepare(`UPDATE projects SET name=?,description=?,budget=?,start_date=?,target_end_date=?,status=?,responsible_member_id=?,updated_at=datetime('now'),
     completed_at=CASE WHEN ? THEN datetime('now') WHEN ?!='completed' THEN NULL ELSE completed_at END,
     completed_by=CASE WHEN ? THEN ? WHEN ?!='completed' THEN NULL ELSE completed_by END,
     cancelled_at=CASE WHEN ? THEN datetime('now') WHEN ?!='cancelled' THEN NULL ELSE cancelled_at END,
     cancelled_by=CASE WHEN ? THEN ? WHEN ?!='cancelled' THEN NULL ELSE cancelled_by END,
-    cancel_reason=CASE WHEN ?='cancelled' THEN ? ELSE NULL END WHERE id=?`)
-    .bind(name,description,budget,startDate,targetEnd,status,responsible,completing?1:0,status,completing?1:0,admin.id,status,cancelling?1:0,status,cancelling?1:0,admin.id,status,status,boundedText(b.cancel_reason,500)||null,id).run();
+    cancel_reason=CASE WHEN ?='cancelled' THEN ? ELSE NULL END WHERE id=? AND status=?`)
+    .bind(name,description,budget,startDate,targetEnd,status,responsible,completing?1:0,status,completing?1:0,admin.id,status,cancelling?1:0,status,cancelling?1:0,admin.id,status,status,boundedText(b.cancel_reason,500)||null,id,String(before.status)).run();
+  if(!Number(update.meta?.changes||0)){
+    const current=await projectRow(c,id);
+    return c.json({error:`Project changed to ${current?.status||'another state'} while you were editing it. Refresh and try again.`,code:'PROJECT_CHANGED'},409);
+  }
   const after=await projectRow(c,id);
   const action = completing ? 'project_completed' : cancelling ? 'project_cancelled' : reopening ? 'project_reopened' : 'project_updated';
   await auditEntity(c.env,admin.id,action,'project',id,before,after);

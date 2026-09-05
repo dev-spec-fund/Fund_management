@@ -131,6 +131,8 @@ donationsRoute.patch("/:id",requireFinance,async c=>{
   const before=await c.env.DB.prepare("SELECT * FROM donations WHERE id=?").bind(id).first<any>();
   if(!before)return c.json({error:"Donation not found"},404);
   if(before.status!=='active')return c.json({error:`${String(before.status).replace(/^./,x=>x.toUpperCase())} donations cannot be edited`},409);
+  const currentProject=await donationProject(c,before.project_id);
+  if(currentProject&&!['planned','active'].includes(String(currentProject.status)))return c.json({error:`Project ${currentProject.project_code} is ${currentProject.status}. Reopen the project before editing this linked donation.`,code:'PROJECT_LOCKED'},409);
   const originalDate=String(before.donation_date||before.created_at||'').slice(0,10);
   const originalMonth=String(before.transaction_month||originalDate.slice(0,7));
   try{await requireOpenMonth(c.env,originalMonth)}catch(e:any){return c.json({error:e.message},409)}

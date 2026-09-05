@@ -44,6 +44,22 @@ async function notificationAlreadySent(env:any,electionId:number,eventKey:string
   return !!row;
 }
 
+export async function claimElectionNotification(env:any,electionId:number,eventKey:string,audience:string,detail:any=null,createdBy:number|null=null){
+  const claimed=await env.DB.prepare(`INSERT INTO election_notification_log(election_id,event_key,audience,sent,failed,detail,created_by)
+    SELECT ?,?,?,0,0,?,?
+    WHERE NOT EXISTS(SELECT 1 FROM election_notification_log WHERE election_id=? AND event_key=? LIMIT 1)`)
+    .bind(electionId,eventKey,audience,detail==null?null:JSON.stringify(detail),createdBy,electionId,eventKey).run();
+  if(!claimed.meta.changes)return null;
+  return Number(claimed.meta.last_row_id);
+}
+
+export async function finishClaimedElectionNotification(env:any,notificationId:number,result:any){
+  const sent=Number(result?.sent||0),failed=Number(result?.failed||0);
+  await env.DB.prepare("UPDATE election_notification_log SET sent=?,failed=? WHERE id=?")
+    .bind(sent,failed,notificationId).run();
+  return {sent,failed};
+}
+
 async function notifyRunoffNonVoters(env:any,runoff:any,message:string){
   const rows=await env.DB.prepare(`SELECT m.telegram_id FROM election_runoff_voters v
     JOIN members m ON m.id=v.member_id
@@ -64,10 +80,11 @@ async function processElectionClosingReminders(env:any){
     const closeMs=Date.parse(`${election.closes_at}Z`);
     if(!Number.isFinite(closeMs)||!Number.isFinite(nowMs)||closeMs-nowMs>24*60*60*1000)continue;
     const eventKey="voting_closing_24h";
-    if(await notificationAlreadySent(env,election.id,eventKey))continue;
+    const notificationId=await claimElectionNotification(env,election.id,eventKey,"non_voters",{closes_at:election.closes_at});
+    if(!notificationId)continue;
     const result=await notifyEligible(env,election,
       `⏳ <b>${brand.fund_name} · ${election.title}</b>\n\nVoting closes within 24 hours and you have not voted yet. Open the Mini App to submit your secret ballot.`,true);
-    await recordElectionNotification(env,election.id,eventKey,"non_voters",result,{closes_at:election.closes_at});
+    await finishClaimedElectionNotification(env,notificationId,result);
   }
 
   const runoffs=await env.DB.prepare(`SELECT r.*,e.title election_title,ep.title position_title
@@ -77,10 +94,11 @@ async function processElectionClosingReminders(env:any){
     const closeMs=Date.parse(`${runoff.closes_at}Z`);
     if(!Number.isFinite(closeMs)||!Number.isFinite(nowMs)||closeMs-nowMs>24*60*60*1000)continue;
     const eventKey=`runoff_closing_24h:${runoff.id}`;
-    if(await notificationAlreadySent(env,runoff.election_id,eventKey))continue;
+    const notificationId=await claimElectionNotification(env,runoff.election_id,eventKey,"runoff_non_voters",{runoff_id:runoff.id,closes_at:runoff.closes_at});
+    if(!notificationId)continue;
     const result=await notifyRunoffNonVoters(env,runoff,
       `⏳ <b>${brand.fund_name} · Runoff Vote</b>\n\nThe runoff for <b>${runoff.position_title}</b> in ${runoff.election_title} closes within 24 hours. Open the Mini App to vote.`);
-    await recordElectionNotification(env,runoff.election_id,eventKey,"runoff_non_voters",result,{runoff_id:runoff.id,closes_at:runoff.closes_at});
+    await finishClaimedElectionNotification(env,notificationId,result);
   }
 }
 
@@ -93,6 +111,9 @@ async function processApplicationReminders(env:any){
   for(const election of rows.results as any[]){
     const closeMs=Date.parse(`${election.applications_close_at}Z`);
     if(!Number.isFinite(currentMs)||!Number.isFinite(closeMs)||closeMs-currentMs>24*60*60*1000)continue;
+    const eventKey="applications_closing_24h";
+    const notificationId=await claimElectionNotification(env,election.id,eventKey,"eligible_non_applicants",{closes_at:election.applications_close_at});
+    if(!notificationId)continue;
     const members=await env.DB.prepare(`SELECT m.* FROM members m WHERE m.active=1 AND m.telegram_id IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM election_applications ea WHERE ea.election_id=? AND ea.member_id=m.id AND ea.status IN ('pending','approved'))`).bind(election.id).all<any>();
     const brand=await getBranding(env);
@@ -100,8 +121,8 @@ async function processApplicationReminders(env:any){
       `⏳ <b>${brand.fund_name} · ${election.title}</b>\n\nCandidate applications close within 24 hours. All registered active members can apply for an available EXCO position in the Mini App.`
     )));
     const result={sent:deliveries.filter((r:any)=>r.status==="fulfilled").length,failed:deliveries.filter((r:any)=>r.status==="rejected").length};
+    await finishClaimedElectionNotification(env,notificationId,result);
     await env.DB.prepare("UPDATE elections SET application_reminder_sent_at=datetime('now') WHERE id=? AND application_reminder_sent_at IS NULL").bind(election.id).run();
-    await recordElectionNotification(env,election.id,"applications_closing_24h","eligible_non_applicants",result,{closes_at:election.applications_close_at});
     await auditEntity(env,null,"election_application_reminder_sent","election",election.id,null,{election_id:election.id,sent:result.sent,failed:result.failed});
   }
 }
