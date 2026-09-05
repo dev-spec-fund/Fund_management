@@ -109,9 +109,11 @@ export default function Members({ isAdmin, admin }) {
       {memberPage.rows.map((m) => {
         const monthly = outstandingByMember.get(Number(m.id));
         const status = memberStatus(m);
-        const paid = Number(monthly?.paid ?? (status === "paid" ? m.monthly_amount : 0));
-        const due = status === "exempt" || status === "inactive" ? 0 : Math.max(0, Number(m.monthly_amount) - paid);
-        const memberPercent = Number(m.monthly_amount) > 0 ? Math.min(100, Math.round((paid / Number(m.monthly_amount)) * 100)) : 0;
+        const required = Number(monthly?.monthly_amount ?? m.monthly_amount ?? 0);
+        const paid = Number(monthly?.paid ?? (status === "paid" ? required : 0));
+        const noContributionDue = status === "exempt" || status === "inactive" || status === "not_applicable" || required <= 0.004;
+        const due = noContributionDue ? 0 : Math.max(0, required - paid);
+        const memberPercent = required > 0 ? Math.min(100, Math.round((paid / required) * 100)) : 0;
         return (
           <div key={m.id} onClick={() => setSelected(m)} style={{ background: m.active ? "var(--card)" : "var(--button-soft)", opacity: m.active ? 1 : 0.65, border: "1px solid var(--border)", borderRadius: 12, padding: "11px 12px", marginBottom: 7, cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
@@ -121,13 +123,19 @@ export default function Members({ isAdmin, admin }) {
               </div>
               <StatusBadge status={status} />
             </div>
-            {m.active && status !== "exempt" && <>
-              <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginTop: 8, color: "var(--muted)" }}>
-                <span>MVR {fmt(paid)} of {fmt(m.monthly_amount)} paid</span>
-                <span style={{ color: due > 0 ? "var(--danger)" : "var(--success)", fontWeight: 650 }}>{due > 0 ? `MVR ${fmt(due)} due` : "Complete"}</span>
-              </div>
-              <div style={{ height: 4, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", marginTop: 5 }}><div style={{ width: `${memberPercent}%`, height: "100%", background: status === "partial" ? "var(--warning-4)" : "var(--success)" }} /></div>
-            </>}
+            {m.active && status !== "exempt" && (
+              status === "not_applicable" || required <= 0.004 ? (
+                <div className="sans" style={{ fontSize: 10, marginTop: 8, color: "var(--muted)" }}>
+                  No contribution due for {monthLabel}
+                </div>
+              ) : <>
+                <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginTop: 8, color: "var(--muted)" }}>
+                  <span>MVR {fmt(paid)} of {fmt(required)} paid</span>
+                  <span style={{ color: due > 0 ? "var(--danger)" : "var(--success)", fontWeight: 650 }}>{due > 0 ? `MVR ${fmt(due)} due` : "Complete"}</span>
+                </div>
+                <div style={{ height: 4, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", marginTop: 5 }}><div style={{ width: `${memberPercent}%`, height: "100%", background: status === "partial" ? "var(--warning-4)" : "var(--success)" }} /></div>
+              </>
+            )}
           </div>
         );
       })}

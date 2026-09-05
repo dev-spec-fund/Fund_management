@@ -354,3 +354,11 @@ test('new member inserts explicitly store a Maldives-local joined date', () => {
   assert.match(pending, /currentDate\(c\.env\.FUND_TIMEZONE/);
   assert.match(callbacks, /currentDate\(env\.FUND_TIMEZONE/);
 });
+
+
+test('admin member cards do not show a due amount for not-applicable months', () => {
+  const members = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Members.jsx'),'utf8');
+  assert.match(members,/status === "not_applicable"/);
+  assert.match(members,/No contribution due for \{monthLabel\}/);
+  assert.match(members,/monthly\?\.monthly_amount/);
+});
