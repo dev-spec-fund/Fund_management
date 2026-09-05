@@ -35,10 +35,11 @@ export function PageState({ kind = "empty", title, message, action, compact = fa
   const isLoading = kind === "loading";
   const resolvedTitle = title || (isLoading ? "Loading…" : isError ? "Something went wrong" : "Nothing to show");
   return (
-    <div className="sans" role={isError ? "alert" : "status"} aria-live={isError ? "assertive" : "polite"} style={{
+    <div className={`sans app-page-state app-page-state--${kind}${compact?" app-page-state--compact":""}`} role={isError ? "alert" : "status"} aria-live={isError ? "assertive" : "polite"} style={{
       padding: compact ? "20px 14px" : "38px 18px", textAlign: "center", color: "var(--muted)"
     }}>
-      <div style={{fontSize:13,fontWeight:700,color:isError?"var(--danger)":"var(--primary-text)"}}>{resolvedTitle}</div>
+      {isLoading&&<span className="app-loading-pulse" aria-hidden="true"/>}
+      <div className="app-page-state-title" style={{fontSize:13,fontWeight:700,color:isError?"var(--danger)":"var(--primary-text)"}}>{resolvedTitle}</div>
       {message && <div style={{fontSize:11,lineHeight:1.5,margin:"6px auto 0",maxWidth:320,color:"var(--soft)"}}>{message}</div>}
       {action && <div style={{marginTop:12,display:"flex",justifyContent:"center"}}>{action}</div>}
     </div>

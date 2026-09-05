@@ -3339,3 +3339,257 @@ button:not(:disabled):active {
   .member-overview-election-title{font-size:19px}
   .member-overview-election-action{flex-basis:76px;font-size:8px}
 }
+
+
+/* v68 UI smoothing + mobile polish */
+:root {
+  --ui-fast: 120ms;
+  --ui-medium: 180ms;
+  --ui-slow: 240ms;
+  --ui-ease: cubic-bezier(.22,.8,.24,1);
+}
+
+/* Tap/press feedback across the Mini App without affecting disabled controls. */
+button,
+[role="button"],
+.expense-row,
+.member-election-card,
+.election-archive-row,
+.project-card,
+.activity-row {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  transition:
+    transform var(--ui-fast) ease-out,
+    opacity var(--ui-fast) ease-out,
+    background-color var(--ui-medium) ease-out,
+    border-color var(--ui-medium) ease-out,
+    box-shadow var(--ui-medium) ease-out;
+}
+
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(.985);
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: default !important;
+}
+
+/* Prevent small layout jumps while data is loading or switching pages. */
+.page-panel {
+  min-height: 100%;
+  opacity: 1;
+}
+.page-panel--active {
+  animation: v68-page-fade var(--ui-medium) var(--ui-ease) both !important;
+}
+@keyframes v68-page-fade {
+  from { opacity: .82; }
+  to { opacity: 1; }
+}
+
+/* Dedicated scroll viewport tuning for Telegram/iOS. */
+.app-page-content {
+  scroll-behavior: smooth;
+  scroll-padding-top: 12px;
+  scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+}
+.app-page-content > * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Modal enter animation and cleaner iPhone safe-area behavior. */
+.app-modal-overlay {
+  animation: v68-overlay-in var(--ui-medium) ease-out both;
+  background: color-mix(in srgb, var(--overlay) 94%, transparent) !important;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.app-modal-sheet {
+  animation: v68-sheet-in var(--ui-slow) var(--ui-ease) both;
+  box-shadow: 0 -18px 42px rgba(0,0,0,.22);
+}
+.app-modal-header {
+  min-height: 56px !important;
+  padding-top: max(5px, env(safe-area-inset-top) * .15) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.app-modal-body {
+  scroll-padding-top: 10px;
+  scroll-padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+@keyframes v68-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes v68-sheet-in {
+  from { opacity: .7; translate: 0 16px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* Consistent loading treatment instead of sudden text-only state changes. */
+.app-page-state {
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.app-page-state--compact {
+  min-height: 74px;
+}
+.app-loading-pulse {
+  width: 24px;
+  height: 24px;
+  display: block;
+  border-radius: 999px;
+  margin: 0 auto 10px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--primary);
+  animation: v68-loading-spin .72s linear infinite;
+}
+.app-page-state-title {
+  transition: opacity var(--ui-medium) ease-out;
+}
+@keyframes v68-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Smooth card appearance and more stable text wrapping. */
+.member-election-card,
+.election-archive-row,
+.official-exco-card,
+.exco-term-card,
+.exco-handover-card,
+.exco-workboard-card,
+.election-dashboard,
+.election-summary-card,
+.member-governance-card,
+.meeting-resolution-card,
+.expense-row {
+  contain: layout style;
+}
+.member-election-card,
+.expense-row,
+.election-dashboard-card,
+.election-archive-row {
+  transition:
+    background-color var(--ui-medium) ease-out,
+    border-color var(--ui-medium) ease-out,
+    box-shadow var(--ui-medium) ease-out,
+    opacity var(--ui-medium) ease-out !important;
+}
+.member-election-card b,
+.member-election-card span,
+.expense-row b,
+.expense-row span,
+.election-dashboard-card b,
+.election-dashboard-card span {
+  overflow-wrap: anywhere;
+}
+
+/* Inputs/selects use consistent touch targets on phones. */
+input,
+select,
+textarea {
+  min-height: 40px;
+  box-sizing: border-box;
+}
+textarea {
+  min-height: 76px;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--focus) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus) 20%, transparent);
+  transition: border-color var(--ui-fast) ease-out, box-shadow var(--ui-fast) ease-out;
+}
+
+/* Bottom navigation: stable spacing and a little more breathing room above iPhone home indicator. */
+.admin-tab-strip.app-icon-nav {
+  bottom: max(8px, env(safe-area-inset-bottom)) !important;
+  padding-bottom: 6px !important;
+  min-height: 48px;
+}
+.app-nav-item {
+  touch-action: manipulation;
+}
+
+/* Long admin/member pages: keep section spacing consistent and avoid cramped controls. */
+.member-section-title {
+  margin-top: 14px;
+}
+.election-dashboard,
+.official-exco-card,
+.exco-term-card,
+.exco-handover-card,
+.exco-workboard-card,
+.election-archive-card,
+.member-governance-card {
+  scroll-margin-top: 12px;
+}
+
+/* Small-screen refinements. */
+@media (max-width: 420px) {
+  .app-modal-sheet {
+    border-radius: 18px 18px 0 0 !important;
+  }
+  .app-modal-body {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+  .app-modal-header {
+    padding-left: 14px !important;
+    padding-right: 10px !important;
+  }
+  .election-dashboard,
+  .official-exco-card,
+  .exco-term-card,
+  .exco-handover-card,
+  .exco-workboard-card,
+  .election-archive-card,
+  .member-governance-card {
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .app-page-content {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .admin-tab-strip.app-icon-nav {
+    width: calc(100% - 10px) !important;
+  }
+}
+
+/* Respect accessibility settings and keep the app snappy on lower-end devices. */
+@media (prefers-reduced-motion: reduce) {
+  html,
+  .app-page-content {
+    scroll-behavior: auto !important;
+  }
+  .app-modal-overlay,
+  .app-modal-sheet,
+  .page-panel--active,
+  .app-loading-pulse {
+    animation: none !important;
+  }
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    transition: none !important;
+  }
+}

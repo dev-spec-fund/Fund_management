@@ -54,6 +54,7 @@ export function Modal({ title, onClose, action, children, closeDisabled = false 
       role="presentation"
       onFocusCapture={keepFocusedFieldVisible}
       style={{
+        "--app-modal-vh": `${viewport.height}px`,
         position: "fixed",
         left: 0,
         right: 0,

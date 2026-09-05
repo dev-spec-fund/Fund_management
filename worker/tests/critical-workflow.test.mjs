@@ -1451,3 +1451,44 @@ test('v67 overview election card prioritizes immediate member election action', 
   assert.match(overview,/e\.status === "draft" && e\.application_phase === "open"/);
   assert.match(overview,/Number\(e\.open_runoffs \|\| 0\) > 0/);
 });
+
+
+test('v68 global UI smoothing adds modal, page, loading and tap polish', () => {
+  const css=fs.readFileSync(path.resolve(root,'../frontend/src/styles.css'),'utf8');
+  assert.match(css,/v68 UI smoothing \+ mobile polish/);
+  assert.match(css,/v68-page-fade/);
+  assert.match(css,/v68-overlay-in/);
+  assert.match(css,/v68-sheet-in/);
+  assert.match(css,/app-loading-pulse/);
+  assert.match(css,/scroll-padding-bottom/);
+  assert.match(css,/env\(safe-area-inset-bottom\)/);
+  assert.match(css,/prefers-reduced-motion: reduce/);
+});
+
+test('v68 shared loading state has stable visual hook without changing content semantics', () => {
+  const shared=fs.readFileSync(path.resolve(root,'../frontend/src/components/Shared.jsx'),'utf8');
+  assert.match(shared,/app-page-state--\$\{kind\}/);
+  assert.match(shared,/app-loading-pulse/);
+  assert.match(shared,/aria-live/);
+  assert.match(shared,/role=\{isError \? "alert" : "status"\}/);
+});
+
+test('v68 modal preserves single-scroll design and exposes stable viewport CSS value', () => {
+  const modal=fs.readFileSync(path.resolve(root,'../frontend/src/components/FormControls.jsx'),'utf8');
+  assert.match(modal,/--app-modal-vh/);
+  assert.match(modal,/app-modal-overlay/);
+  assert.match(modal,/app-modal-sheet/);
+  assert.match(modal,/app-modal-body/);
+  assert.match(modal,/overflowY: "auto"/);
+  assert.match(modal,/env\(safe-area-inset-bottom\)/);
+});
+
+test('v68 mobile polish does not replace functional navigation or modal controls', () => {
+  const app=fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
+  const modal=fs.readFileSync(path.resolve(root,'../frontend/src/components/FormControls.jsx'),'utf8');
+  assert.match(app,/app-nav-item/);
+  assert.match(app,/aria-current/);
+  assert.match(modal,/aria-label="Close"/);
+  assert.match(modal,/role="dialog"/);
+  assert.match(modal,/aria-modal="true"/);
+});
