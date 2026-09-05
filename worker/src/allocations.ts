@@ -97,19 +97,35 @@ export async function approveWithAllocations(env: Env, contributionId: number, a
   if(contribution.status!=="pending") throw new Error(`Already ${contribution.status}`);
 
   const plan=await buildAllocationPlan(env,contribution);
+  // Claim the exact pending row before touching allocations. The claim marker
+  // prevents a losing concurrent approval batch from deleting/reinserting the
+  // winner's allocations after its own status update affected zero rows.
+  const claim=`allocation-claim:${crypto.randomUUID()}`;
   const statements:any[]=[
-    env.DB.prepare("UPDATE contributions SET status='approved',approved_by=?,approved_at=datetime('now'),ocr_raw=NULL WHERE id=? AND status='pending'").bind(adminId,contributionId),
-    env.DB.prepare("DELETE FROM contribution_allocations WHERE contribution_id=?").bind(contributionId),
+    env.DB.prepare("UPDATE contributions SET ocr_raw=? WHERE id=? AND status='pending' AND ocr_raw IS ?")
+      .bind(claim,contributionId,contribution.ocr_raw??null),
+    env.DB.prepare(`DELETE FROM contribution_allocations
+      WHERE contribution_id=? AND EXISTS (
+        SELECT 1 FROM contributions c WHERE c.id=? AND c.status='pending' AND c.ocr_raw=?
+      )`).bind(contributionId,contributionId,claim),
   ];
   for(const a of plan){
     statements.push(env.DB.prepare(`
       INSERT INTO contribution_allocations(contribution_id,member_id,month,amount)
-      VALUES(?,?,?,?)
-    `).bind(contributionId,contribution.member_id,a.month,a.amount));
+      SELECT ?,?,?,?
+      WHERE EXISTS (
+        SELECT 1 FROM contributions c WHERE c.id=? AND c.status='pending' AND c.ocr_raw=?
+      )
+    `).bind(contributionId,contribution.member_id,a.month,a.amount,contributionId,claim));
   }
+  statements.push(
+    env.DB.prepare("UPDATE contributions SET status='approved',approved_by=?,approved_at=datetime('now'),ocr_raw=NULL WHERE id=? AND status='pending' AND ocr_raw=?")
+      .bind(adminId,contributionId,claim)
+  );
   const result=await env.DB.batch(statements);
-  const changed=(result[0] as any)?.meta?.changes;
-  if(!changed) throw new Error("Already reviewed");
+  const claimed=(result[0] as any)?.meta?.changes;
+  const approved=(result[result.length-1] as any)?.meta?.changes;
+  if(!claimed || !approved) throw new Error("Already reviewed");
   return {contribution,allocations:plan};
 }
 

@@ -200,6 +200,11 @@ test('critical financial workflow guards remain wired after stability hardening'
   assert.match(governanceSource, /financial_reversals WHERE entity_type=\? AND entity_id=\?/);
   assert.match(pendingSource, /duplicateSlip/);
   assert.match(pendingSource, /approveWithAllocations/);
+  const allocationSource = fs.readFileSync(path.join(root, 'src/allocations.ts'), 'utf8');
+  assert.match(allocationSource, /allocation-claim:\$\{crypto\.randomUUID\(\)\}/);
+  assert.match(allocationSource, /status='pending' AND ocr_raw IS \?/);
+  assert.match(allocationSource, /status='pending' AND c\.ocr_raw=\?/);
+  assert.match(allocationSource, /if\(!claimed \|\| !approved\) throw new Error\("Already reviewed"\)/);
   assert.match(expensesSource, /idempotency_key/);
   assert.match(expensesSource, /status='voided'/);
   assert.match(projectsSource, /donation_received/);
