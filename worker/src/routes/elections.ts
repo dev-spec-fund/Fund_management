@@ -213,8 +213,15 @@ electionsRoute.get("/", async c=>{
     (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id) eligible,
     (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id AND v.voted_at IS NOT NULL) voted
     FROM elections e
-    WHERE ? IS NOT NULL OR e.status<>'draft'
-    ORDER BY CASE e.status WHEN 'open' THEN 0 WHEN 'draft' THEN 1 WHEN 'closed' THEN 2 ELSE 3 END,e.id DESC`)
+    WHERE ? IS NOT NULL
+       OR e.status<>'draft'
+       OR (e.status='draft' AND e.applications_open_at IS NOT NULL AND e.applications_close_at IS NOT NULL)
+    ORDER BY CASE
+      WHEN e.status='draft' AND e.applications_open_at IS NOT NULL AND e.applications_close_at IS NOT NULL THEN 0
+      WHEN e.status='open' THEN 1
+      WHEN e.status='closed' THEN 2
+      WHEN e.status='draft' THEN 3
+      ELSE 4 END,e.id DESC`)
     .bind(admin?.id||null).all<any>();
   const result=[];
   for(const e of rows.results as any[]){
@@ -247,7 +254,8 @@ electionsRoute.get("/:id", async c=>{
     const v=await c.env.DB.prepare("SELECT voted_at FROM election_voters WHERE election_id=? AND member_id=?").bind(id,member.id).first<any>();
     eligible=!!v;my_vote=!!v?.voted_at;
   }
-  if(!admin && detail.status==="draft")return c.json({error:"Election not available"},404);
+  if(!admin && detail.status==="draft" && !(detail.applications_open_at && detail.applications_close_at))
+    return c.json({error:"Election not available"},404);
   let results:any[]=[]; let unresolved_ties:any[]=[];
   if(detail.status==="closed" && (admin || detail.certified_at)){
     const calculated=await calculateElectionResults(c.env,id);

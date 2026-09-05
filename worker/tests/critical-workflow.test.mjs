@@ -778,3 +778,18 @@ test('member APIs expose current and historical EXCO positions', () => {
   assert.match(index,/current_exco/);
   assert.match(index,/exco_history/);
 });
+
+
+test('members can see draft elections during configured application stage', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/e\.status='draft' AND e\.applications_open_at IS NOT NULL AND e\.applications_close_at IS NOT NULL/);
+  assert.match(route,/detail\.status==="draft" && !\(detail\.applications_open_at && detail\.applications_close_at\)/);
+  assert.doesNotMatch(route,/if\(!admin && detail\.status==="draft"\)return c\.json/);
+});
+
+test('true admin-only election drafts remain hidden from members', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/Election not available/);
+  assert.match(route,/applications_open_at/);
+  assert.match(route,/applications_close_at/);
+});
