@@ -3,7 +3,7 @@ import { api } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
 import { adminCan } from "./utils/permissions";
-import { currentMonthValue } from "./utils/date";
+import { getAdminReportMonth, saveAdminReportMonth } from "./utils/adminReportMonth";
 import {
   Home, Clock3, Users, Activity as ActivityIcon, ReceiptText, FolderKanban,
   BarChart3, CalendarDays, Settings as SettingsIcon, History,
@@ -31,34 +31,15 @@ function applyAppTheme(theme = resolveAppTheme()) {
 // truth inside the Mini App; the device/browser preference is fallback only.
 applyAppTheme();
 
-const CHUNK_RELOAD_KEY = "fund_chunk_reload_once";
-
-function resilientImport(loader) {
-  return loader().catch((error) => {
-    const message=String(error?.message||error||"");
-    const chunkFailure=/module script|dynamically imported module|ChunkLoadError|Loading chunk/i.test(message);
-    if(chunkFailure && typeof window!=="undefined"){
-      try{
-        if(sessionStorage.getItem(CHUNK_RELOAD_KEY)!=="1"){
-          sessionStorage.setItem(CHUNK_RELOAD_KEY,"1");
-          window.location.reload();
-          return new Promise(()=>{});
-        }
-      }catch{}
-    }
-    throw error;
-  });
-}
-
 const pageLoaders = {
-  members: () => resilientImport(() => import("./pages/Members")),
-  reports: () => resilientImport(() => import("./pages/Reports")),
-  expenses: () => resilientImport(() => import("./pages/Expenses")),
-  projects: () => resilientImport(() => import("./pages/Projects")),
-  pending: () => resilientImport(() => import("./pages/PendingApprovals")),
-  meetings: () => resilientImport(() => import("./pages/Meetings")),
-  settings: () => resilientImport(() => import("./pages/Settings")),
-  memberViews: () => resilientImport(() => import("./pages/MemberViews")),
+  members: () => import("./pages/Members"),
+  reports: () => import("./pages/Reports"),
+  expenses: () => import("./pages/Expenses"),
+  projects: () => import("./pages/Projects"),
+  pending: () => import("./pages/PendingApprovals"),
+  meetings: () => import("./pages/Meetings"),
+  settings: () => import("./pages/Settings"),
+  memberViews: () => import("./pages/MemberViews"),
 };
 
 const Members = lazy(pageLoaders.members);
@@ -125,15 +106,19 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [bootstrapSummary, setBootstrapSummary] = useState(null);
+  const [adminMonth, setAdminMonthState] = useState(getAdminReportMonth());
+  const setAdminMonth = (value) => {
+    if(!/^\d{4}-\d{2}$/.test(String(value||""))) return;
+    saveAdminReportMonth(value);
+    setAdminMonthState(value);
+  };
   const [tab, setTab] = useState("overview");
   const [mode, setMode] = useState("member");
-  const [adminReportMonth, setAdminReportMonth] = useState(() => currentMonthValue());
   const [mountedTabs, setMountedTabs] = useState(() => new Set(["overview"]));
   const contentScrollRef = useRef(null);
   const lastWarmRef = useRef({ key: "", at: 0 });
   const [navLabelTab, setNavLabelTab] = useState(tab);
   const bootStartedAt = useRef(typeof performance !== "undefined" ? performance.now() : 0);
-  const backgroundedAtRef = useRef(0);
 
   const isAdmin = !!me?.admin;
   const isMember = !!me?.member;
@@ -224,28 +209,6 @@ export default function App() {
 
   useEffect(() => {
     if (!me) return undefined;
-    const refreshAfterBackground = () => {
-      if (document.visibilityState === "hidden") {
-        backgroundedAtRef.current=Date.now();
-        return;
-      }
-      const hiddenFor=backgroundedAtRef.current ? Date.now()-backgroundedAtRef.current : 0;
-      backgroundedAtRef.current=0;
-      if(hiddenFor>=30_000) api.refreshAfterResume("telegram-resume");
-    };
-    const onPageShow = (event) => {
-      if(event.persisted) api.refreshAfterResume("page-restore");
-    };
-    document.addEventListener("visibilitychange", refreshAfterBackground);
-    window.addEventListener("pageshow", onPageShow);
-    return () => {
-      document.removeEventListener("visibilitychange", refreshAfterBackground);
-      window.removeEventListener("pageshow", onPageShow);
-    };
-  }, [me]);
-
-  useEffect(() => {
-    if (!me) return undefined;
 
     // Performance Stage 1: preload JavaScript chunks only.
     // API data is fetched on actual navigation, where the shared GET cache and
@@ -296,7 +259,6 @@ export default function App() {
       adminView,
       canFinance,
       memberId: me?.member?.id || null,
-      reportMonth: adminView ? adminReportMonth : "",
     }).catch(() => {});
   };
 
@@ -322,9 +284,9 @@ export default function App() {
   };
 
   const renderPage = (page) => {
-    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} />;
+    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} adminMonth={adminView ? adminMonth : null} />;
     if (page === "pending" && canFinance) return <PendingApprovals />;
-    if (page === "members" && adminView) return <Members isAdmin admin={me.admin} reportMonth={adminReportMonth} onReportMonthChange={setAdminReportMonth} />;
+    if (page === "members" && adminView) return <Members isAdmin admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} />;
     if (page === "history" && memberView) return <MyHistory member={me.member} />;
     if (page === "fund" && memberView) return <FundView />;
     if (page === "activity") return <Activity isAdmin={adminView} canFinance={canFinance} />;
@@ -334,9 +296,9 @@ export default function App() {
     if (page === "profile" && memberView) return <MyProfile member={me.member} setTab={openTab} />;
     if (page === "expenses" && canFinance) return <Expenses admin={me.admin} />;
     if (page === "projects" && canFinance) return <Projects admin={me.admin} />;
-    if (page === "reports" && adminView) return <Reports setTab={openTab} admin={me.admin} reportMonth={adminReportMonth} onReportMonthChange={setAdminReportMonth} />;
+    if (page === "reports" && adminView) return <Reports setTab={openTab} admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} />;
     if (page === "meetings" && adminView) return <Meetings admin={me.admin} />;
-    if (page === "settings" && adminView) return <Settings admin={me.admin} />;
+    if (page === "settings" && adminView) return <Settings admin={me.admin} adminMonth={adminMonth} onAdminMonthChange={setAdminMonth} />;
     return null;
   };
 

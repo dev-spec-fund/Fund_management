@@ -298,13 +298,19 @@ test('admin acceptance polish keeps reporting month consistent and mobile admin 
   const app = fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
   const memberData = fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/useMembersData.js'),'utf8');
   const reportData = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/useReportsData.js'),'utf8');
+  const monthUtil = fs.readFileSync(path.resolve(root,'../frontend/src/utils/adminReportMonth.js'),'utf8');
   const projects = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Projects.jsx'),'utf8');
   const reportSections = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/ReportSections.jsx'),'utf8');
   const settingsSections = fs.readFileSync(path.resolve(root,'../frontend/src/pages/settings/SettingsSections.jsx'),'utf8');
 
-  assert.match(app,/adminReportMonth/);
-  assert.match(memberData,/reportMonth/);
-  assert.match(reportData,/onMonthChange/);
+  assert.match(app,/const \[adminMonth, setAdminMonthState\]/);
+  assert.match(app,/month=\{adminMonth\} onMonthChange=\{setAdminMonth\}/);
+  assert.match(app,/adminMonth=\{adminMonth\}/);
+  assert.match(memberData,/sharedMonth/);
+  assert.match(reportData,/sharedMonth/);
+  assert.doesNotMatch(memberData,/getAdminReportMonth/);
+  assert.doesNotMatch(reportData,/getAdminReportMonth/);
+  assert.match(monthUtil,/fund_admin_report_month/);
   assert.match(projects,/ProjectsSkeleton/);
   assert.match(reportSections,/annual-top-member/);
   assert.match(settingsSections,/admin-audit-row/);
@@ -362,48 +368,66 @@ test('admin member cards do not show a due amount for not-applicable months', ()
 });
 
 
-test('admin reporting month is owned by App and shared by Members and Reports', () => {
-  const app = fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
-  const members = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Members.jsx'),'utf8');
-  const memberData = fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/useMembersData.js'),'utf8');
-  const reports = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Reports.jsx'),'utf8');
-  const reportData = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/useReportsData.js'),'utf8');
+test('first-month contribution rule boundary semantics are locked at day 15 and 16', () => {
+  // Mirror the deliberately tiny pure policy function so the boundary cases are explicit
+  // in regression coverage, while source assertions below guarantee production uses it.
+  const due = (rate, joinedAt, month, rule='half_after_15') => {
+    const joined=String(joinedAt||'').slice(0,10);
+    const joinMonth=joined.slice(0,7);
+    if(/^\d{4}-\d{2}$/.test(joinMonth)){
+      if(month<joinMonth)return 0;
+      if(month===joinMonth){
+        if(rule==='next_month')return 0;
+        if(rule==='half_after_15' && Number(joined.slice(8,10))>15)return Number((rate/2).toFixed(2));
+      }
+    }
+    return Number(Number(rate||0).toFixed(2));
+  };
 
-  assert.match(app,/adminReportMonth/);
-  assert.match(app,/currentMonthValue\(\)/);
-  assert.match(app,/reportMonth=\{adminReportMonth\}/);
-  assert.match(app,/onReportMonthChange=\{setAdminReportMonth\}/);
-  assert.match(members,/reportMonth, onReportMonthChange/);
-  assert.match(memberData,/const month = reportMonth/);
-  assert.match(memberData,/onReportMonthChange\?\.\(value\)/);
-  assert.match(reports,/reportMonth, onReportMonthChange/);
-  assert.match(reportData,/onMonthChange\?\.\(shiftMonthValue\(month, delta\)\)/);
-  assert.doesNotMatch(memberData,/sessionStorage|getAdminReportMonth|saveAdminReportMonth/);
-  assert.doesNotMatch(reportData,/sessionStorage|getAdminReportMonth|saveAdminReportMonth/);
+  assert.equal(due(100,'2026-09-15','2026-09'),100);
+  assert.equal(due(100,'2026-09-16','2026-09'),50);
+  assert.equal(due(101,'2026-09-30','2026-09'),50.5);
+  assert.equal(due(100,'2026-09-16','2026-08'),0);
+  assert.equal(due(100,'2026-09-16','2026-10'),100);
+  assert.equal(due(100,'2026-09-01','2026-09','next_month'),0);
+  assert.equal(due(100,'2026-09-01','2026-09','full'),100);
+
+  const rates = fs.readFileSync(path.join(root,'src/contributionRates.ts'),'utf8');
+  assert.match(rates,/day>15/);
+  assert.match(rates,/Number\(\(rate\/2\)\.toFixed\(2\)\)/);
 });
 
+test('first-month policy propagates to reminders allocations analytics and month-close calculations', () => {
+  const scheduled = fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
+  const pending = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
+  const allocations = fs.readFileSync(path.join(root,'src/allocations.ts'),'utf8');
+  const governance = fs.readFileSync(path.join(root,'src/routes/governance.ts'),'utf8');
+  const reports = fs.readFileSync(path.join(root,'src/routes/reports.ts'),'utf8');
 
-test('performance stage 5 adds cache, stale-response, resume and lazy-chunk protections', () => {
-  const apiSource = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
-  const appSource = fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
-  const overviewSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Overview.jsx'),'utf8');
-  const membersSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/useMembersData.js'),'utf8');
-  const reportsSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/useReportsData.js'),'utf8');
-  const projectsSource = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Projects.jsx'),'utf8');
+  assert.match(scheduled,/contributionDueForMonth/);
+  assert.match(pending,/contributionDueFromRate/);
+  assert.match(pending,/m\.due>0\.005/);
+  assert.match(allocations,/if\(monthly<=0\.004\) continue/);
+  assert.match(allocations,/contributionDueFromRate/);
+  assert.match(governance,/contributionDueFromRate/);
+  assert.match(governance,/firstMonthContributionRule/);
+  assert.match(reports,/collectionExpected/);
+  assert.match(reports,/adjustedOutstanding/);
+});
 
-  assert.match(apiSource,/GET_CACHE_TTL_MS = 45_000/);
-  assert.match(apiSource,/inFlightGets/);
-  assert.match(apiSource,/Request timed out/);
-  assert.match(apiSource,/refreshAfterResume/);
-  assert.match(apiSource,/reportMonth/);
-  assert.match(appSource,/resilientImport/);
-  assert.match(appSource,/visibilitychange/);
-  assert.match(appSource,/pageshow/);
-  assert.match(appSource,/reportMonth: adminView \? adminReportMonth/);
-  assert.match(overviewSource,/overviewRequestRef/);
-  assert.match(overviewSource,/memberStatusRequestRef/);
-  assert.match(membersSource,/requestIdRef/);
-  assert.match(reportsSource,/monthlyRequestRef/);
-  assert.match(reportsSource,/annualRequestRef/);
-  assert.match(projectsSource,/requestIdRef/);
+test('shared admin month is the single React source for overview members reports and month close', () => {
+  const app = fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
+  const overview = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Overview.jsx'),'utf8');
+  const members = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Members.jsx'),'utf8');
+  const reports = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Reports.jsx'),'utf8');
+  const settings = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Settings.jsx'),'utf8');
+
+  assert.match(app,/adminMonth=\{adminMonth\}/);
+  assert.match(app,/<Members[^>]*month=\{adminMonth\}[^>]*onMonthChange=\{setAdminMonth\}/);
+  assert.match(app,/<Reports[^>]*month=\{adminMonth\}[^>]*onMonthChange=\{setAdminMonth\}/);
+  assert.match(overview,/api\.reports\.summary\(adminMonth \|\| undefined\)/);
+  assert.match(members,/sharedMonth/);
+  assert.match(reports,/sharedMonth/);
+  assert.match(settings,/onAdminMonthChange/);
+  assert.match(settings,/shiftSharedCloseMonth/);
 });

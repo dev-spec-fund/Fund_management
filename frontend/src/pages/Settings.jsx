@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useConfirmDialog } from "../components/FormControls";
 import { LoadingState, ErrorState, MessageBanner } from "../components/Shared";
 import { currentMonthValue } from "../utils/date";
@@ -8,7 +8,7 @@ import { GeneralSettingsSection, AdminSettingsSection, SystemSettingsSection, Au
 import { useSettingsData } from "./settings/useSettingsData";
 import { useSettingsActions } from "./settings/useSettingsActions";
 
-export default function Settings({ admin }) {
+export default function Settings({ admin, adminMonth, onAdminMonthChange }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
   const superAdmin = adminCan(admin, "manage_admins");
@@ -18,6 +18,12 @@ export default function Settings({ admin }) {
   const currentMonth = currentMonthValue();
 
   const data=useSettingsData({admin,role,superAdmin,financeAdmin});
+  useEffect(()=>{
+    if(adminMonth && adminMonth!==data.closeMonthValue){
+      data.setCloseMonthValue(adminMonth);
+      data.setCloseCheck(null);
+    }
+  },[adminMonth]);
   const {
     settings,setSettings,admins,audit,setAudit,health,setHealth,closures,errors,setErrors,message,setMessage,
     settingsSection,setSettingsSection,categories,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,
@@ -38,9 +44,19 @@ export default function Settings({ admin }) {
   const errorRows=pageSlice(filteredErrors,errorPage);
   const auditRows=pageSlice(audit,auditPage);
 
+  const shiftSharedCloseMonth=(delta)=>{
+    const [y,m]=String(closeMonthValue).split("-").map(Number);
+    const d=new Date(Date.UTC(y,m-1+delta,1));
+    const value=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;
+    if(value>currentMonth)return;
+    setCloseMonthValue(value);
+    setCloseCheck(null);
+    onAdminMonthChange?.(value);
+  };
+
   const sectionProps={
     settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,
-    closeBusy,shiftCloseMonth,closeMonthValue,setCloseMonthValue,setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,
+    closeBusy,shiftCloseMonth:shiftSharedCloseMonth,closeMonthValue,setCloseMonthValue:(value)=>{setCloseMonthValue(value);onAdminMonthChange?.(value);},setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,
     newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,
     health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage
   };

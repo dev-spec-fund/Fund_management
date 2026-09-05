@@ -9,13 +9,13 @@ import Pagination from "../components/Pagination";
 import MemberPopup, { StatusBadge } from "./members/MemberPopup";
 import useMembersData from "./members/useMembersData";
 
-export default function Members({ isAdmin, admin, reportMonth, onReportMonthChange }) {
+export default function Members({ isAdmin, admin, month: sharedMonth, onMonthChange }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const {
     month, setMonth, search, setSearch, filter, setFilter, defaultMonthly, form, setForm,
     page, setPage, load, outstandingByMember, activeMembers, memberStatus, counts, expected,
     collected, percent, filtered, memberPage, shiftMonth, monthLabel,
-  } = useMembersData(isAdmin, reportMonth, onReportMonthChange);
+  } = useMembersData(isAdmin, sharedMonth, onMonthChange);
   const [selected, setSelected] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [reminderBusy, setReminderBusy] = useState(false);

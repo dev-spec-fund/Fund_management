@@ -8,7 +8,7 @@ import DonationDetails from "./reports/DonationDetails";
 import { api, onDataChange } from "../api";
 import { fmt } from "../utils/format";
 
-export default function Reports({ setTab, admin, reportMonth, onReportMonthChange }) {
+export default function Reports({ setTab, admin, month: sharedMonth, onMonthChange }) {
   const [showExpense, setShowExpense] = useState(false);
   const [showDonation, setShowDonation] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -29,7 +29,7 @@ export default function Reports({ setTab, admin, reportMonth, onReportMonthChang
     shiftMonth,
     loadMonthly,
     loadAnnual,
-  } = useReportsData({ month: reportMonth, onMonthChange: onReportMonthChange });
+  } = useReportsData(sharedMonth, onMonthChange);
 
   const loadDonations = () => api.donations.list({ month }).then(setDonations).catch((e) => setError(e.message || "Could not load donations"));
   useEffect(() => { loadDonations(); }, [month]);
