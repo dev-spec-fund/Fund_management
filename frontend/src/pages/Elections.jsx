@@ -9,6 +9,7 @@ export default function Elections(){
   const [selected,setSelected]=useState(null);
   const [detail,setDetail]=useState(null);
   const [readiness,setReadiness]=useState(null);
+  const [summary,setSummary]=useState(null);
   const [showCreate,setShowCreate]=useState(false);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
@@ -33,6 +34,12 @@ export default function Elections(){
     api.elections.readiness(detail.id).then(r=>{if(active)setReadiness(r)}).catch(e=>{if(active){setReadiness(null);setMessage(e.message)}});
     return ()=>{active=false};
   },[detail]);
+  useEffect(()=>{
+    if(!detail?.id||!detail.certified_at){setSummary(null);return;}
+    let active=true;
+    api.elections.summary(detail.id).then(r=>{if(active)setSummary(r)}).catch(e=>{if(active){setSummary(null);setMessage(e.message)}});
+    return ()=>{active=false};
+  },[detail?.id,detail?.certified_at]);
 
   const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});await load();await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addPosition=async()=>{if(!detail||!position.title.trim())return;setBusy(true);try{const seats=Number(position.seats)||1;const d=await api.elections.addPosition(detail.id,{title:position.title,seats,max_selections:seats,min_selections:Math.max(0,Math.min(seats,Number(position.min_selections)||0))});setDetail(d);setPosition({title:"",seats:"1",min_selections:"1"})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
@@ -127,7 +134,7 @@ export default function Elections(){
       <button type="button" disabled={busy} onClick={create} style={{...approveBtn,width:"100%"}}>{busy?"Creating…":"Create draft"}</button>
     </Modal>}
 
-    {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setReadiness(null)}}>
+    {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setReadiness(null);setSummary(null)}}>
       {!detail?<LoadingState>Loading election…</LoadingState>:<>
         <div className="election-admin-summary sans"><span>Status <b>{detail.status==="draft"&&detail.application_phase==="open"?"Applications Open":detail.status}</b></span><span>Turnout <b>{detail.turnout?.voted||0}/{detail.turnout?.eligible||0}</b></span></div>
         {detail.status==="draft"&&detail.applications_open_at&&<>
@@ -200,6 +207,7 @@ export default function Elections(){
         {detail.status==="closed"&&<>
           {!detail.certified_at&&<div className="sans election-certification pending">{detail.unresolved_ties?.length?`Runoff required · ${detail.unresolved_ties.length} unresolved position${detail.unresolved_ties.length===1?"":"s"}`:"Results calculated · Ready for certification"}</div>}
           {detail.certified_at&&<div className="sans election-certification">✓ Certified by {detail.certified_by_name||"Super Admin"} · Results locked</div>}
+          {detail.certified_at&&summary&&<ElectionSummary summary={summary} adminView/>}
           <ElectionResults detail={detail}/>
           {!detail.certified_at&&detail.unresolved_ties?.map(tie=>{
             const activeRunoff=detail.runoffs?.find(r=>Number(r.position_id)===Number(tie.position_id)&&r.status==="open");
@@ -228,6 +236,34 @@ function applicationStatusLabel(a){
 function formatElectionDate(value){
   if(!value)return "—";
   return String(value).replace("T"," ").slice(0,16);
+}
+
+function ElectionSummary({summary,adminView=false}){
+  const e=summary.election||{};
+  const fmt=(v)=>v?String(v).replace("T"," ").slice(0,16):"—";
+  return <section className="election-summary-card">
+    <div className="sans election-summary-title"><b>OFFICIAL ELECTION SUMMARY</b><span>{e.term||"Certified election record"}</span></div>
+    <div className="election-summary-grid sans">
+      <div><span>Applications</span><b>{fmt(e.applications_open_at)} → {fmt(e.applications_close_at)}</b></div>
+      <div><span>Voting</span><b>{fmt(e.voting_open_at)} → {fmt(e.voting_close_at)}</b></div>
+      <div><span>Applicants</span><b>{summary.applications?.total||0}</b><small>{summary.applications?.approved||0} approved · {summary.applications?.rejected||0} rejected · {summary.applications?.withdrawn||0} withdrawn</small></div>
+      <div><span>Candidates</span><b>{summary.candidates?.active||0} active</b><small>{summary.candidates?.withdrawn||0} withdrawn</small></div>
+      <div><span>Turnout</span><b>{summary.turnout?.voted||0}/{summary.turnout?.eligible||0}</b><small>{Number(summary.turnout?.percent||0).toFixed(1)}%</small></div>
+      <div><span>Certified</span><b>{fmt(e.certified_at)}</b><small>{e.certified_by_name||"Super Admin"}</small></div>
+    </div>
+    {!!summary.runoffs?.length&&<div className="election-summary-section">
+      <div className="sans member-section-title">RUNOFF HISTORY</div>
+      {summary.runoffs.map(r=><div key={r.id} className="sans election-summary-runoff">
+        <span><b>{r.position_title} · Round {r.round_no}</b><small>{r.turnout?.voted||0}/{r.turnout?.eligible||0} voted · {r.status}</small></span>
+        <strong>{r.candidates?.map(c=>`${c.name} ${c.votes}`).join(" · ")}</strong>
+      </div>)}
+    </div>}
+    {!!summary.assigned_exco_roles?.length&&<div className="election-summary-section">
+      <div className="sans member-section-title">ASSIGNED EXCO</div>
+      {summary.assigned_exco_roles.map((x,i)=><div key={`${x.member_id}-${i}`} className="sans election-summary-role"><span>{x.role_title}</span><b>{x.name}</b></div>)}
+    </div>}
+    {adminView&&<div className="sans election-summary-record-note">Read-only governance record · ballot identities are not included.</div>}
+  </section>
 }
 
 function ElectionResults({detail}){

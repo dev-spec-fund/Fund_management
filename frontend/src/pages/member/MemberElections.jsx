@@ -6,6 +6,7 @@ import { LoadingState,EmptyState,MessageBanner,approveBtn } from "../../componen
 export function MemberElections(){
   const [rows,setRows]=useState(()=>api.peekCached("/api/elections"));
   const [detail,setDetail]=useState(null);
+  const [summary,setSummary]=useState(null);
   const [selected,setSelected]=useState(null);
   const [choices,setChoices]=useState({});
   const [applyPosition,setApplyPosition]=useState("");
@@ -21,7 +22,7 @@ export function MemberElections(){
   ]).catch(e=>setMessage(e.message));
   useEffect(()=>{load()},[]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
-  const open=async(e)=>{setSelected(e);setChoices({});setMessage("");try{setDetail(await api.refreshCached(`/api/elections/${e.id}`))}catch(err){setMessage(err.message)}};
+  const open=async(e)=>{setSelected(e);setChoices({});setSummary(null);setMessage("");try{const d=await api.refreshCached(`/api/elections/${e.id}`);setDetail(d);if(d?.certified_at)setSummary(await api.elections.summary(e.id))}catch(err){setMessage(err.message)}};
   const toggle=(position,candidateId)=>{
     const key=String(position.id),current=choices[key]||[];
     if(current.includes(candidateId))return setChoices({...choices,[key]:current.filter(x=>x!==candidateId)});
@@ -66,7 +67,7 @@ export function MemberElections(){
       <div><b className="sans">{e.title}</b><span className="sans">{e.term||""}</span></div>
       <div className="sans"><strong>{e.status==="draft"?"View applications ›":e.status==="open"?(e.my_vote?"Vote submitted ✓":"Vote now ›"):e.status==="closed"?"View results ›":String(e.status)}</strong><span>{e.turnout?.voted||0}/{e.turnout?.eligible||0} voted · {Number(e.turnout?.percent||0).toFixed(1)}%</span></div>
     </button>)}
-    {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null)}}>
+    {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setSummary(null)}}>
       {!detail?<LoadingState>Loading ballot…</LoadingState>:<>
         <div className="sans election-secret-note">🔒 Secret ballot. The system records that you voted, but ballot selections are stored without your member ID.</div>        {detail.status==="draft"&&<>
           <div className={`sans election-application-status ${detail.application_phase}`}>{detail.application_phase==="open"?"Candidate applications are open":detail.application_phase==="upcoming"?"Candidate applications have not opened yet":"Candidate applications are closed"}</div>
@@ -117,7 +118,7 @@ export function MemberElections(){
             </div>
           })}
         </>}
-        {detail.status==="closed"&&detail.certified_at&&<><div className="sans election-certification">✓ Official results certified · EXCO roles assigned</div><MemberResults detail={detail}/></>}
+        {detail.status==="closed"&&detail.certified_at&&<><div className="sans election-certification">✓ Official results certified · EXCO roles assigned</div>{summary&&<MemberElectionSummary summary={summary}/>}<MemberResults detail={detail}/></>}
         {detail.status==="cancelled"&&<div className="sans election-voted">This election was cancelled.</div>}
       </>}
     </Modal>}
@@ -134,6 +135,26 @@ function memberApplicationStatus(a){
 function formatApplicationDate(value){
   if(!value)return "—";
   return String(value).replace("T"," ").slice(0,16);
+}
+
+function MemberElectionSummary({summary}){
+  const e=summary.election||{};
+  const fmt=(v)=>v?String(v).replace("T"," ").slice(0,16):"—";
+  return <section className="election-summary-card">
+    <div className="sans election-summary-title"><b>OFFICIAL ELECTION SUMMARY</b><span>{e.term||"Certified election record"}</span></div>
+    <div className="election-summary-grid sans">
+      <div><span>Applications</span><b>{fmt(e.applications_open_at)} → {fmt(e.applications_close_at)}</b></div>
+      <div><span>Voting</span><b>{fmt(e.voting_open_at)} → {fmt(e.voting_close_at)}</b></div>
+      <div><span>Applicants</span><b>{summary.applications?.total||0}</b><small>{summary.applications?.approved||0} approved</small></div>
+      <div><span>Turnout</span><b>{summary.turnout?.voted||0}/{summary.turnout?.eligible||0}</b><small>{Number(summary.turnout?.percent||0).toFixed(1)}%</small></div>
+      <div><span>Certified</span><b>{fmt(e.certified_at)}</b><small>{e.certified_by_name||"Super Admin"}</small></div>
+      <div><span>Runoffs</span><b>{summary.runoffs?.length||0}</b><small>{summary.runoffs?.length?"Tie resolution rounds":"No runoff required"}</small></div>
+    </div>
+    {!!summary.assigned_exco_roles?.length&&<div className="election-summary-section">
+      <div className="sans member-section-title">OFFICIAL EXCO</div>
+      {summary.assigned_exco_roles.map((x,i)=><div key={`${x.member_id}-${i}`} className="sans election-summary-role"><span>{x.role_title}</span><b>{x.name}</b></div>)}
+    </div>}
+  </section>
 }
 
 function MemberResults({detail}){

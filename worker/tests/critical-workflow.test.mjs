@@ -908,3 +908,31 @@ test('v54 admin UI disables Open Voting until server checklist passes', () => {
   assert.match(admin,/readiness\.passed/);
   assert.match(admin,/disabled=\{busy\|\|!readiness\?\.ready\}/);
 });
+
+
+test('v55 exposes read-only certified election governance summary without ballot identities', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/buildElectionSummary/);
+  assert.match(route,/\/:id\/summary/);
+  assert.match(route,/Official election summary is available after certification/);
+  assert.match(route,/assigned_exco_roles/);
+  assert.match(route,/runoffSummaries/);
+  assert.match(route,/applications:appCounts/);
+  assert.match(route,/turnout:\{eligible,voted,percent/);
+  const summaryBlock=route.match(/async function buildElectionSummary[\s\S]*?\n\}/)?.[0]||'';
+  assert.doesNotMatch(summaryBlock,/ballot_token/);
+  assert.doesNotMatch(summaryBlock,/member_id.*election_ballots/);
+});
+
+test('v55 admin and member UIs render certified election summary records', () => {
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/summary: \(id\)/);
+  assert.match(admin,/OFFICIAL ELECTION SUMMARY/);
+  assert.match(admin,/RUNOFF HISTORY/);
+  assert.match(admin,/ASSIGNED EXCO/);
+  assert.match(admin,/Read-only governance record/);
+  assert.match(member,/OFFICIAL ELECTION SUMMARY/);
+  assert.match(member,/OFFICIAL EXCO/);
+});

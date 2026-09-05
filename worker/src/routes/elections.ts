@@ -269,6 +269,86 @@ async function assignCertifiedExcoRoles(env:any,election:any,results:any[],certi
   return electedRows;
 }
 
+async function buildElectionSummary(env:any,electionId:number){
+  const election=await env.DB.prepare(`SELECT e.*,a.name certified_by_name
+    FROM elections e LEFT JOIN admins a ON a.id=e.certified_by WHERE e.id=?`).bind(electionId).first<any>();
+  if(!election)return null;
+
+  const [positions,applications,candidates,voters,runoffs,roles]=await Promise.all([
+    env.DB.prepare("SELECT * FROM election_positions WHERE election_id=? ORDER BY sort_order,id").bind(electionId).all<any>(),
+    env.DB.prepare(`SELECT status,COUNT(*) n FROM election_applications WHERE election_id=? GROUP BY status`).bind(electionId).all<any>(),
+    env.DB.prepare(`SELECT ec.*,ep.title position_title FROM election_candidates ec
+      JOIN election_positions ep ON ep.id=ec.position_id WHERE ec.election_id=? ORDER BY ep.sort_order,ec.display_name`).bind(electionId).all<any>(),
+    env.DB.prepare(`SELECT COUNT(*) eligible,SUM(CASE WHEN voted_at IS NOT NULL THEN 1 ELSE 0 END) voted FROM election_voters WHERE election_id=?`).bind(electionId).first<any>(),
+    env.DB.prepare(`SELECT r.*,ep.title position_title FROM election_runoffs r
+      JOIN election_positions ep ON ep.id=r.position_id WHERE r.election_id=? ORDER BY r.position_id,r.round_no`).bind(electionId).all<any>(),
+    env.DB.prepare(`SELECT x.role_title,x.term,x.started_at,m.id member_id,m.name,m.member_code
+      FROM exco_role_assignments x JOIN members m ON m.id=x.member_id
+      WHERE x.election_id=? ORDER BY x.position_id,x.id`).bind(electionId).all<any>()
+  ]);
+
+  const calculated=election.status==="closed"?await calculateElectionResults(env,electionId):{results:[],unresolved:[]};
+  const appCounts:any={pending:0,approved:0,rejected:0,withdrawn:0,total:0};
+  for(const row of applications.results as any[]){
+    appCounts[String(row.status)]=Number(row.n||0);
+    appCounts.total+=Number(row.n||0);
+  }
+  const eligible=Number(voters?.eligible||0),voted=Number(voters?.voted||0);
+
+  const positionSummaries:any[]=[];
+  for(const position of positions.results as any[]){
+    const rows=(candidates.results as any[]).filter((c:any)=>Number(c.position_id)===Number(position.id));
+    positionSummaries.push({
+      id:position.id,
+      title:position.title,
+      seats:Number(position.seats||1),
+      candidates:rows.map((c:any)=>{
+        const result=calculated.results.find((r:any)=>Number(r.candidate_id)===Number(c.id));
+        return {id:c.id,member_id:c.member_id,name:c.display_name,status:c.status,votes:Number(result?.votes||0),outcome:result?.outcome||null};
+      })
+    });
+  }
+
+  const runoffSummaries:any[]=[];
+  for(const runoff of runoffs.results as any[]){
+    const [rc,turnout]=await Promise.all([
+      env.DB.prepare(`SELECT ec.id,ec.display_name,
+        (SELECT COUNT(*) FROM election_runoff_ballots rb WHERE rb.runoff_id=? AND rb.candidate_id=ec.id) votes
+        FROM election_runoff_candidates x JOIN election_candidates ec ON ec.id=x.candidate_id
+        WHERE x.runoff_id=? ORDER BY ec.display_name`).bind(runoff.id,runoff.id).all<any>(),
+      env.DB.prepare(`SELECT COUNT(*) eligible,SUM(CASE WHEN voted_at IS NOT NULL THEN 1 ELSE 0 END) voted
+        FROM election_runoff_voters WHERE runoff_id=?`).bind(runoff.id).first<any>()
+    ]);
+    runoffSummaries.push({
+      id:runoff.id,position_id:runoff.position_id,position_title:runoff.position_title,
+      round_no:Number(runoff.round_no||1),seats_to_fill:Number(runoff.seats_to_fill||1),
+      status:runoff.status,opens_at:runoff.opens_at||runoff.opened_at,closes_at:runoff.closes_at||runoff.closed_at,
+      turnout:{eligible:Number(turnout?.eligible||0),voted:Number(turnout?.voted||0)},
+      candidates:(rc.results as any[]).map((c:any)=>({id:c.id,name:c.display_name,votes:Number(c.votes||0)}))
+    });
+  }
+
+  return {
+    election:{
+      id:election.id,title:election.title,term:election.term,status:election.status,
+      applications_open_at:election.applications_open_at,applications_close_at:election.applications_close_at,
+      voting_open_at:election.opened_at||election.opens_at,voting_close_at:election.closed_at||election.closes_at,
+      certified_at:election.certified_at,certified_by_name:election.certified_by_name||null
+    },
+    applications:appCounts,
+    candidates:{
+      total:(candidates.results as any[]).length,
+      active:(candidates.results as any[]).filter((c:any)=>c.status==="active").length,
+      withdrawn:(candidates.results as any[]).filter((c:any)=>c.status==="withdrawn").length
+    },
+    turnout:{eligible,voted,percent:eligible?Math.round((voted/eligible)*1000)/10:0},
+    positions:positionSummaries,
+    runoffs:runoffSummaries,
+    unresolved_ties:calculated.unresolved,
+    assigned_exco_roles:roles.results
+  };
+}
+
 async function memberForUser(c:any){
   const user=c.get("telegramUser");
   return c.env.DB.prepare("SELECT id,member_code,name,telegram_id,joined_at,monthly_amount,active FROM members WHERE telegram_id=? AND active=1 LIMIT 1")
@@ -336,6 +416,16 @@ electionsRoute.get("/exco/current", async c=>{
     FROM exco_role_assignments x JOIN members m ON m.id=x.member_id JOIN elections e ON e.id=x.election_id
     WHERE x.ended_at IS NULL ORDER BY x.position_id,x.id`).all<any>();
   return c.json({roles:rows.results});
+});
+
+electionsRoute.get("/:id/summary", async c=>{
+  await ensureOperationalSchema(c.env);
+  const id=Number(c.req.param("id"));
+  const summary=await buildElectionSummary(c.env,id);
+  if(!summary)return c.json({error:"Election not found"},404);
+  const admin=c.get("admin");
+  if(!admin && !summary.election.certified_at)return c.json({error:"Official election summary is available after certification"},403);
+  return c.json(summary);
 });
 
 electionsRoute.get("/:id", async c=>{
