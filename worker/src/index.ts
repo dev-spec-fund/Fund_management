@@ -130,6 +130,7 @@ app.post("/api/me/meetings/:id/rsvp", async (c) => {
   const meeting=await c.env.DB.prepare("SELECT id,status,audience,sent_at FROM meetings WHERE id=?").bind(meetingId).first<any>(); if(!meeting)return c.json({error:"Meeting not found"},404);
   if(meeting.status==='cancelled')return c.json({error:"Meeting is cancelled"},409);
   if(meeting.status==='completed')return c.json({error:"Meeting is completed"},409);
+  if(!meeting.sent_at || meeting.status==='draft') return c.json({error:"Meeting invitations have not been sent yet"},409);
   const inviteeCount=await c.env.DB.prepare("SELECT COUNT(*) n FROM meeting_invitees WHERE meeting_id=?").bind(meetingId).first<any>();
   if(Number(inviteeCount?.n||0)>0){
     const invited=await c.env.DB.prepare("SELECT 1 ok FROM meeting_invitees WHERE meeting_id=? AND member_id=?").bind(meetingId,member.id).first<any>();
@@ -166,8 +167,9 @@ app.get("/api/me/dashboard", async (c) => {
     c.env.DB.prepare(`SELECT m.id,m.title,m.meeting_date,m.meeting_time,m.venue,m.status,m.audience,r.response rsvp
       FROM meetings m LEFT JOIN meeting_rsvps r ON r.meeting_id=m.id AND r.member_id=?
       WHERE m.status NOT IN ('cancelled','completed')
+        AND m.sent_at IS NOT NULL
         AND (EXISTS(SELECT 1 FROM meeting_invitees i WHERE i.meeting_id=m.id AND i.member_id=?)
-          OR (m.sent_at IS NULL AND (COALESCE(m.audience,'all_members')='all_members'
+          OR (NOT EXISTS(SELECT 1 FROM meeting_invitees ai WHERE ai.meeting_id=m.id) AND (COALESCE(m.audience,'all_members')='all_members'
             OR EXISTS(SELECT 1 FROM exco_role_assignments x WHERE x.member_id=? AND x.ended_at IS NULL))))
       ORDER BY m.meeting_date,m.meeting_time LIMIT 1`).bind(member.id,member.id,member.id).first<any>(),
     c.env.DB.prepare(`SELECT ai.id,ai.description,ai.due_date,ai.status,m.id meeting_id,m.title meeting_title FROM meeting_action_items ai JOIN meetings m ON m.id=ai.meeting_id WHERE ai.assigned_member_id=? AND ai.status='open' ORDER BY CASE WHEN ai.due_date IS NULL THEN 1 ELSE 0 END,ai.due_date,ai.id LIMIT 5`).bind(member.id).all<any>(),
@@ -229,11 +231,12 @@ app.get("/api/me/meetings", async (c) => {
     LEFT JOIN meeting_rsvps r ON r.meeting_id=m.id AND r.member_id=?
     LEFT JOIN meeting_minutes mm ON mm.meeting_id=m.id
     LEFT JOIN meeting_attendance a ON a.meeting_id=m.id AND a.member_id=?
-    WHERE EXISTS(SELECT 1 FROM meeting_invitees i WHERE i.meeting_id=m.id AND i.member_id=?)
-       OR (m.sent_at IS NULL AND m.status='draft' AND (
+    WHERE m.sent_at IS NOT NULL
+      AND (EXISTS(SELECT 1 FROM meeting_invitees i WHERE i.meeting_id=m.id AND i.member_id=?)
+       OR (NOT EXISTS(SELECT 1 FROM meeting_invitees ai WHERE ai.meeting_id=m.id) AND (
           COALESCE(m.audience,'all_members')='all_members'
           OR EXISTS(SELECT 1 FROM exco_role_assignments x WHERE x.member_id=? AND x.ended_at IS NULL)
-       ))
+       )))
     ORDER BY m.meeting_date DESC,m.meeting_time DESC LIMIT 100`).bind(member.id,member.id,member.id,member.id).all<any>();
   return c.json(rows.results);
 });

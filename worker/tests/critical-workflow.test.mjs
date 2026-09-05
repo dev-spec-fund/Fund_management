@@ -1764,3 +1764,11 @@ test('v74 Admin member profile exposes detailed allocation reconciliation diagno
   assert.match(popup,/legacy_fallback_total/);
   assert.match(popup,/reconciliation\.issues/);
 });
+
+test('v75 member meeting views hide unsent drafts and RSVP rejects them', () => {
+  const index=fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
+  assert.match(index,/Meeting invitations have not been sent yet/);
+  assert.match(index,/m\.sent_at IS NOT NULL/);
+  assert.doesNotMatch(index,/m\.sent_at IS NULL AND m\.status='draft'/);
+  assert.match(index,/NOT EXISTS\(SELECT 1 FROM meeting_invitees ai WHERE ai\.meeting_id=m\.id\)/);
+});
