@@ -35,10 +35,28 @@ export default function Elections(){
     if(reason===null)return;
     setBusy(true);try{setDetail(await api.elections.reviewApplication(detail.id,a.id,decision,reason));setMessage(`Application ${decision}.`)}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
+  const extendApplications=async()=>{
+    if(!detail)return;
+    const current=String(detail.applications_close_at||"").slice(0,16);
+    const next=window.prompt("New application deadline (YYYY-MM-DDTHH:MM):",current);
+    if(next===null)return;
+    if(!next.trim())return setMessage("Enter the new application deadline.");
+    setBusy(true);try{
+      await api.elections.extendApplications(detail.id,next.trim());
+      setDetail(await api.elections.get(detail.id));
+      await load();
+      setMessage(`Application deadline extended to ${next.trim().replace("T"," ")}.`);
+    }catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
   const withdrawCandidate=async(c)=>{
     const reason=window.prompt(`Reason for withdrawing ${c.display_name}:`);
     if(reason===null)return;
-    setBusy(true);try{setDetail(await api.elections.withdrawCandidate(detail.id,c.id,reason.trim()||"Withdrawn"));setMessage(`${c.display_name} withdrawn from the election.`)}catch(e){setMessage(e.message)}finally{setBusy(false)}
+    setBusy(true);try{
+      await api.elections.withdrawCandidate(detail.id,c.id,reason.trim()||"Withdrawn");
+      setDetail(await api.elections.get(detail.id));
+      await load();
+      setMessage(`${c.display_name} withdrawn from the election. Member application status updated too.`);
+    }catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const remindNonVoters=async()=>{
     setBusy(true);try{const r=await api.elections.remindNonVoters(detail.id);setMessage(`Voting reminder sent: ${r.sent||0}${r.failed?` · ${r.failed} failed`:""}`)}catch(e){setMessage(e.message)}finally{setBusy(false)}
@@ -91,7 +109,10 @@ export default function Elections(){
     {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null)}}>
       {!detail?<LoadingState>Loading election…</LoadingState>:<>
         <div className="election-admin-summary sans"><span>Status <b>{detail.status==="draft"&&detail.application_phase==="open"?"Applications Open":detail.status}</b></span><span>Turnout <b>{detail.turnout?.voted||0}/{detail.turnout?.eligible||0}</b></span></div>
-        {detail.status==="draft"&&detail.applications_open_at&&<div className="sans election-secret-note">Candidate applications: <b>{detail.application_phase}</b> · {String(detail.applications_open_at).replace("T"," ")} → {String(detail.applications_close_at||"").replace("T"," ")}</div>}
+        {detail.status==="draft"&&detail.applications_open_at&&<>
+          <div className="sans election-secret-note">Candidate applications: <b>{detail.application_phase}</b> · {String(detail.applications_open_at).replace("T"," ")} → {String(detail.applications_close_at||"").replace("T"," ")}</div>
+          <button type="button" disabled={busy} onClick={extendApplications} className="sans election-extend-deadline">Extend application deadline</button>
+        </>}
         {detail.status==="draft"&&<>
           <div className="sans member-section-title">APPLICATIONS</div>
           <div className="election-application-counts sans">{["pending","approved","rejected","withdrawn"].map(s=><button type="button" key={s} className={applicationFilter===s?"active":""} onClick={()=>setApplicationFilter(applicationFilter===s?"all":s)}><b>{detail.applications?.filter(a=>a.status===s).length||0}</b><span>{s}</span></button>)}</div>

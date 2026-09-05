@@ -793,3 +793,34 @@ test('true admin-only election drafts remain hidden from members', () => {
   assert.match(route,/applications_open_at/);
   assert.match(route,/applications_close_at/);
 });
+
+
+test('admin can extend candidate application deadline before voting opens', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+
+  assert.match(route,/extend-applications/);
+  assert.match(route,/New deadline must extend the current application deadline/);
+  assert.match(route,/application_reminder_sent_at=NULL/);
+  assert.match(route,/election_application_deadline_extended/);
+  assert.match(api,/extendApplications/);
+  assert.match(admin,/Extend application deadline/);
+});
+
+test('admin candidate withdrawal synchronizes approved member application status', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+
+  assert.match(route,/UPDATE election_applications/);
+  assert.match(route,/status='withdrawn'/);
+  assert.match(route,/Withdrawn by admin:/);
+  assert.match(route,/approved candidacy has been <b>withdrawn by Admin<\/b>/);
+  assert.match(member,/api\.refreshCached\(`\/api\/elections\/\$\{e\.id\}`\)/);
+});
+
+test('application deadline extension cannot move beyond voting opening time', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/Application deadline must remain on or before voting opens/);
+  assert.match(route,/New application deadline must be in the future/);
+});

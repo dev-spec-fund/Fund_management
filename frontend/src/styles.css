@@ -2788,3 +2788,11 @@ button:not(:disabled):active {
 .election-runoff-title{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
 .election-runoff-title b{font-size:10px;color:var(--warning)}
 .election-runoff-title span{font-size:8px;color:var(--muted)}
+
+/* v52 election application deadline controls */
+.election-extend-deadline{
+  width:100%;border:1px solid var(--border-strong);border-radius:9px;
+  background:var(--card);color:var(--primary-text);padding:9px 10px;
+  font-size:9px;font-weight:750;margin:-4px 0 12px;cursor:pointer
+}
+.election-extend-deadline:disabled{opacity:.55;cursor:default}

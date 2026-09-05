@@ -314,6 +314,39 @@ electionsRoute.patch("/:id", requireSuperAdmin, async c=>{
   return c.json(await electionDetail(c.env,id));
 });
 
+electionsRoute.post("/:id/extend-applications", requireSuperAdmin, async c=>{
+  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
+  const before=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!before)return c.json({error:"Election not found"},404);
+  if(before.status!=="draft" || before.certified_at)return c.json({error:"Application deadline can only be changed before voting opens"},409);
+  const body=await c.req.json<any>().catch(()=>({}));
+  const newClose=iso(body.applications_close_at);
+  if(!newClose)return c.json({error:"New application deadline is required"},400);
+  const now=localNow(c.env.FUND_TIMEZONE || "Indian/Maldives");
+  if(newClose<=now)return c.json({error:"New application deadline must be in the future"},400);
+  if(before.applications_open_at && newClose<=String(before.applications_open_at))
+    return c.json({error:"Application deadline must be after the application opening time"},400);
+  if(before.applications_close_at && newClose<=String(before.applications_close_at))
+    return c.json({error:"New deadline must extend the current application deadline"},400);
+  if(before.opens_at && newClose>String(before.opens_at))
+    return c.json({error:"Application deadline must remain on or before voting opens"},400);
+
+  await c.env.DB.prepare(`UPDATE elections
+    SET applications_close_at=?,application_reminder_sent_at=NULL
+    WHERE id=? AND status='draft'`).bind(newClose,id).run();
+  const after=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  await auditEntity(c.env,admin.id,"election_application_deadline_extended","election",id,before,after);
+
+  const branding=await getBranding(c.env);
+  const applicants=await c.env.DB.prepare(`SELECT DISTINCT m.telegram_id FROM election_applications ea
+    JOIN members m ON m.id=ea.member_id
+    WHERE ea.election_id=? AND m.telegram_id IS NOT NULL AND ea.status IN ('pending','approved')`).bind(id).all<any>();
+  c.executionCtx.waitUntil(Promise.allSettled((applicants.results as any[]).map((m:any)=>sendMessage(c.env,m.telegram_id,
+    `⏰ <b>${branding.fund_name} · ${after.title}</b>\n\nThe candidate application deadline has been extended to <b>${newClose.replace("T"," ")}</b>.`
+  ))));
+  return c.json(await electionDetail(c.env,id));
+});
+
 electionsRoute.post("/:id/positions", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404); if(election.status!=="draft")return c.json({error:"Election is locked"},409);
@@ -452,10 +485,25 @@ electionsRoute.post("/:id/candidates/:candidateId/withdraw", requireSuperAdmin, 
   const before=await c.env.DB.prepare("SELECT * FROM election_candidates WHERE id=? AND election_id=?").bind(candidateId,id).first<any>();
   if(!before)return c.json({error:"Candidate not found"},404);
   const body=await c.req.json<any>().catch(()=>({})); const reason=text(body.reason,300)||"Withdrawn";
-  await c.env.DB.prepare(`UPDATE election_candidates SET status='withdrawn',withdrawn_at=datetime('now'),withdrawn_by=?,withdrawal_reason=?
-    WHERE id=? AND election_id=?`).bind(admin.id,reason,candidateId,id).run();
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE election_candidates SET status='withdrawn',withdrawn_at=datetime('now'),withdrawn_by=?,withdrawal_reason=?
+      WHERE id=? AND election_id=?`).bind(admin.id,reason,candidateId,id),
+    c.env.DB.prepare(`UPDATE election_applications
+      SET status='withdrawn',withdrawn_at=datetime('now'),review_reason=?,reviewed_by=?
+      WHERE election_id=? AND position_id=? AND member_id=? AND status='approved'`)
+      .bind(`Withdrawn by admin: ${reason}`,admin.id,id,before.position_id,before.member_id)
+  ]);
   const after=await c.env.DB.prepare("SELECT * FROM election_candidates WHERE id=?").bind(candidateId).first<any>();
   await auditEntity(c.env,admin.id,"election_candidate_withdrawn","election_candidate",candidateId,before,{...after,election_id:id});
+  const member=await c.env.DB.prepare("SELECT telegram_id,name FROM members WHERE id=?").bind(before.member_id).first<any>();
+  if(member?.telegram_id){
+    c.executionCtx.waitUntil(sendMessage(c.env,member.telegram_id,
+      `↩️ <b>${election.title}</b>
+
+Your approved candidacy has been <b>withdrawn by Admin</b>.${reason?`
+Reason: ${reason}`:""}`
+    ).catch(()=>null));
+  }
   return c.json(await electionDetail(c.env,id));
 });
 

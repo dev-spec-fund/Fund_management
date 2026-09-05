@@ -21,7 +21,7 @@ export function MemberElections(){
   ]).catch(e=>setMessage(e.message));
   useEffect(()=>{load()},[]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
-  const open=async(e)=>{setSelected(e);setChoices({});setMessage("");try{setDetail(await api.elections.get(e.id))}catch(err){setMessage(err.message)}};
+  const open=async(e)=>{setSelected(e);setChoices({});setMessage("");try{setDetail(await api.refreshCached(`/api/elections/${e.id}`))}catch(err){setMessage(err.message)}};
   const toggle=(position,candidateId)=>{
     const key=String(position.id),current=choices[key]||[];
     if(current.includes(candidateId))return setChoices({...choices,[key]:current.filter(x=>x!==candidateId)});
@@ -70,7 +70,7 @@ export function MemberElections(){
       {!detail?<LoadingState>Loading ballot…</LoadingState>:<>
         <div className="sans election-secret-note">🔒 Secret ballot. The system records that you voted, but ballot selections are stored without your member ID.</div>        {detail.status==="draft"&&<>
           <div className={`sans election-application-status ${detail.application_phase}`}>{detail.application_phase==="open"?"Candidate applications are open":detail.application_phase==="upcoming"?"Candidate applications have not opened yet":"Candidate applications are closed"}</div>
-          {!!detail.applications?.length&&<div className="election-my-applications">{detail.applications.map(a=><div key={a.id} className="sans election-my-application"><div><b>{detail.positions.find(p=>Number(p.id)===Number(a.position_id))?.title||"Position"}</b><span>{a.status}</span>{a.review_reason&&<small>{a.review_reason}</small>}</div>{a.status==="pending"&&detail.application_phase==="open"&&<button type="button" onClick={()=>withdrawApplication(a)}>Withdraw</button>}</div>)}</div>}
+          {!!detail.applications?.length&&<div className="election-my-applications">{detail.applications.map(a=><div key={a.id} className="sans election-my-application"><div><b>{detail.positions.find(p=>Number(p.id)===Number(a.position_id))?.title||"Position"}</b><span>{a.status}</span>{a.review_reason&&<small>{a.review_reason}</small>}{a.status==="withdrawn"&&!a.review_reason&&<small>Candidacy withdrawn.</small>}</div>{a.status==="pending"&&detail.application_phase==="open"&&<button type="button" onClick={()=>withdrawApplication(a)}>Withdraw</button>}</div>)}</div>}
           {detail.application_phase==="open"&&<>
             <div className="sans member-section-title">APPLY FOR AN AVAILABLE POSITION</div>
             <div className="sans election-deadline">Applications close: <b>{String(detail.applications_close_at||"").replace("T"," ").slice(0,16)}</b></div>
