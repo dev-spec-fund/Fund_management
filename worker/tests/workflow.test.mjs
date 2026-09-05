@@ -47,7 +47,7 @@ test("migration numeric versions are unique", () => {
 test("election application migration matches canonical runtime schema", () => {
   const migration = read("migrations/0032_election_application_eligibility.sql");
   const schema = read("schema.sql");
-  const elections = read("src/routes/elections.ts");
+  const elections = (read("src/routes/elections.ts") + read("src/elections/core.ts"));
   assert.match(migration, /application_reminder_sent_at/);
   assert.match(schema, /application_reminder_sent_at/);
   assert.match(elections, /application_reminder_sent_at/);

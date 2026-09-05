@@ -5,7 +5,7 @@ import { isMonthClosed, safeLogError } from "./ops";
 import { allocatedPaidSql } from "./allocations";
 import { contributionDueForMonth } from "./contributionRates";
 import { cleanupContributionReviewMessages } from "./contributionReviewMessages";
-import { processElectionLifecycle } from "./routes/elections";
+import { processElectionLifecycle } from "./elections/core";
 
 /** Runs daily and evaluates reminder dates in FUND_TIMEZONE (Indian/Maldives by default). */
 export async function runScheduled(env: Env, cron = "0 19 * * *") {
