@@ -185,7 +185,7 @@ test('frontend crashes are reported to the authenticated production error log en
 
 test('pending contribution correction conflicts if another admin reviews it first', () => {
   const pendingSource = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
-  assert.match(pendingSource, /const changed=await c\.env\.DB\.prepare\(`UPDATE contributions SET amount=\?,ref_number=\?,bank_date=\?,month=\?,duplicate_key=\?,corrected_by=\?,corrected_at=datetime\('now'\) WHERE id=\? AND status='pending'`\)/);
+  assert.match(pendingSource, /changed=await c\.env\.DB\.prepare\(`UPDATE contributions SET amount=\?,ref_number=\?,bank_date=\?,month=\?,duplicate_key=\?,corrected_by=\?,corrected_at=datetime\('now'\) WHERE id=\? AND status='pending'`\)/);
   assert.match(pendingSource, /if\(!changed\.meta\.changes\)/);
   assert.match(pendingSource, /Contribution is already .* Refresh before editing/);
 });
@@ -1852,4 +1852,9 @@ test("financial reversal claims only the expected live status", () => {
   assert.match(source, /SET status='reversed' WHERE id=\? AND status=\?/);
   assert.match(source, /if\(!Number\(\(reversalBatch\[0\]/);
   assert.match(source, /Transaction is \${current\?\.status\|\|'changed'} and cannot be reversed/);
+});
+
+test('manual correction converts a raced duplicate-key conflict into 409', () => {
+  const pendingSource = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
+  assert.match(pendingSource, /catch \(e:any\) \{[\s\S]*const raced=await duplicateSlip\(c\.env,ref,amount,bankDate,id\);[\s\S]*Duplicate slip matches \$\{raced\.txn_id\}[\s\S]*,409\);/);
 });
