@@ -56,6 +56,45 @@ async function processApplicationReminders(env:any){
   }
 }
 
+async function synchronizeElectionApplications(env:any,electionId:number,adminId:number|null=null){
+  const applications=await env.DB.prepare(`SELECT ea.*,m.name member_name FROM election_applications ea
+    JOIN members m ON m.id=ea.member_id WHERE ea.election_id=? ORDER BY ea.id`).bind(electionId).all<any>();
+  let activated=0,withdrawn=0,created=0;
+
+  for(const app of applications.results as any[]){
+    const candidate=await env.DB.prepare(`SELECT * FROM election_candidates
+      WHERE election_id=? AND position_id=? AND member_id=? LIMIT 1`)
+      .bind(electionId,app.position_id,app.member_id).first<any>();
+
+    if(app.status==="approved"){
+      if(candidate){
+        if(candidate.status!=="active"){
+          await env.DB.prepare(`UPDATE election_candidates
+            SET display_name=?,status='active',withdrawn_at=NULL,withdrawn_by=NULL,withdrawal_reason=NULL
+            WHERE id=?`).bind(app.member_name,candidate.id).run();
+          activated++;
+        }else if(candidate.display_name!==app.member_name){
+          await env.DB.prepare("UPDATE election_candidates SET display_name=? WHERE id=?").bind(app.member_name,candidate.id).run();
+        }
+      }else{
+        await env.DB.prepare(`INSERT INTO election_candidates(election_id,position_id,member_id,display_name,status)
+          VALUES(?,?,?,?,'active')`).bind(electionId,app.position_id,app.member_id,app.member_name).run();
+        created++;
+      }
+    }
+
+    if(app.status==="withdrawn" && candidate?.status==="active"){
+      await env.DB.prepare(`UPDATE election_candidates
+        SET status='withdrawn',withdrawn_at=COALESCE(withdrawn_at,datetime('now')),withdrawn_by=?,
+            withdrawal_reason=COALESCE(withdrawal_reason,'Application withdrawn')
+        WHERE id=?`).bind(adminId,candidate.id).run();
+      withdrawn++;
+    }
+  }
+
+  return {activated,created,withdrawn,total_changes:activated+created+withdrawn};
+}
+
 async function evaluateElectionReadiness(env:any,election:any){
   const now=localNow(env.FUND_TIMEZONE || "Indian/Maldives");
   const checks:any[]=[];
@@ -111,6 +150,7 @@ async function evaluateElectionReadiness(env:any,election:any){
   checks.push({
     key:"approved_candidates_linked",
     label:"Every approved application has an active candidate record",
+    repairable:true,
     ok:approvedMissing.results.length===0,
     detail:approvedMissing.results.length?(approvedMissing.results as any[]).map((x:any)=>`${x.name} · ${x.position_title}`).join(" · "):"All approved applications are linked to active candidates."
   });
@@ -122,6 +162,7 @@ async function evaluateElectionReadiness(env:any,election:any){
   checks.push({
     key:"withdrawals_synced",
     label:"Withdrawn applications have no active candidate record",
+    repairable:true,
     ok:withdrawnStillActive.results.length===0,
     detail:withdrawnStillActive.results.length?(withdrawnStillActive.results as any[]).map((x:any)=>`${x.name} · ${x.position_title}`).join(" · "):"Withdrawn applications and candidate records are synchronized."
   });
@@ -159,6 +200,7 @@ export async function processElectionLifecycle(env:any){
   const drafts=await env.DB.prepare(`SELECT * FROM elections
     WHERE status='draft' AND opens_at IS NOT NULL AND opens_at<>'' AND opens_at<=?`).bind(now).all<any>();
   for(const election of drafts.results as any[]){
+    await synchronizeElectionApplications(env,election.id,null);
     const readiness=await evaluateElectionReadiness(env,election);
     if(!readiness.ready)continue;
     const result=await env.DB.prepare("UPDATE elections SET status='open',opened_at=datetime('now') WHERE id=? AND status='draft'").bind(election.id).run();
@@ -580,6 +622,25 @@ electionsRoute.post("/:id/candidates", requireSuperAdmin, async c=>{
   return c.json(await electionDetail(c.env,id),201);
 });
 
+electionsRoute.post("/:id/repair-application-sync", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
+  const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+  if(election.status!=="draft"||election.certified_at)return c.json({error:"Election data can only be repaired before voting opens"},409);
+
+  const before=await evaluateElectionReadiness(c.env,election);
+  const repaired=await synchronizeElectionApplications(c.env,id,admin.id);
+  const afterElection=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  const after=await evaluateElectionReadiness(c.env,afterElection);
+
+  await auditEntity(c.env,admin.id,"election_application_sync_repaired","election",id,
+    {readiness:{passed:before.passed,total:before.total}},
+    {readiness:{passed:after.passed,total:after.total},repaired});
+
+  return c.json({ok:true,repaired,readiness:after,detail:await electionDetail(c.env,id)});
+});
+
 electionsRoute.get("/:id/readiness", requireSuperAdmin, async c=>{
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param("id"));
@@ -592,6 +653,7 @@ electionsRoute.get("/:id/readiness", requireSuperAdmin, async c=>{
 electionsRoute.post("/:id/open", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404); if(election.status!=="draft")return c.json({error:"Election is not draft"},409);
+  await synchronizeElectionApplications(c.env,id,admin.id);
   const readiness=await evaluateElectionReadiness(c.env,election);
   if(!readiness.ready)return c.json({error:"Election is not ready to open voting",readiness},409);
   await c.env.DB.batch([

@@ -970,3 +970,32 @@ test('v56 admin and member election archive surfaces certified history and admin
   assert.match(admin,/CSV Record/);
   assert.match(member,/PAST CERTIFIED ELECTIONS/);
 });
+
+
+test('v57 auto-repair synchronizes approved and withdrawn applications with candidate records', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/synchronizeElectionApplications/);
+  assert.match(route,/status='active',withdrawn_at=NULL,withdrawn_by=NULL,withdrawal_reason=NULL/);
+  assert.match(route,/INSERT INTO election_candidates/);
+  assert.match(route,/Application withdrawn/);
+  assert.match(route,/repair-application-sync/);
+  assert.match(route,/election_application_sync_repaired/);
+});
+
+test('v57 readiness flags sync failures as repairable and opening self-heals legacy mismatches', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/approved_candidates_linked[\s\S]*?repairable:true/);
+  assert.match(route,/withdrawals_synced[\s\S]*?repairable:true/);
+  assert.match(route,/await synchronizeElectionApplications\(c\.env,id,admin\.id\)/);
+  assert.match(route,/await synchronizeElectionApplications\(env,election\.id,null\)/);
+});
+
+test('v57 admin checklist offers Fix automatically and refreshes readiness after repair', () => {
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/repairApplicationSync/);
+  assert.match(admin,/Fix election data automatically/);
+  assert.match(admin,/Fix automatically/);
+  assert.match(admin,/setReadiness\(r\.readiness/);
+  assert.match(admin,/Election data synchronized/);
+});

@@ -421,6 +421,7 @@ export const api = {
     list: () => request("/api/elections"),
     get: (id) => request(`/api/elections/${id}`),
     readiness: (id) => request(`/api/elections/${id}/readiness`),
+    repairApplicationSync: (id) => request(`/api/elections/${id}/repair-application-sync`, { method:"POST" }),
     summary: (id) => request(`/api/elections/${id}/summary`),
     archive: () => request("/api/elections/archive"),
     create: (data) => request("/api/elections", { method:"POST", body:JSON.stringify(data) }),

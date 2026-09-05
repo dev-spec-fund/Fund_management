@@ -2936,3 +2936,11 @@ button:not(:disabled):active {
   color:var(--primary-text);padding:9px 10px;font:inherit;font-size:9px;font-weight:800;cursor:pointer
 }
 .election-export-actions button:disabled{opacity:.55}
+
+/* v57 election application/candidate auto-repair */
+.election-auto-repair-btn{
+  width:100%;margin-top:7px;border:1px solid var(--border-strong);border-radius:7px;
+  background:var(--button-soft);color:var(--primary-text);padding:7px 9px;
+  font-size:8px;font-weight:800;cursor:pointer
+}
+.election-auto-repair-btn:disabled{opacity:.55}

@@ -43,6 +43,17 @@ export default function Elections(){
     return ()=>{active=false};
   },[detail?.id,detail?.certified_at]);
 
+  const repairApplicationSync=async()=>{
+    if(!detail)return;
+    if(!await confirm({title:"Fix election data automatically?",message:"This will synchronize approved/withdrawn applications with their candidate records before voting opens.",confirmLabel:"Fix automatically",tone:"primary"}))return;
+    setBusy(true);try{
+      const r=await api.elections.repairApplicationSync(detail.id);
+      setDetail(r.detail||await api.elections.get(detail.id));
+      setReadiness(r.readiness||await api.elections.readiness(detail.id));
+      const x=r.repaired||{};
+      setMessage(`Election data synchronized · ${Number(x.total_changes||0)} change${Number(x.total_changes||0)===1?"":"s"} applied.`);
+    }catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
   const exportPdf=async()=>{
     if(!summary)return setMessage("Certified election summary is still loading.");
     setBusy(true);try{const {exportElectionPdf}=await import("../utils/exports");await exportElectionPdf(summary);setMessage("Election PDF sent to your Telegram chat.")}catch(e){setMessage(e.message||"Could not export election PDF")}finally{setBusy(false)}
@@ -207,6 +218,7 @@ export default function Elections(){
             <div className="election-readiness-list">
               {readiness.checks.map(check=><div key={check.key} className={`sans election-readiness-check ${check.ok?"pass":"fail"}`}>
                 <div><strong>{check.ok?"✓":"!"}</strong><span><b>{check.label}</b><small>{check.detail}</small></span></div>
+                {!check.ok&&check.repairable&&<button type="button" disabled={busy} onClick={repairApplicationSync} className="sans election-auto-repair-btn">Fix automatically</button>}
               </div>)}
             </div>
           </>}
