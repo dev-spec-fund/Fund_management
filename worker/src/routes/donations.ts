@@ -88,14 +88,33 @@ donationsRoute.post("/",requireFinance,async c=>{
   const project=await donationProject(c,b.project_id); if(b.project_id!=null&&b.project_id!==''&&!project)return c.json({error:'Project not found'},404);
   if(project&&!['planned','active'].includes(String(project.status)))return c.json({error:'Donations can only be linked to planned or active projects'},409);
   const idempotencyKey=boundedText(b.idempotency_key,120);
-  if(idempotencyKey){const existing=await c.env.DB.prepare("SELECT id,txn_id,status,project_id FROM donations WHERE idempotency_key=?").bind(idempotencyKey).first<any>();if(existing)return c.json({...existing,idempotent:true},200);}
+  const idempotencyMatches=(existing:any)=>
+    String(existing?.donor_name||'')===donor &&
+    Number(existing?.amount||0)===Number(amount) &&
+    String(existing?.donation_date||'')===donationDate &&
+    Number(existing?.member_id||0)===Number(member?.id||0) &&
+    Number(existing?.project_id||0)===Number(project?.id||0) &&
+    String(existing?.note||'')===String(note||'');
+  if(idempotencyKey){
+    const existing=await c.env.DB.prepare("SELECT id,txn_id,status,donor_name,member_id,project_id,amount,note,donation_date FROM donations WHERE idempotency_key=?").bind(idempotencyKey).first<any>();
+    if(existing){
+      if(!idempotencyMatches(existing))return c.json({error:'This request key was already used for a different donation. Refresh and submit again.',code:'IDEMPOTENCY_KEY_REUSED'},409);
+      return c.json({id:existing.id,txn_id:existing.txn_id,status:existing.status,project_id:existing.project_id,idempotent:true},200);
+    }
+  }
   const txn=await generateTxnId(c.env,"D");
   let r:any;
   try{
     r=await c.env.DB.prepare("INSERT INTO donations(txn_id,donor_name,member_id,project_id,amount,note,logged_by,transaction_month,status,donation_date,idempotency_key) VALUES(?,?,?,?,?,?,?,?, 'active',?,?)")
       .bind(txn,donor,member?.id??null,project?.id??null,amount,note||null,admin.id,month,donationDate,idempotencyKey||null).run();
   }catch(error){
-    if(idempotencyKey){const existing=await c.env.DB.prepare("SELECT id,txn_id,status,project_id FROM donations WHERE idempotency_key=?").bind(idempotencyKey).first<any>();if(existing)return c.json({...existing,idempotent:true},200);}
+    if(idempotencyKey){
+      const existing=await c.env.DB.prepare("SELECT id,txn_id,status,donor_name,member_id,project_id,amount,note,donation_date FROM donations WHERE idempotency_key=?").bind(idempotencyKey).first<any>();
+      if(existing){
+        if(!idempotencyMatches(existing))return c.json({error:'This request key was already used for a different donation. Refresh and submit again.',code:'IDEMPOTENCY_KEY_REUSED'},409);
+        return c.json({id:existing.id,txn_id:existing.txn_id,status:existing.status,project_id:existing.project_id,idempotent:true},200);
+      }
+    }
     throw error;
   }
   await auditEntity(c.env,admin.id,"donation_created","donation",Number(r.meta.last_row_id),null,{txn_id:txn,donor_name:donor,member_id:member?.id??null,project_id:project?.id??null,amount,note,donation_date:donationDate,month});

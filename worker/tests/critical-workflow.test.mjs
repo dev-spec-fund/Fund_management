@@ -287,6 +287,15 @@ test('donation idempotency key blocks duplicate create retries in the database',
   db.close();
 });
 
+test('donation idempotency retries must match the original donation payload', () => {
+  const source = fs.readFileSync(path.join(root,'src/routes/donations.ts'),'utf8');
+  assert.match(source,/IDEMPOTENCY_KEY_REUSED/);
+  assert.match(source,/idempotencyMatches/);
+  assert.match(source,/donor_name,member_id,project_id,amount,note,donation_date/);
+  assert.match(source,/different donation/);
+});
+
+
 
 test('member fund can open Uncategorised expenses', () => {
   const reportsSource = fs.readFileSync(path.join(root,'src/routes/reports.ts'),'utf8');
