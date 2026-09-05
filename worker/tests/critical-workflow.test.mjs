@@ -492,3 +492,20 @@ test('failed Telegram contribution review sync is logged, retryable, and retaine
   assert.match(system,/telegram_review_sync_retried/);
   assert.match(scheduled,/cleanupContributionReviewMessages\(env,180\)/);
 });
+
+
+test('pending contribution review loads Telegram-backed slip inline with retry and large preview', () => {
+  const pending = fs.readFileSync(path.resolve(root,'../frontend/src/pages/PendingApprovals.jsx'),'utf8');
+  const api = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const members = fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
+
+  assert.match(pending,/loadReviewSlip/);
+  assert.match(pending,/api\.members\.contributionSlip\(contribution\.member_id,contribution\.id\)/);
+  assert.match(pending,/Loading slip…/);
+  assert.match(pending,/Fetching securely from Telegram/);
+  assert.match(pending,/Tap image to enlarge/);
+  assert.match(pending,/Retry/);
+  assert.match(api,/contributionSlip/);
+  assert.match(members,/downloadTelegramFile/);
+  assert.match(members,/Content-Disposition.*inline/);
+});

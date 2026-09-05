@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { LoadingState, ErrorState, SectionTitle, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
@@ -13,6 +13,10 @@ export default function PendingApprovals() {
   const [lastChecked, setLastChecked] = useState(null);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [reviewSlip, setReviewSlip] = useState(null);
+  const [largeSlip, setLargeSlip] = useState(false);
+  const slipRequestRef = useRef(0);
+  const slipCacheRef = useRef(new Map());
 
   const load = () => api.admin.pending()
     .then((d) => { setData(d); setLastChecked(new Date()); })
@@ -20,6 +24,49 @@ export default function PendingApprovals() {
 
   useEffect(() => { load(); }, []);
   useEffect(() => onDataChange(() => load()), []);
+  useEffect(() => () => {
+    for (const entry of slipCacheRef.current.values()) if(entry?.url) URL.revokeObjectURL(entry.url);
+    slipCacheRef.current.clear();
+  }, []);
+
+  const loadReviewSlip = async (contribution, force=false) => {
+    if(!contribution?.id || !contribution?.member_id || !contribution?.slip_file_id){
+      setReviewSlip({status:"missing", contribution});
+      return;
+    }
+    const cached=slipCacheRef.current.get(Number(contribution.id));
+    if(cached && !force){
+      setReviewSlip({status:"ready",...cached,contribution});
+      return;
+    }
+    const requestId=++slipRequestRef.current;
+    setReviewSlip({status:"loading",contribution});
+    try{
+      const blob=await api.members.contributionSlip(contribution.member_id,contribution.id);
+      const url=URL.createObjectURL(blob);
+      if(requestId!==slipRequestRef.current){ URL.revokeObjectURL(url); return; }
+      if(cached?.url) URL.revokeObjectURL(cached.url);
+      const entry={url,mime:blob.type||"image/jpeg",txnId:contribution.txn_id||"Contribution"};
+      slipCacheRef.current.set(Number(contribution.id),entry);
+      setReviewSlip({status:"ready",...entry,contribution});
+    }catch(e){
+      if(requestId!==slipRequestRef.current)return;
+      setReviewSlip({status:"error",error:e.message||"Could not load payment slip",contribution});
+    }
+  };
+
+  const openReview = (contribution) => {
+    setEditing({...contribution});
+    setLargeSlip(false);
+    loadReviewSlip(contribution);
+  };
+
+  const closeReview = () => {
+    slipRequestRef.current+=1;
+    setLargeSlip(false);
+    setReviewSlip(null);
+    setEditing(null);
+  };
 
   if (!data && error) return <ErrorState onRetry={load}>{error}</ErrorState>;
   if (!data) return <LoadingState>Loading approvals…</LoadingState>;
@@ -54,7 +101,7 @@ export default function PendingApprovals() {
     },`contribution-${id}`);
     if(!result)return;
     setData(prev=>prev?{...prev,contributions:(prev.contributions||[]).filter(x=>Number(x.id)!==Number(id)),slips:(prev.slips||[]).filter(x=>Number(x.id)!==Number(id))}:prev);
-    setEditing(null);
+    closeReview();
     const sync=result.review_messages;
     if(sync?.failed>0)setMessage(`${decision==="approved"?"Contribution approved":"Contribution rejected"} · ${sync.failed} Telegram message${sync.failed===1?"":"s"} could not be updated`);
     else setMessage(`${decision==="approved"?"Contribution approved":"Contribution rejected"} · Telegram review messages updated`);
@@ -133,7 +180,7 @@ export default function PendingApprovals() {
                   </div>)}
                 </div>
               )}
-              <button type="button" onClick={() => setEditing({...c})}
+              <button type="button" onClick={() => openReview(c)}
                 style={{...approveBtn,width:"100%",marginTop:10,padding:"9px 10px"}}>
                 Review →
               </button>
@@ -165,9 +212,35 @@ export default function PendingApprovals() {
       </>
     )}
 
-    {editing && <Modal title={`Review ${editing.txn_id}`} onClose={() => setEditing(null)}>
+    {editing && <Modal title={`Review ${editing.txn_id}`} onClose={closeReview}>
       <div className="sans" style={{fontSize:11,color:"var(--muted)",background:"var(--bg)",padding:9,borderRadius:8,marginBottom:10}}>
         Verify the bank slip details before approval. Correct any OCR mistakes first.
+      </div>
+      <div className="review-slip-card">
+        <div className="sans review-slip-head">
+          <span>PAYMENT SLIP</span>
+          {reviewSlip?.status==="ready" && <button type="button" onClick={()=>setLargeSlip(true)}>View larger</button>}
+        </div>
+        {reviewSlip?.status==="loading" ? (
+          <div className="review-slip-loading" aria-busy="true">
+            <span className="review-slip-spinner" aria-hidden="true"/>
+            <div className="sans"><b>Loading slip…</b><span>Fetching securely from Telegram</span></div>
+          </div>
+        ) : reviewSlip?.status==="error" ? (
+          <div className="review-slip-error">
+            <div className="sans">{reviewSlip.error}</div>
+            <button type="button" onClick={()=>loadReviewSlip(editing,true)} style={compactBtn}>Retry</button>
+          </div>
+        ) : reviewSlip?.status==="missing" ? (
+          <div className="sans review-slip-missing">No payment slip is attached to this contribution.</div>
+        ) : reviewSlip?.status==="ready" && String(reviewSlip.mime||"").startsWith("image/") ? (
+          <button type="button" className="review-slip-image-button" onClick={()=>setLargeSlip(true)} aria-label="Open larger payment slip preview">
+            <img src={reviewSlip.url} alt={`Payment slip ${reviewSlip.txnId || editing.txn_id || ""}`} />
+            <span className="sans">Tap image to enlarge</span>
+          </button>
+        ) : reviewSlip?.status==="ready" ? (
+          <div className="sans review-slip-missing">This attachment cannot be previewed as an image.</div>
+        ) : null}
       </div>
       <Field label="Amount" type="number" prefix="MVR" value={editing.amount} onChange={(v)=>setEditing({...editing,amount:v})}/>
       <Field label="Bank reference" value={editing.ref_number || ""} onChange={(v)=>setEditing({...editing,ref_number:v})}/>
@@ -180,12 +253,23 @@ export default function PendingApprovals() {
       <div style={{display:"flex",gap:8}}>
         <button type="button" style={{...compactBtn,flex:1}} onClick={() => act(async()=>{
           await api.admin.correctContribution(editing.id,{amount:editing.amount,ref_number:editing.ref_number||null,bank_date:editing.bank_date||null,month:editing.month});
-          setEditing(null);
+          closeReview();
         })}>Save correction</button>
         <button type="button" disabled={!!busy} style={{...approveBtn,flex:1,opacity:busy?.7:1}} onClick={() => finishContribution("approved")}>{busy===`contribution-${editing.id}`?"Approving…":"Approve"}</button>
       </div>
       <button type="button" disabled={!!busy} style={{...rejectBtn,width:"100%",marginTop:8,opacity:busy?.7:1}} onClick={() => finishContribution("rejected")}>{busy===`contribution-${editing.id}`?"Working…":"Reject contribution"}</button>
     </Modal>}
+    {largeSlip && reviewSlip?.status==="ready" && (
+      <Modal title={`Payment slip · ${reviewSlip.txnId || editing?.txn_id || ""}`} onClose={()=>setLargeSlip(false)}>
+        <div className="review-slip-large">
+          {String(reviewSlip.mime||"").startsWith("image/") ? (
+            <img src={reviewSlip.url} alt={`Payment slip ${reviewSlip.txnId || ""}`} />
+          ) : (
+            <div className="sans review-slip-missing">This attachment cannot be previewed as an image.</div>
+          )}
+        </div>
+      </Modal>
+    )}
   </>;
 }
 

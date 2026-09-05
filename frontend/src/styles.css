@@ -2453,3 +2453,126 @@ button:not(:disabled):active {
   .annual-report-controls > button:last-child {grid-column:1/-1;width:100%;}
   .admin-audit-details > div {grid-template-columns:68px minmax(0,1fr);}
 }
+
+
+/* v43: Telegram-backed contribution slip preview in Pending Review. */
+.review-slip-card {
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--card);
+  overflow:hidden;
+  margin-bottom:12px;
+}
+.review-slip-head {
+  min-height:36px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:8px 10px;
+  border-bottom:1px solid var(--divider);
+}
+.review-slip-head > span {
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.65px;
+  color:var(--soft);
+}
+.review-slip-head button {
+  border:0;
+  background:transparent;
+  color:var(--primary-text);
+  font:inherit;
+  font-size:10px;
+  font-weight:750;
+  cursor:pointer;
+  padding:5px 2px;
+}
+.review-slip-loading {
+  min-height:150px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:18px;
+  background:var(--bg);
+}
+.review-slip-loading b,
+.review-slip-loading span {
+  display:block;
+}
+.review-slip-loading b {
+  font-size:11px;
+  color:var(--primary-text);
+}
+.review-slip-loading div span {
+  font-size:9px;
+  color:var(--soft);
+  margin-top:2px;
+}
+.review-slip-spinner {
+  width:22px;
+  height:22px;
+  border:2px solid var(--border-strong);
+  border-top-color:var(--primary);
+  border-radius:999px;
+  animation:review-slip-spin .8s linear infinite;
+}
+@keyframes review-slip-spin { to { transform:rotate(360deg); } }
+.review-slip-error,
+.review-slip-missing {
+  min-height:120px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  padding:18px;
+  text-align:center;
+  background:var(--bg);
+  color:var(--muted);
+  font-size:11px;
+}
+.review-slip-error > div { color:var(--danger); }
+.review-slip-image-button {
+  display:block;
+  width:100%;
+  border:0;
+  background:var(--bg);
+  padding:8px;
+  cursor:zoom-in;
+  color:inherit;
+}
+.review-slip-image-button img {
+  display:block;
+  width:100%;
+  max-height:290px;
+  object-fit:contain;
+  border-radius:8px;
+  background:#fff;
+}
+.review-slip-image-button span {
+  display:block;
+  margin-top:6px;
+  font-size:9px;
+  color:var(--soft);
+  text-align:center;
+}
+.review-slip-large {
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:7px;
+  text-align:center;
+}
+.review-slip-large img {
+  display:block;
+  width:100%;
+  max-height:72vh;
+  object-fit:contain;
+  border-radius:8px;
+  background:#fff;
+}
+@media (prefers-reduced-motion:reduce){
+  .review-slip-spinner { animation:none; }
+}
