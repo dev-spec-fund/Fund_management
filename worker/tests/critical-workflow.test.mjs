@@ -458,7 +458,7 @@ test('contribution review Telegram messages are persisted and synchronized from 
   assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"rejected"/);
   assert.match(callbacks,/recordContributionReviewMessage/);
   assert.match(callbacks,/syncContributionReviewMessages/);
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 31/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 32/);
 });
 
 test('Telegram callback can self-heal a legacy stale contribution review message', () => {
@@ -581,7 +581,7 @@ test('database backup includes election governance tables and schema version 29'
   for(const table of ['elections','election_positions','election_candidates','election_voters','election_ballots']){
     assert.match(system,new RegExp(table));
   }
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 31/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 32/);
 });
 
 
@@ -630,7 +630,7 @@ test('election integrity migration advances schema to 30', () => {
   assert.ok(candidateCols.has("withdrawal_reason"));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 31/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 32/);
 });
 
 
@@ -676,4 +676,47 @@ test('ordinary members only receive their own election application records', () 
   assert.match(route,/detail\.applications\.filter/);
   assert.match(route,/Number\(a\.member_id\)===Number\(member\.id\)/);
   assert.match(route,/visibleApplications/);
+});
+
+
+test('members can discover draft elections while candidate applications are active', () => {
+  const elections=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(elections,/e\.status='draft' AND e\.applications_open_at IS NOT NULL/);
+  assert.match(elections,/application_phase:applicationPhase/);
+  assert.match(elections,/my_application/);
+  assert.match(elections,/detail\.application_phase==="disabled"/);
+});
+
+test('candidate application opening and closing reminders are Telegram notified exactly once', () => {
+  const elections=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const schema=fs.readFileSync(path.join(root,'schema.sql'),'utf8');
+  assert.match(elections,/applications_notified_at IS NULL/);
+  assert.match(elections,/applications_reminder_at IS NULL/);
+  assert.match(elections,/EXCO Candidate Applications Open/);
+  assert.match(elections,/Candidate Application Reminder/);
+  assert.match(elections,/onlyNotApplied/);
+  assert.match(elections,/minutes>1440/);
+  assert.match(schema,/applications_notified_at/);
+  assert.match(schema,/applications_reminder_at/);
+});
+
+test('hourly election lifecycle does not multiply contribution reminders', () => {
+  const scheduled=fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
+  const index=fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
+  const wrangler=fs.readFileSync(path.join(root,'wrangler.toml'),'utf8');
+  assert.match(wrangler,/"0 \* \* \* \*"/);
+  assert.match(index,/runScheduled\(env, _event\.cron\)/);
+  assert.match(scheduled,/if\(cron !== "0 19 \* \* \*"\) return/);
+  assert.match(scheduled,/processElectionLifecycle\(env\)/);
+});
+
+test('member overview and Elections nav visibly surface open candidate applications', () => {
+  const app=fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
+  const overview=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Overview.jsx'),'utf8');
+  assert.match(app,/electionAttention/);
+  assert.match(app,/Applications open/);
+  assert.match(app,/name==="elections"|t === "elections"/);
+  assert.match(overview,/Applications Open/);
+  assert.match(overview,/Application Submitted/);
+  assert.match(overview,/Apply Now/);
 });

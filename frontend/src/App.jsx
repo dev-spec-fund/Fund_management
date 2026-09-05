@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "./api";
+import { api, onDataChange } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
 import { adminCan } from "./utils/permissions";
@@ -87,7 +87,7 @@ const NAV_ITEMS = {
   profile: { label: "Profile", icon: UserRound },
 };
 
-function NavItem({ name, active, labelVisible, onWarm, onOpen }) {
+function NavItem({ name, active, labelVisible, onWarm, onOpen, attention = false }) {
   const meta = NAV_ITEMS[name] || { label: name, icon: Home };
   const Icon = meta.icon;
   return (
@@ -102,6 +102,7 @@ function NavItem({ name, active, labelVisible, onWarm, onOpen }) {
     >
       <Icon size={16} strokeWidth={active ? 2.25 : 1.9} aria-hidden="true" />
       <span className={`app-nav-label${labelVisible ? " visible" : ""}`}>{meta.label}</span>
+      {attention && <span className="app-nav-attention" aria-label="Applications open" />}
     </button>
   );
 }
@@ -111,6 +112,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [bootstrapSummary, setBootstrapSummary] = useState(null);
+  const [electionAttention, setElectionAttention] = useState(null);
   const [adminMonth, setAdminMonthState] = useState(getAdminReportMonth());
   const setAdminMonth = (value) => {
     if(!/^\d{4}-\d{2}$/.test(String(value||""))) return;
@@ -174,6 +176,16 @@ export default function App() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!me?.member) { setElectionAttention(null); return undefined; }
+    const loadElectionAttention=()=>api.elections.list().then((rows)=>{
+      const open=(rows||[]).find((e)=>e.status==="draft" && e.application_phase==="open");
+      setElectionAttention(open||null);
+    }).catch(()=>{});
+    loadElectionAttention();
+    return onDataChange(({path})=>{ if(path?.startsWith("/api/elections")) loadElectionAttention(); });
+  }, [me?.member?.id]);
 
   useEffect(() => {
     if (!me) return undefined;
@@ -290,7 +302,7 @@ export default function App() {
   };
 
   const renderPage = (page) => {
-    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} adminMonth={adminView ? adminMonth : null} />;
+    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} adminMonth={adminView ? adminMonth : null} electionAttention={memberView ? electionAttention : null} />;
     if (page === "pending" && canFinance) return <PendingApprovals />;
     if (page === "members" && adminView) return <Members isAdmin admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} />;
     if (page === "history" && memberView) return <MyHistory member={me.member} />;
@@ -338,6 +350,7 @@ export default function App() {
             labelVisible={navLabelTab === t}
             onWarm={() => warmTab(t)}
             onOpen={() => openTab(t)}
+            attention={memberView && t === "elections" && !!electionAttention}
           />
         ))}
       </nav>

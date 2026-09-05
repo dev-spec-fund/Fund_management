@@ -34,8 +34,75 @@ async function notifyEligible(env:any,election:any,message:string, onlyNonVoters
   return {sent:results.filter(r=>r.status==="fulfilled").length,failed:results.filter(r=>r.status==="rejected").length};
 }
 
+async function notifyApplicationMembers(env:any,election:any,message:string, onlyNotApplied=false){
+  const query=env.DB.prepare(`SELECT m.id,m.telegram_id FROM members m
+    WHERE m.active=1 AND m.telegram_id IS NOT NULL AND trim(m.telegram_id)<>''
+    ${onlyNotApplied?`AND NOT EXISTS (
+      SELECT 1 FROM election_applications ea WHERE ea.election_id=? AND ea.member_id=m.id
+    )`:""}`);
+  const rows=onlyNotApplied?await query.bind(election.id).all<any>():await query.all<any>();
+  const results=await Promise.allSettled(rows.results.map((m:any)=>sendMessage(env,m.telegram_id,message)));
+  return {sent:results.filter(r=>r.status==="fulfilled").length,failed:results.filter(r=>r.status==="rejected").length};
+}
+
+async function applicationPositionNames(env:any,electionId:number){
+  const rows=await env.DB.prepare("SELECT title,seats FROM election_positions WHERE election_id=? ORDER BY sort_order,id").bind(electionId).all<any>();
+  return rows.results.map((p:any)=>`${p.title}${Number(p.seats)>1?` (${p.seats} seats)`:""}`);
+}
+
+function minutesUntilLocal(value:string, timeZone="Indian/Maldives"){
+  const now=localNow(timeZone);
+  const from=new Date(`${now}+05:00`).getTime();
+  const to=new Date(`${String(value).slice(0,19)}+05:00`).getTime();
+  return Math.floor((to-from)/60000);
+}
+
 export async function processElectionLifecycle(env:any){
-  const now=localNow(env.FUND_TIMEZONE || "Indian/Maldives");
+  const timeZone=env.FUND_TIMEZONE || "Indian/Maldives";
+  const now=localNow(timeZone);
+
+  // Candidate application notifications are claimed in D1 before Telegram sends,
+  // so scheduled runs and normal API reads cannot send duplicates.
+  const applicationOpenRows=await env.DB.prepare(`SELECT * FROM elections
+    WHERE status='draft'
+      AND applications_open_at IS NOT NULL AND applications_open_at<>''
+      AND applications_close_at IS NOT NULL AND applications_close_at<>''
+      AND applications_open_at<=? AND applications_close_at>=?
+      AND applications_notified_at IS NULL`).bind(now,now).all<any>();
+  for(const election of applicationOpenRows.results as any[]){
+    const positions=await applicationPositionNames(env,election.id);
+    if(!positions.length)continue;
+    const claim=await env.DB.prepare(`UPDATE elections SET applications_notified_at=datetime('now')
+      WHERE id=? AND applications_notified_at IS NULL`).bind(election.id).run();
+    if(!claim.meta.changes)continue;
+    const brand=await getBranding(env);
+    const deadline=String(election.applications_close_at||"").replace("T"," ");
+    const positionsText=positions.length?`\n\nAvailable positions:\n${positions.map(x=>`• ${x}`).join("\n")}`:"";
+    const result=await notifyApplicationMembers(env,election,
+      `📣 <b>${brand.fund_name} · EXCO Candidate Applications Open</b>\n\n<b>${election.title}</b>${positionsText}\n\nApplications close: <b>${deadline}</b>\n\nOpen the Mini App → Elections to apply.`);
+    await auditEntity(env,null,"election_applications_open_notified","election",election.id,election,{...election,notification_result:result});
+  }
+
+  const reminderRows=await env.DB.prepare(`SELECT * FROM elections
+    WHERE status='draft'
+      AND applications_close_at IS NOT NULL AND applications_close_at<>''
+      AND applications_open_at IS NOT NULL AND applications_open_at<=?
+      AND applications_close_at>?
+      AND applications_notified_at IS NOT NULL
+      AND applications_reminder_at IS NULL`).bind(now,now).all<any>();
+  for(const election of reminderRows.results as any[]){
+    const minutes=minutesUntilLocal(election.applications_close_at,timeZone);
+    if(minutes<0 || minutes>1440)continue;
+    const claim=await env.DB.prepare(`UPDATE elections SET applications_reminder_at=datetime('now')
+      WHERE id=? AND applications_reminder_at IS NULL`).bind(election.id).run();
+    if(!claim.meta.changes)continue;
+    const brand=await getBranding(env);
+    const deadline=String(election.applications_close_at||"").replace("T"," ");
+    const result=await notifyApplicationMembers(env,election,
+      `⏰ <b>${brand.fund_name} · Candidate Application Reminder</b>\n\nApplications for <b>${election.title}</b> close within 24 hours.\nDeadline: <b>${deadline}</b>\n\nOpen the Mini App → Elections if you want to apply.`,true);
+    await auditEntity(env,null,"election_applications_closing_reminder","election",election.id,election,{...election,notification_result:result});
+  }
+
   const drafts=await env.DB.prepare(`SELECT * FROM elections
     WHERE status='draft' AND opens_at IS NOT NULL AND opens_at<>'' AND opens_at<=?`).bind(now).all<any>();
   for(const election of drafts.results as any[]){
@@ -98,18 +165,25 @@ electionsRoute.get("/", async c=>{
     (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id) eligible,
     (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id AND v.voted_at IS NOT NULL) voted
     FROM elections e
-    WHERE ? IS NOT NULL OR e.status<>'draft'
+    WHERE ? IS NOT NULL
+       OR e.status<>'draft'
+       OR (e.status='draft' AND e.applications_open_at IS NOT NULL AND e.applications_close_at IS NOT NULL)
     ORDER BY CASE e.status WHEN 'open' THEN 0 WHEN 'draft' THEN 1 WHEN 'closed' THEN 2 ELSE 3 END,e.id DESC`)
     .bind(admin?.id||null).all<any>();
   const result=[];
   for(const e of rows.results as any[]){
-    let my_vote=false,eligible=false;
+    let my_vote=false,eligible=false,my_application=null;
     if(member){
-      const v=await c.env.DB.prepare("SELECT voted_at FROM election_voters WHERE election_id=? AND member_id=?").bind(e.id,member.id).first<any>();
-      eligible=!!v; my_vote=!!v?.voted_at;
+      const [v,a]=await Promise.all([
+        c.env.DB.prepare("SELECT voted_at FROM election_voters WHERE election_id=? AND member_id=?").bind(e.id,member.id).first<any>(),
+        c.env.DB.prepare("SELECT id,position_id,status,submitted_at FROM election_applications WHERE election_id=? AND member_id=? ORDER BY id DESC LIMIT 1").bind(e.id,member.id).first<any>()
+      ]);
+      eligible=!!v; my_vote=!!v?.voted_at; my_application=a||null;
     }
     const eligibleCount=Number(e.eligible||0),votedCount=Number(e.voted||0);
-    result.push({...e,eligible,my_vote,turnout:{eligible:eligibleCount,voted:votedCount,percent:eligibleCount>0?Math.round((votedCount/eligibleCount)*1000)/10:0}});
+    result.push({...e,eligible,my_vote,my_application,
+      application_phase:applicationPhase(e,localNow(c.env.FUND_TIMEZONE || "Indian/Maldives")),
+      turnout:{eligible:eligibleCount,voted:votedCount,percent:eligibleCount>0?Math.round((votedCount/eligibleCount)*1000)/10:0}});
   }
   return c.json(result);
 });
@@ -125,7 +199,7 @@ electionsRoute.get("/:id", async c=>{
     const v=await c.env.DB.prepare("SELECT voted_at FROM election_voters WHERE election_id=? AND member_id=?").bind(id,member.id).first<any>();
     eligible=!!v;my_vote=!!v?.voted_at;
   }
-  if(!admin && detail.status==="draft")return c.json({error:"Election not available"},404);
+  if(!admin && detail.status==="draft" && detail.application_phase==="disabled")return c.json({error:"Election not available"},404);
   let results:any[]= [];
   if(detail.status==="closed" && (admin || detail.certified_at)){
     const rows=await c.env.DB.prepare(`SELECT b.position_id,b.candidate_id,COUNT(*) votes

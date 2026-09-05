@@ -8,12 +8,15 @@ import { cleanupContributionReviewMessages } from "./contributionReviewMessages"
 import { processElectionLifecycle } from "./routes/elections";
 
 /** Runs daily and evaluates reminder dates in FUND_TIMEZONE (Indian/Maldives by default). */
-export async function runScheduled(env: Env) {
+export async function runScheduled(env: Env, cron = "0 19 * * *") {
   try {
     // Governance lifecycle runs independently from contribution reminder settings.
     await processElectionLifecycle(env).catch((e)=>safeLogError(env,"scheduled.election_lifecycle",e));
     // Best-effort retention cleanup; never block financial/reminder processing.
     await cleanupContributionReviewMessages(env,180).catch((e)=>safeLogError(env,"scheduled.review_message_cleanup",e));
+    // Keep contribution reminders on the original once-daily cron. The hourly
+    // trigger exists only so election application/voting lifecycle is timely.
+    if(cron !== "0 19 * * *") return;
     const reminderDay = await getSetting(env, "reminder_day");
     if (!reminderDay || reminderDay === "off") return;
     const timeZone = env.FUND_TIMEZONE || "Indian/Maldives";

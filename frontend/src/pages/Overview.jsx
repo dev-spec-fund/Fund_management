@@ -6,7 +6,7 @@ import { fmt } from "../utils/format";
 import { LoadingState } from "../components/Shared";
 import { ActivityRow } from "../components/ActivityRow";
 
-export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null, member = null, adminMonth = null }) {
+export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null, member = null, adminMonth = null, electionAttention = null }) {
   const [summary, setSummary] = useState(bootstrapSummary);
   const [activity, setActivity] = useState([]);
   const [pendingCount, setPendingCount] = useState(null);
@@ -100,6 +100,15 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   const memberState = String(memberStatus?.status || "unpaid").toLowerCase();
   const memberStateLabel = memberState === "paid" ? "Paid" : memberState === "partial" ? "Partial" : memberState === "exempt" ? "Exempt" : memberState === "not_applicable" ? "Not due" : "Unpaid";
   const memberStateColor = memberState === "paid" ? "var(--success)" : memberState === "partial" ? "var(--warning)" : memberState === "exempt" || memberState === "not_applicable" ? "var(--muted)" : "var(--danger)";
+  const electionApplication=electionAttention?.my_application||null;
+  const applicationDeadline=(()=>{
+    if(!electionAttention?.applications_close_at)return "";
+    try{
+      const value=String(electionAttention.applications_close_at);
+      const d=new Date(value.length===16?`${value}:00`:value);
+      return new Intl.DateTimeFormat("en-GB",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}).format(d);
+    }catch{return String(electionAttention.applications_close_at).replace("T"," ")}
+  })();
 
   return (
     <>
@@ -124,6 +133,22 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
               </div>
             </>
           )}
+        </button>
+      )}
+
+      {!isAdmin && electionAttention && (
+        <button type="button" onClick={() => setTab?.("elections")} className={`member-election-overview${electionApplication ? " submitted" : ""}`}>
+          <div className="sans member-election-overview-top">
+            <span>EXCO ELECTION</span>
+            <strong>{electionApplication ? "Application Submitted ✓" : "Applications Open"}</strong>
+          </div>
+          <div className="sans member-election-overview-title">{electionAttention.title}</div>
+          <div className="sans member-election-overview-bottom">
+            <span>{electionApplication
+              ? `${String(electionApplication.status||"pending").replace("_"," ")} · ${applicationDeadline ? `Applications close ${applicationDeadline}` : "View application"}`
+              : `${applicationDeadline ? `Apply before ${applicationDeadline}` : "Candidate applications are open"}`}</span>
+            <strong>{electionApplication ? "View ›" : "Apply Now ›"}</strong>
+          </div>
         </button>
       )}
 

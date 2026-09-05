@@ -534,7 +534,9 @@ CREATE TABLE IF NOT EXISTS elections (
   certified_at TEXT,
   certified_by INTEGER REFERENCES admins(id),
   applications_open_at TEXT,
-  applications_close_at TEXT
+  applications_close_at TEXT,
+  applications_notified_at TEXT,
+  applications_reminder_at TEXT
 );
 CREATE TABLE IF NOT EXISTS election_positions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -602,3 +604,5 @@ CREATE INDEX IF NOT EXISTS idx_election_applications_review
 
 
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(31,'election_applications');
+
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(32,'election_application_notifications');
