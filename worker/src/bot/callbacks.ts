@@ -5,6 +5,7 @@ import { sendMessage, answerCallback, editMessageText, editMessageCaption } from
 import { currentMonth, currentDate, getAdminByTelegramId, logAudit, generateMemberCode, getSetting, getBranding, ensureMemberRegistrationTable } from "../db";
 import { adminCan, consumeRateLimit, duplicateSlip, normalizeName, normalizePhone, requireOpenMonth } from "../ops";
 import { esc, miniAppUrl } from "../botSupport";
+import { recordContributionReviewMessage, syncContributionReviewMessages } from "../contributionReviewMessages";
 
 async function finishRegistrationMessage(env: Env, callback: any, text: string) {
   if (callback.message?.photo) {
@@ -163,7 +164,29 @@ export async function handleCallback(env: Env, callback: any) {
   const contributionId = Number(parts[1]);
   const contribution = await env.DB.prepare("SELECT * FROM contributions WHERE id = ?").bind(contributionId).first<any>();
   if (!contribution) return answerCallback(env, callback.id, "Not found.");
-  if (contribution.status !== "pending") return answerCallback(env, callback.id, `Already ${contribution.status}.`);
+
+  // Record the message that produced this callback too. This also lets a legacy
+  // review message self-heal when someone taps an old button after the Mini App
+  // already approved/rejected the contribution.
+  if(callback.message?.chat?.id && callback.message?.message_id){
+    await recordContributionReviewMessage(env,contributionId,{
+      admin_telegram_id:telegramId,
+      telegram_chat_id:callback.message.chat.id,
+      telegram_message_id:Number(callback.message.message_id),
+      message_kind:callback.message?.photo?"photo":"text"
+    }).catch(()=>{});
+  }
+
+  if (contribution.status !== "pending") {
+    if(contribution.status==="approved"){
+      const reviewedBy=await env.DB.prepare("SELECT name FROM admins WHERE id=?").bind(contribution.approved_by||0).first<any>();
+      await syncContributionReviewMessages(env,contributionId,"approved",reviewedBy?.name||"Admin").catch(()=>{});
+    } else if(contribution.status==="rejected"){
+      const reviewedBy=await env.DB.prepare("SELECT name FROM admins WHERE id=?").bind(contribution.approved_by||0).first<any>();
+      await syncContributionReviewMessages(env,contributionId,"rejected",reviewedBy?.name||"Admin",contribution.void_reason||null).catch(()=>{});
+    }
+    return answerCallback(env, callback.id, `Already ${contribution.status}.`);
+  }
 
   if (action === "approve") {
     try { await requireOpenMonth(env, contribution.month); } catch (e:any) { return answerCallback(env, callback.id, e.message); }
@@ -177,8 +200,7 @@ export async function handleCallback(env: Env, callback: any) {
     if (member?.telegram_id) await sendMessage(env, member.telegram_id,
       `✅ <b>Contribution approved</b>\n\nReceived: <b>MVR ${Number(contribution.amount).toFixed(2)}</b>\n\nApplied to:\n${allocationReceipt(approved.allocations)}`
     );
-    const previous = callback.message.caption || callback.message.text || "Contribution";
-    await finishRegistrationMessage(env, callback, `${previous}\n\n✅ Approved by ${esc(admin.name)}`);
+    await syncContributionReviewMessages(env,contributionId,"approved",admin.name).catch(()=>{});
     return answerCallback(env, callback.id, "Approved");
   }
 
@@ -189,7 +211,6 @@ export async function handleCallback(env: Env, callback: any) {
   await logAudit(env, admin.id, "contribution_rejected", `${contribution.txn_id} rejected`);
   const member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(contribution.member_id).first<any>();
   if (member?.telegram_id) await sendMessage(env, member.telegram_id, `❌ Your slip for ${contribution.month} was rejected. Please check the amount/reference and resend.`);
-  const previous = callback.message.caption || callback.message.text || "Contribution";
-  await finishRegistrationMessage(env, callback, `${previous}\n\n❌ Rejected by ${esc(admin.name)}`);
+  await syncContributionReviewMessages(env,contributionId,"rejected",admin.name).catch(()=>{});
   return answerCallback(env, callback.id, "Rejected");
 }

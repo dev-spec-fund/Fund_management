@@ -6,6 +6,7 @@ import { currentMonth, currentDate, getSetting, getBranding, generateMemberCode 
 import { ensureInitialContributionRate, contributionDueFromRate, firstMonthContributionRule } from "../../contributionRates";
 import { sendMessage } from "../../telegram";
 import { approveWithAllocations, allocationReceipt, buildAllocationPlan, allocatedPaidSql } from "../../allocations";
+import { syncContributionReviewMessages } from "../../contributionReviewMessages";
 import { money, validDate, validMonth, boundedText } from "../../validation";
 
 export function registerPendingAdminRoutes(route: Hono<AppEnv>) {
@@ -87,14 +88,20 @@ route.post('/pending/contributions/:id/approve', requireFinance, async c => {
   if(member?.telegram_id) { const brand=await getBranding(c.env); await sendMessage(c.env,member.telegram_id,
     `✅ <b>${brand.fund_name} · Contribution approved</b>\n\nReceived: <b>MVR ${Number(row.amount).toFixed(2)}</b>\n\nApplied to:\n${allocationReceipt(approved.allocations)}`
   ); }
-  return c.json({ok:true,allocations:approved.allocations});
+  const reviewSync=await syncContributionReviewMessages(c.env,id,"approved",admin.name).catch(()=>({updated:0,failed:0,total:0}));
+  return c.json({ok:true,allocations:approved.allocations,review_messages:reviewSync});
 });
 
 route.post('/pending/contributions/:id/reject', requireFinance, async c => {
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const body=await c.req.json().catch(()=>({})) as any; const row=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
   if(!row)return c.json({error:'Not found'},404); if(row.status!=='pending')return c.json({error:`Already ${row.status}`},409);
-  const r=await c.env.DB.prepare("UPDATE contributions SET status='rejected',approved_by=?,approved_at=datetime('now'),void_reason=? WHERE id=? AND status='pending'").bind(admin.id,body.reason||'Rejected by admin',id).run();if(!r.meta.changes)return c.json({error:'Already reviewed'},409);
-  await auditEntity(c.env,admin.id,'contribution_rejected','contribution',id,row,{...row,status:'rejected'});return c.json({ok:true});
+  const reason=String(body.reason||'Rejected by admin');
+  const r=await c.env.DB.prepare("UPDATE contributions SET status='rejected',approved_by=?,approved_at=datetime('now'),void_reason=? WHERE id=? AND status='pending'").bind(admin.id,reason,id).run();if(!r.meta.changes)return c.json({error:'Already reviewed'},409);
+  await auditEntity(c.env,admin.id,'contribution_rejected','contribution',id,row,{...row,status:'rejected',void_reason:reason});
+  const member=await c.env.DB.prepare("SELECT telegram_id FROM members WHERE id=?").bind(row.member_id).first<any>();
+  if(member?.telegram_id) await sendMessage(c.env,member.telegram_id,`❌ Your slip for ${row.month} was rejected.${reason?` Reason: ${reason}`:""} Please check the amount/reference and resend.`);
+  const reviewSync=await syncContributionReviewMessages(c.env,id,"rejected",admin.name,reason).catch(()=>({updated:0,failed:0,total:0}));
+  return c.json({ok:true,review_messages:reviewSync});
 });
 
 route.delete('/contributions/:id', requireFinance, async c => {

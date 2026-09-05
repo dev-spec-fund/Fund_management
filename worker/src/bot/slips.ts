@@ -3,6 +3,7 @@ import { sendMessage, slipReference, ocrSlip, downloadTelegramFile } from "../te
 import { currentMonth, getAdminByTelegramId, logAudit, generateTxnId } from "../db";
 import { adminCan, consumeRateLimit, contributionDuplicateKey, duplicateSlip, requireOpenMonth } from "../ops";
 import { esc, miniAppUrl, notifyAdminsWithPhoto } from "../botSupport";
+import { recordContributionReviewMessage } from "../contributionReviewMessages";
 
 export async function handleSlipPhoto(env: Env, message: any, chatId: number, telegramId: string) {
   if (!(await consumeRateLimit(env, "slip_upload", telegramId, 10, 3600))) return sendMessage(env, chatId, "Too many slip uploads. Please try again later.");
@@ -107,7 +108,7 @@ export async function handleSlipPhoto(env: Env, message: any, chatId: number, te
     `Bank date: ${esc(bankDate)}\n` +
     `${ref ? "✅ OCR amount/reference detected" : "⚠️ OCR reference needs admin review"}${dupWarning}`;
 
-  await notifyAdminsWithPhoto(env, fileId, adminCaption, {
+  const reviewMessages = await notifyAdminsWithPhoto(env, fileId, adminCaption, {
     reply_markup: {
       inline_keyboard: [
         [
@@ -118,5 +119,8 @@ export async function handleSlipPhoto(env: Env, message: any, chatId: number, te
       ],
     },
   });
+  await Promise.allSettled(reviewMessages.map((message:any)=>
+    recordContributionReviewMessage(env,contributionId,message)
+  ));
 }
 

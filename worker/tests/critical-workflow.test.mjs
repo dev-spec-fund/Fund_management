@@ -431,3 +431,40 @@ test('shared admin month is the single React source for overview members reports
   assert.match(settings,/onAdminMonthChange/);
   assert.match(settings,/shiftSharedCloseMonth/);
 });
+
+
+test('contribution review Telegram messages are persisted and synchronized from Mini App decisions', () => {
+  const db = dbWithSchema();
+  const table = db.prepare("PRAGMA table_info(contribution_review_messages)").all();
+  const cols = new Set(table.map((r) => r.name));
+  for (const name of ['contribution_id','telegram_chat_id','telegram_message_id','message_kind','last_synced_at','last_sync_status']) {
+    assert.ok(cols.has(name), `missing ${name}`);
+  }
+  db.close();
+
+  const slips = fs.readFileSync(path.join(root,'src/bot/slips.ts'),'utf8');
+  const helper = fs.readFileSync(path.join(root,'src/contributionReviewMessages.ts'),'utf8');
+  const pending = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
+  const callbacks = fs.readFileSync(path.join(root,'src/bot/callbacks.ts'),'utf8');
+  const support = fs.readFileSync(path.join(root,'src/botSupport.ts'),'utf8');
+  const ops = fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
+
+  assert.match(support,/telegram_message_id/);
+  assert.match(slips,/recordContributionReviewMessage/);
+  assert.match(helper,/syncContributionReviewMessages/);
+  assert.match(helper,/editMessageCaption/);
+  assert.match(helper,/inline_keyboard:\[\]/);
+  assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"approved"/);
+  assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"rejected"/);
+  assert.match(callbacks,/recordContributionReviewMessage/);
+  assert.match(callbacks,/syncContributionReviewMessages/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 28/);
+});
+
+test('Telegram callback can self-heal a legacy stale contribution review message', () => {
+  const callbacks = fs.readFileSync(path.join(root,'src/bot/callbacks.ts'),'utf8');
+  assert.match(callbacks,/if \(contribution\.status !== "pending"\)/);
+  assert.match(callbacks,/contribution\.status==="approved"/);
+  assert.match(callbacks,/contribution\.status==="rejected"/);
+  assert.match(callbacks,/Already \$\{contribution\.status\}/);
+});

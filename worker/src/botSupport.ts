@@ -32,7 +32,18 @@ export async function notifyAdminsWithPhoto(
   extra: Record<string, unknown> = {}
 ) {
   const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
-  await Promise.allSettled(admins.results.map((a) => sendPhoto(env, a.telegram_id, photoFileId, caption, extra)));
+  const results = await Promise.allSettled(admins.results.map(async (a) => {
+    const response:any = await sendPhoto(env, a.telegram_id, photoFileId, caption, extra);
+    return { admin_telegram_id:String(a.telegram_id), response };
+  }));
+  return results
+    .filter((r:any)=>r.status==="fulfilled" && r.value?.response?.ok && r.value?.response?.result?.message_id)
+    .map((r:any)=>({
+      admin_telegram_id:r.value.admin_telegram_id,
+      telegram_chat_id:String(r.value.response.result.chat?.id ?? r.value.admin_telegram_id),
+      telegram_message_id:Number(r.value.response.result.message_id),
+      message_kind:"photo"
+    }));
 }
 
 function registrationButtons(requestId: number, matches: any[]) {

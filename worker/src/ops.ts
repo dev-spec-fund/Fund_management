@@ -26,7 +26,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 26;
+const REQUIRED_SCHEMA_VERSION = 28;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -55,6 +55,7 @@ export async function ensureOperationalSchema(env: Env) {
       ["admin_roles", ["name","active","created_by","created_at"]],
       ["admin_role_permissions", ["role_id","permission"]],
       ["telegram_update_receipts", ["update_id","status","claimed_at","attempts"]],
+      ["contribution_review_messages", ["contribution_id","telegram_chat_id","telegram_message_id","message_kind","last_synced_at","last_sync_status"]],
     ];
     for (const [table,required] of checks) {
       const rows=await env.DB.prepare(`PRAGMA table_info(${table})`).all<any>();
