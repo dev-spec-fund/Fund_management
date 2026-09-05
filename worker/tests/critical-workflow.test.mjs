@@ -1833,3 +1833,11 @@ test('contribution void and reversal protect every allocated closed month', () =
   assert.match(pending,/requireOpenContributionMonths\(c\.env,id,row\.month\)/);
   assert.match(governance,/if\(type==='contribution'\) await requireOpenContributionMonths\(c\.env,id,month\)/);
 });
+
+
+test("financial reversal claims only the expected live status", () => {
+  const source = fs.readFileSync(new URL("../src/routes/governance.ts", import.meta.url), "utf8");
+  assert.match(source, /SET status='reversed' WHERE id=\? AND status=\?/);
+  assert.match(source, /if\(!Number\(\(reversalBatch\[0\]/);
+  assert.match(source, /Transaction is \${current\?\.status\|\|'changed'} and cannot be reversed/);
+});

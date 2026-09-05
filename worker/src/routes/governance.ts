@@ -161,10 +161,18 @@ governanceRoute.post('/reverse', requireFinance, async c=>{
   const existing=await c.env.DB.prepare("SELECT reversal_id FROM financial_reversals WHERE entity_type=? AND entity_id=?").bind(type,id).first<any>();
   if(existing) return c.json({error:`Already reversed as ${existing.reversal_id}`},409);
   const reversalId=await nextReversalId(c.env);
+  const liveStatus=type==='donation'?'active':'approved';
+  let reversalBatch:any[];
   try {
-    await c.env.DB.batch([
-      c.env.DB.prepare(`UPDATE ${cfg.table} SET status='reversed' WHERE id=?`).bind(id),
-      c.env.DB.prepare("INSERT INTO financial_reversals(reversal_id,entity_type,entity_id,original_txn_id,amount,month,reason,reversed_by) VALUES(?,?,?,?,?,?,?,?)").bind(reversalId,type,id,row.txn_id||null,n(row.amount),month||null,reason,admin.id)
+    // Claim the live transaction with a conditional state transition. This prevents
+    // a simultaneous void/edit from being overwritten by a stale reversal request.
+    reversalBatch=await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE ${cfg.table} SET status='reversed' WHERE id=? AND status=?`).bind(id,liveStatus),
+      c.env.DB.prepare(`INSERT INTO financial_reversals(reversal_id,entity_type,entity_id,original_txn_id,amount,month,reason,reversed_by)
+        SELECT ?,?,?,?,?,?,?,?
+        WHERE EXISTS (SELECT 1 FROM ${cfg.table} WHERE id=? AND status='reversed')
+          AND NOT EXISTS (SELECT 1 FROM financial_reversals WHERE entity_type=? AND entity_id=?)`)
+        .bind(reversalId,type,id,row.txn_id||null,n(row.amount),month||null,reason,admin.id,id,type,id)
     ]);
   } catch (error:any) {
     // The unique (entity_type, entity_id) index is the final guard for two
@@ -173,6 +181,12 @@ governanceRoute.post('/reverse', requireFinance, async c=>{
     const duplicate=await c.env.DB.prepare("SELECT reversal_id FROM financial_reversals WHERE entity_type=? AND entity_id=?").bind(type,id).first<any>();
     if(duplicate) return c.json({error:`Already reversed as ${duplicate.reversal_id}`},409);
     throw error;
+  }
+  if(!Number((reversalBatch[0] as any)?.meta?.changes||0)){
+    const current=await c.env.DB.prepare(`SELECT status FROM ${cfg.table} WHERE id=?`).bind(id).first<any>();
+    const duplicate=await c.env.DB.prepare("SELECT reversal_id FROM financial_reversals WHERE entity_type=? AND entity_id=?").bind(type,id).first<any>();
+    if(duplicate) return c.json({error:`Already reversed as ${duplicate.reversal_id}`},409);
+    return c.json({error:`Transaction is ${current?.status||'changed'} and cannot be reversed`},409);
   }
   await auditEntity(c.env,admin.id,'financial_transaction_reversed',type,id,row,{...row,status:'reversed',reversal_id:reversalId,reason});
   return c.json({ok:true,reversal_id:reversalId});
