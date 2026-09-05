@@ -3876,3 +3876,30 @@ textarea:focus {
 .member-history-reconciliation-alert b {
   font-size: 11px !important;
 }
+
+/* v84 election admin workflow clarity */
+.election-stage-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:8px 0 12px;padding:8px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.election-stage-strip>div{min-width:0;text-align:center;color:var(--soft);font-size:10px;font-weight:700}
+.election-stage-strip i{display:flex;align-items:center;justify-content:center;width:24px;height:24px;margin:0 auto 4px;border-radius:50%;background:var(--muted);font-style:normal;font-size:10px}
+.election-stage-strip .done,.election-stage-strip .current{color:var(--text)}
+.election-stage-strip .done i{background:var(--success-bg);color:var(--success)}
+.election-stage-strip .current i{background:var(--text);color:var(--card)}
+.election-stage-strip.cancelled{display:block;text-align:center}
+.election-stage-strip.cancelled>div{display:none}
+.election-stage-strip.cancelled>b{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--danger)}
+.election-admin-more{margin:10px 0;border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
+.election-admin-more>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:9px 11px;cursor:pointer;list-style:none}
+.election-admin-more>summary::-webkit-details-marker{display:none}
+.election-admin-more>summary span{display:flex;min-width:0;flex-direction:column;gap:2px;text-align:left}
+.election-admin-more>summary b{font-size:12px}
+.election-admin-more>summary small{font-size:10px;color:var(--soft);font-weight:500}
+.election-admin-more>summary strong{font-size:10px;color:var(--soft);white-space:nowrap}
+.election-admin-more[open]>summary{border-bottom:1px solid var(--line)}
+.election-admin-more-body{padding:10px}
+.election-admin-more-body>.election-notification-status:first-child,.election-admin-more-body>.election-governance-timeline:first-child{margin-top:0}
+.election-setup-details{margin-top:12px}
+.election-danger-details{margin-top:12px}
+.election-danger-details>summary b{color:var(--danger)}
+.election-danger-details .election-delete-zone{margin:0}
+.election-audit-details{margin-top:14px}
+@media(max-width:380px){.election-stage-strip{gap:2px;padding:7px 4px}.election-stage-strip>div{font-size:9px}.election-stage-strip i{width:22px;height:22px}}

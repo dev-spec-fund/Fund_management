@@ -313,6 +313,10 @@ export default function Elections(){
     {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setReadiness(null);setSummary(null);setNotificationStatus(null);setTimeline(null)}}>
       {!detail?<LoadingState>Loading election…</LoadingState>:<>
         <div className="election-admin-summary sans"><span>Status <b>{detail.status==="draft"&&detail.application_phase==="open"?"Applications Open":detail.status}</b></span><span>Turnout <b>{detail.turnout?.voted||0}/{detail.turnout?.eligible||0}</b></span></div>
+        <ElectionStageStrip detail={detail}/>
+        {(notificationStatus||timeline)&&<details className="election-admin-more">
+          <summary className="sans"><span><b>Governance details</b><small>Notifications, timeline and audit context</small></span><strong>View</strong></summary>
+          <div className="election-admin-more-body">
         {notificationStatus&&<section className="election-notification-status">
           <div className="sans election-notification-heading"><b>NOTIFICATION STATUS</b><span>{notificationStatus.totals?.sent||0} sent · {notificationStatus.totals?.failed||0} failed</span></div>
           {!notificationStatus.items?.length?<div className="sans election-field-help">No election notifications recorded yet.</div>:notificationStatus.items.slice(0,6).map(n=><div key={n.id} className="sans election-notification-row">
@@ -332,6 +336,8 @@ export default function Elections(){
             <span>Certified by <b>{timeline.governance?.certified_by||"Not certified"}</b></span>
           </div>
         </section>}
+          </div>
+        </details>}
         {detail.status==="draft"&&detail.applications_open_at&&<>
           <div className="sans election-secret-note">Candidate applications: <b>{detail.application_phase}</b> · {String(detail.applications_open_at).replace("T"," ")} → {String(detail.applications_close_at||"").replace("T"," ")}</div>
           <button type="button" disabled={busy} onClick={extendApplications} className="sans election-extend-deadline">Extend application deadline</button>
@@ -360,6 +366,9 @@ export default function Elections(){
               <div className="sans election-position-counts"><span>{approved} approved</span><span>{pending} pending</span><span>{withdrawn} withdrawn</span><strong>{ready?"✓ Ready":"Needs review"}</strong></div>
             </div>
           })}
+          <details className="election-admin-more election-setup-details" open={!detail.positions.length}>
+            <summary className="sans"><span><b>Election setup</b><small>Positions and manual candidate management</small></span><strong>{detail.positions.length} position{detail.positions.length===1?"":"s"}</strong></summary>
+            <div className="election-admin-more-body">
           <div className="sans member-section-title">POSITIONS</div>
           {detail.positions.map(p=><div key={p.id} className="election-admin-position"><b className="sans">{p.title}</b><span className="sans">{p.seats} seat{Number(p.seats)===1?"":"s"} · select {p.min_selections}–{p.max_selections} · {p.candidates.filter(c=>c.status==="active").length} active candidates</span></div>)}
           <div className="election-position-create">
@@ -376,6 +385,8 @@ export default function Elections(){
             <select className="sans election-select" value={candidate.member_id} onChange={e=>setCandidate({...candidate,member_id:e.target.value})}><option value="">Choose member</option>{members.filter(m=>Number(m.active)!==0).map(m=><option key={m.id} value={m.id}>{m.member_code} · {m.name}</option>)}</select>
             <button type="button" style={{...approveBtn,width:"100%",marginTop:7}} disabled={busy} onClick={addCandidate}>Add candidate</button>
           </>}
+            </div>
+          </details>
           <div className="sans member-section-title" style={{marginTop:16}}>PRE-VOTE CHECKLIST</div>
           {!readiness?<div className="sans election-readiness-loading">Checking election readiness…</div>:<>
             <div className={`sans election-readiness-summary ${readiness.ready?"ready":"blocked"}`}>
@@ -393,6 +404,9 @@ export default function Elections(){
           <button type="button" style={{...approveBtn,width:"100%",marginTop:10,opacity:readiness?.ready?1:.5}} disabled={busy||!readiness?.ready} onClick={()=>changeStatus("open")}>
             {readiness?.ready?"Open Voting & Lock Setup":readiness?`Open Voting · ${readiness.passed}/${readiness.total} checks`:"Checking…"}
           </button>
+          <details className="election-admin-more election-danger-details">
+            <summary className="sans"><span><b>Advanced</b><small>Permanent draft deletion</small></span><strong>Manage</strong></summary>
+            <div className="election-admin-more-body">
           <section className="election-delete-zone">
             <div className="sans election-delete-zone-copy">
               <b>DELETE DRAFT ELECTION</b>
@@ -403,6 +417,8 @@ export default function Elections(){
             </div>
             {detail.deletion?.allowed&&<button type="button" className="sans election-delete-unused-btn" disabled={busy} onClick={deleteUnusedElection}>Delete election permanently</button>}
           </section>
+            </div>
+          </details>
         </>}
         {detail.status==="open"&&<>
           <div className="sans election-voting-lock-banner">
@@ -433,13 +449,27 @@ export default function Elections(){
             </div>
           })}
           {!detail.certified_at&&<button type="button" disabled={busy||!!detail.unresolved_ties?.length} onClick={certify} style={{...approveBtn,width:"100%",marginTop:10,opacity:detail.unresolved_ties?.length?.55:1}}>{detail.unresolved_ties?.length?"Resolve runoffs before certification":"Certify results & assign EXCO roles"}</button>}
-          {!!detail.audit_history?.length&&<><div className="sans member-section-title" style={{marginTop:16}}>ELECTION AUDIT</div>{detail.audit_history.map(a=><div key={a.id} className="sans election-audit-row"><b>{String(a.action||"").replaceAll("_"," ")}</b><span>{a.admin_name||"system"} · {String(a.created_at||"").replace("T"," ").slice(0,16)}</span></div>)}</>}
+          {!!detail.audit_history?.length&&<details className="election-admin-more election-audit-details"><summary className="sans"><span><b>Election audit</b><small>{detail.audit_history.length} governance event{detail.audit_history.length===1?"":"s"}</small></span><strong>View</strong></summary><div className="election-admin-more-body">{detail.audit_history.map(a=><div key={a.id} className="sans election-audit-row"><b>{String(a.action||"").replaceAll("_"," ")}</b><span>{a.admin_name||"system"} · {String(a.created_at||"").replace("T"," ").slice(0,16)}</span></div>)}</div></details>}
         </>}
         {detail.status==="cancelled"&&<div className="sans election-secret-note">This election was cancelled.</div>}
       </>}
     </Modal>}
     {confirmationDialog}
   </>;
+}
+
+function ElectionStageStrip({detail}){
+  const stages=["Setup","Applications","Voting","Results","Certified"];
+  let current=0;
+  if(detail.status==="draft"&&detail.application_phase==="open")current=1;
+  else if(detail.status==="open")current=2;
+  else if(detail.status==="closed"&&!detail.certified_at)current=3;
+  else if(detail.certified_at)current=4;
+  const cancelled=detail.status==="cancelled";
+  return <div className={`election-stage-strip sans ${cancelled?"cancelled":""}`}>
+    {stages.map((stage,index)=><div key={stage} className={`${index===current&&!cancelled?"current":""} ${index<current&&!cancelled?"done":""}`}><i>{index<current&&!cancelled?"✓":index+1}</i><span>{stage}</span></div>)}
+    {cancelled&&<b>Cancelled</b>}
+  </div>;
 }
 
 function notificationEventLabel(key){
