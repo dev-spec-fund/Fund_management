@@ -12,6 +12,7 @@ import { settingsRoute } from "./routes/settings";
 import { adminRoute } from "./routes/admin";
 import { governanceRoute } from "./routes/governance";
 import { projectsRoute } from "./routes/projects";
+import { electionsRoute } from "./routes/elections";
 import { consumeRateLimit, safeLogError } from "./ops";
 import { currentMonth, getBranding, getSetting } from "./db";
 import { paidForMonth } from "./allocations";
@@ -87,6 +88,7 @@ app.route("/api/settings", settingsRoute);
 app.route("/api/admin", adminRoute);
 app.route("/api/governance", governanceRoute);
 app.route("/api/projects", projectsRoute);
+app.route("/api/elections", electionsRoute);
 
 app.get("/api/branding", async (c) => c.json(await getBranding(c.env)));
 

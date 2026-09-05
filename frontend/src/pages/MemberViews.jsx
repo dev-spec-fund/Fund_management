@@ -5,3 +5,5 @@ export { MemberMeetings } from "./member/MemberMeetings";
 export { MemberProjects } from "./member/MemberProjects";
 export { MyActions } from "./member/MyActions";
 export { MyProfile } from "./member/MyProfile";
+
+export { MemberElections } from "./member/MemberElections";

@@ -458,7 +458,7 @@ test('contribution review Telegram messages are persisted and synchronized from 
   assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"rejected"/);
   assert.match(callbacks,/recordContributionReviewMessage/);
   assert.match(callbacks,/syncContributionReviewMessages/);
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 28/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 29/);
 });
 
 test('Telegram callback can self-heal a legacy stale contribution review message', () => {
@@ -536,4 +536,50 @@ test('financial write requests remain uncached and invalidate read cache', () =>
   assert.match(api,/invalidateAfterMutation\(path\)/);
   assert.match(api,/if \(!isGet\) return run\(\)/);
   assert.match(api,/broadcastDataChange\(path, method\)/);
+});
+
+
+test('EXCO elections use secret ballot storage separated from voter identity', () => {
+  const db=dbWithSchema();
+  const voterCols=new Set(db.prepare("PRAGMA table_info(election_voters)").all().map(r=>r.name));
+  const ballotCols=new Set(db.prepare("PRAGMA table_info(election_ballots)").all().map(r=>r.name));
+  assert.ok(voterCols.has("member_id"));
+  assert.ok(voterCols.has("voted_at"));
+  assert.ok(voterCols.has("vote_claim"));
+  assert.ok(ballotCols.has("ballot_token"));
+  assert.ok(!ballotCols.has("member_id"),"secret ballots must not contain member_id");
+  db.close();
+
+  const elections=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(elections,/INSERT OR IGNORE INTO election_voters/);
+  assert.match(elections,/crypto\.randomUUID\(\)/);
+  assert.match(elections,/vote_claim IS NULL/);
+  assert.match(elections,/election\.status!=="open"/);
+  assert.match(elections,/detail\.status==="closed"/);
+});
+
+test('EXCO election UI supports admin setup, member voting, turnout and closed results', () => {
+  const app=fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+
+  assert.match(app,/elections/);
+  assert.match(admin,/Create election/);
+  assert.match(admin,/Open voting/);
+  assert.match(admin,/Close voting & publish results/);
+  assert.match(admin,/Secret ballot active/);
+  assert.match(member,/Submit secret ballot/);
+  assert.match(member,/Your vote has been submitted/);
+  assert.match(member,/ELECTED/);
+  assert.match(api,/vote: \(id,selections\)/);
+});
+
+test('database backup includes election governance tables and schema version 29', () => {
+  const system=fs.readFileSync(path.join(root,'src/routes/admin/system.ts'),'utf8');
+  const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
+  for(const table of ['elections','election_positions','election_candidates','election_voters','election_ballots']){
+    assert.match(system,new RegExp(table));
+  }
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 29/);
 });

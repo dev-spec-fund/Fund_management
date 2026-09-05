@@ -38,6 +38,7 @@ const pageLoaders = {
   projects: () => import("./pages/Projects"),
   pending: () => import("./pages/PendingApprovals"),
   meetings: () => import("./pages/Meetings"),
+  elections: () => import("./pages/Elections"),
   settings: () => import("./pages/Settings"),
   memberViews: () => import("./pages/MemberViews"),
 };
@@ -48,11 +49,13 @@ const Expenses = lazy(pageLoaders.expenses);
 const Projects = lazy(pageLoaders.projects);
 const PendingApprovals = lazy(pageLoaders.pending);
 const Meetings = lazy(pageLoaders.meetings);
+const Elections = lazy(pageLoaders.elections);
 const Settings = lazy(pageLoaders.settings);
 const MyHistory = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyHistory })));
 const FundView = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.FundView })));
 const Activity = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.Activity })));
 const MemberMeetings = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MemberMeetings })));
+const MemberElections = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MemberElections })));
 const MemberProjects = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MemberProjects })));
 const MyActions = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyActions })));
 const MyProfile = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyProfile })));
@@ -62,6 +65,7 @@ const loaderForTab = (tab, adminView = false) => {
   // Member implementations. Keep the preload target aligned with the screen
   // that will actually render so the first Admin Meetings visit is warm too.
   if (["history", "fund", "activity", "projects", "actions", "profile"].includes(tab)) return pageLoaders.memberViews;
+  if (tab === "elections") return adminView ? pageLoaders.elections : pageLoaders.memberViews;
   if (tab === "meetings") return adminView ? pageLoaders.meetings : pageLoaders.memberViews;
   return pageLoaders[tab] || null;
 };
@@ -75,6 +79,7 @@ const NAV_ITEMS = {
   projects: { label: "Projects", icon: FolderKanban },
   reports: { label: "Reports", icon: BarChart3 },
   meetings: { label: "Meetings", icon: CalendarDays },
+  elections: { label: "Elections", icon: ListChecks },
   settings: { label: "Settings", icon: SettingsIcon },
   history: { label: "History", icon: History },
   fund: { label: "Fund", icon: WalletCards },
@@ -127,8 +132,8 @@ export default function App() {
   const canFinance = adminView && adminCan(me?.admin, "finance");
   const memberProjectsEnabled = me?.member_features?.projects !== false;
   const tabs = useMemo(() => adminView
-    ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "projects", "reports", "meetings", "settings"] : ["overview", "members", "activity", "reports", "meetings", "settings"])
-    : ["overview", "history", "fund", "activity", ...(memberProjectsEnabled ? ["projects"] : []), "meetings", "actions", "profile"], [adminView, canFinance, memberProjectsEnabled]);
+    ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "projects", "reports", "meetings", "elections", "settings"] : ["overview", "members", "activity", "reports", "meetings", "elections", "settings"])
+    : ["overview", "history", "fund", "activity", ...(memberProjectsEnabled ? ["projects"] : []), "meetings", "elections", "actions", "profile"], [adminView, canFinance, memberProjectsEnabled]);
 
 
   useEffect(() => {
@@ -293,12 +298,14 @@ export default function App() {
     if (page === "activity") return <Activity isAdmin={adminView} canFinance={canFinance} />;
     if (page === "projects" && memberView) return <MemberProjects />;
     if (page === "meetings" && memberView) return <MemberMeetings />;
+    if (page === "elections" && memberView) return <MemberElections />;
     if (page === "actions" && memberView) return <MyActions />;
     if (page === "profile" && memberView) return <MyProfile member={me.member} setTab={openTab} />;
     if (page === "expenses" && canFinance) return <Expenses admin={me.admin} />;
     if (page === "projects" && canFinance) return <Projects admin={me.admin} />;
     if (page === "reports" && adminView) return <Reports setTab={openTab} admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} />;
     if (page === "meetings" && adminView) return <Meetings admin={me.admin} />;
+    if (page === "elections" && adminView) return <Elections />;
     if (page === "settings" && adminView) return <Settings admin={me.admin} adminMonth={adminMonth} onAdminMonthChange={setAdminMonth} />;
     return null;
   };

@@ -192,6 +192,7 @@ async function prefetchTabData({ tab, adminView = false, canFinance = false, mem
     else if (tab === "expenses" && canFinance) paths = ["/api/expenses", "/api/expenses/categories", "/api/projects"];
     else if (tab === "projects" && canFinance) paths = ["/api/projects", "/api/members"];
     else if (tab === "meetings") paths = ["/api/admin/meetings"];
+    else if (tab === "elections") paths = ["/api/elections","/api/members"];
     else if (tab === "reports") paths = [
       `/api/reports/summary?month=${month}`,
       `/api/reports/trend?month=${month}`,
@@ -208,6 +209,7 @@ async function prefetchTabData({ tab, adminView = false, canFinance = false, mem
     else if (tab === "activity") paths = ["/api/reports/activity"];
     else if (tab === "projects") paths = ["/api/me/projects"];
     else if (tab === "meetings") paths = ["/api/me/meetings"];
+    else if (tab === "elections") paths = ["/api/elections"];
     else if (tab === "actions") paths = ["/api/me/actions"];
     else if (tab === "profile") paths = ["/api/me/dashboard"];
   }
@@ -413,6 +415,19 @@ export const api = {
     updateMeetingAction: (id, data) => request(`/api/governance/meeting-actions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     annual: (year) => request(`/api/governance/annual/${year}`),
     analytics: (year) => request(`/api/governance/analytics/${year}`),
+  },
+
+  elections: {
+    list: () => request("/api/elections"),
+    get: (id) => request(`/api/elections/${id}`),
+    create: (data) => request("/api/elections", { method:"POST", body:JSON.stringify(data) }),
+    update: (id,data) => request(`/api/elections/${id}`, { method:"PATCH", body:JSON.stringify(data) }),
+    addPosition: (id,data) => request(`/api/elections/${id}/positions`, { method:"POST", body:JSON.stringify(data) }),
+    addCandidate: (id,data) => request(`/api/elections/${id}/candidates`, { method:"POST", body:JSON.stringify(data) }),
+    open: (id) => request(`/api/elections/${id}/open`, { method:"POST" }),
+    close: (id) => request(`/api/elections/${id}/close`, { method:"POST" }),
+    cancel: (id) => request(`/api/elections/${id}/cancel`, { method:"POST" }),
+    vote: (id,selections) => request(`/api/elections/${id}/vote`, { method:"POST", body:JSON.stringify({selections}) }),
   },
 
   admin: {
