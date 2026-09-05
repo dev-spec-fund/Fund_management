@@ -3,6 +3,7 @@ import { api } from "./api";
 import { Center } from "./components/Shared";
 import Overview from "./pages/Overview";
 import { adminCan } from "./utils/permissions";
+import { currentMonthValue } from "./utils/date";
 import {
   Home, Clock3, Users, Activity as ActivityIcon, ReceiptText, FolderKanban,
   BarChart3, CalendarDays, Settings as SettingsIcon, History,
@@ -107,6 +108,7 @@ export default function App() {
   const [bootstrapSummary, setBootstrapSummary] = useState(null);
   const [tab, setTab] = useState("overview");
   const [mode, setMode] = useState("member");
+  const [adminReportMonth, setAdminReportMonth] = useState(() => currentMonthValue());
   const [mountedTabs, setMountedTabs] = useState(() => new Set(["overview"]));
   const contentScrollRef = useRef(null);
   const lastWarmRef = useRef({ key: "", at: 0 });
@@ -279,7 +281,7 @@ export default function App() {
   const renderPage = (page) => {
     if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} />;
     if (page === "pending" && canFinance) return <PendingApprovals />;
-    if (page === "members" && adminView) return <Members isAdmin admin={me.admin} />;
+    if (page === "members" && adminView) return <Members isAdmin admin={me.admin} reportMonth={adminReportMonth} onReportMonthChange={setAdminReportMonth} />;
     if (page === "history" && memberView) return <MyHistory member={me.member} />;
     if (page === "fund" && memberView) return <FundView />;
     if (page === "activity") return <Activity isAdmin={adminView} canFinance={canFinance} />;
@@ -289,7 +291,7 @@ export default function App() {
     if (page === "profile" && memberView) return <MyProfile member={me.member} setTab={openTab} />;
     if (page === "expenses" && canFinance) return <Expenses admin={me.admin} />;
     if (page === "projects" && canFinance) return <Projects admin={me.admin} />;
-    if (page === "reports" && adminView) return <Reports setTab={openTab} admin={me.admin} />;
+    if (page === "reports" && adminView) return <Reports setTab={openTab} admin={me.admin} reportMonth={adminReportMonth} onReportMonthChange={setAdminReportMonth} />;
     if (page === "meetings" && adminView) return <Meetings admin={me.admin} />;
     if (page === "settings" && adminView) return <Settings admin={me.admin} />;
     return null;

@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import { api, onDataChange } from "../../api";
-import { currentMonthValue } from "../../utils/date";
-import { getAdminReportMonth, saveAdminReportMonth } from "../../utils/adminReportMonth";
 import { pageSlice } from "../../components/Pagination";
 
-export default function useMembersData(isAdmin) {
+export default function useMembersData(isAdmin, reportMonth, onReportMonthChange) {
   const [members, setMembers] = useState([]);
-  const [month, setMonthState] = useState(getAdminReportMonth());
+  const month = reportMonth;
   const [monthlySummary, setMonthlySummary] = useState(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -15,8 +13,7 @@ export default function useMembersData(isAdmin) {
   const [page, setPage] = useState(1);
   const setMonth = (value) => {
     if(!value)return;
-    saveAdminReportMonth(value);
-    setMonthState(value);
+    onReportMonthChange?.(value);
   };
 
   const load = () => Promise.all([

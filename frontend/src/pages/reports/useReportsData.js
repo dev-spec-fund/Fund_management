@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, onDataChange } from "../../api";
-import { currentMonthValue, shiftMonthValue } from "../../utils/date";
-import { getAdminReportMonth, saveAdminReportMonth } from "../../utils/adminReportMonth";
+import { shiftMonthValue } from "../../utils/date";
 
-export function useReportsData() {
-  const [month, setMonth] = useState(getAdminReportMonth());
+export function useReportsData({ month, onMonthChange }) {
   const [summary, setSummary] = useState(null);
   const [trend, setTrend] = useState([]);
   const [annualYear, setAnnualYear] = useState(String(new Date().getFullYear()));
@@ -65,7 +63,7 @@ export function useReportsData() {
     annual,
     analytics,
     annualBusy,
-    shiftMonth: (delta) => setMonth((value) => { const next=shiftMonthValue(value,delta); saveAdminReportMonth(next); return next; }),
+    shiftMonth: (delta) => onMonthChange?.(shiftMonthValue(month, delta)),
     loadMonthly,
     loadAnnual,
   };
