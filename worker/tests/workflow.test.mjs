@@ -35,6 +35,26 @@ test("schema version is current", () => {
   assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
 
+
+test("migration numeric versions are unique", () => {
+  const dir = new URL("../migrations/", import.meta.url);
+  const files = fs.readdirSync(dir).filter(name => /^\d{4}_.*\.sql$/.test(name));
+  const versions = files.map(name => name.slice(0, 4));
+  const duplicates = versions.filter((version, index) => versions.indexOf(version) !== index);
+  assert.deepEqual([...new Set(duplicates)], []);
+});
+
+test("election application migration matches canonical runtime schema", () => {
+  const migration = read("migrations/0032_election_application_eligibility.sql");
+  const schema = read("schema.sql");
+  const elections = read("src/routes/elections.ts");
+  assert.match(migration, /application_reminder_sent_at/);
+  assert.match(schema, /application_reminder_sent_at/);
+  assert.match(elections, /application_reminder_sent_at/);
+  assert.doesNotMatch(schema, /applications_notified_at|applications_reminder_at/);
+  assert.doesNotMatch(elections, /applications_notified_at|applications_reminder_at/);
+});
+
 test("demotion preserves member record and removes admin access only", () => {
   const settings=read("src/routes/settings.ts");
   assert.match(settings,/demote-member/);
