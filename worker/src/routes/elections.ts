@@ -56,16 +56,111 @@ async function processApplicationReminders(env:any){
   }
 }
 
+async function evaluateElectionReadiness(env:any,election:any){
+  const now=localNow(env.FUND_TIMEZONE || "Indian/Maldives");
+  const checks:any[]=[];
+
+  const positions=await env.DB.prepare("SELECT * FROM election_positions WHERE election_id=? ORDER BY sort_order,id").bind(election.id).all<any>();
+  const applications=await env.DB.prepare("SELECT * FROM election_applications WHERE election_id=?").bind(election.id).all<any>();
+  const candidates=await env.DB.prepare("SELECT * FROM election_candidates WHERE election_id=?").bind(election.id).all<any>();
+  const activeMembers=await env.DB.prepare("SELECT COUNT(*) n FROM members WHERE active=1").first<any>();
+
+  const phase=applicationPhase(election,now);
+  const applicationWindowOk=phase==="closed"||phase==="disabled";
+  checks.push({
+    key:"applications_closed",
+    label:"Candidate application period is closed",
+    ok:applicationWindowOk,
+    detail:phase==="open"?"Applications are still open.":phase==="upcoming"?"Applications have not opened yet.":"Application period is closed."
+  });
+
+  const pending=(applications.results as any[]).filter((a:any)=>a.status==="pending");
+  checks.push({
+    key:"applications_reviewed",
+    label:"No applications are waiting for review",
+    ok:pending.length===0,
+    detail:pending.length?`${pending.length} application${pending.length===1?" is":"s are"} still pending.`:"All submitted applications have been decided."
+  });
+
+  const positionIssues:any[]=[];
+  for(const p of positions.results as any[]){
+    const active=(candidates.results as any[]).filter((c:any)=>Number(c.position_id)===Number(p.id)&&c.status==="active");
+    if(active.length<Number(p.seats||1))positionIssues.push(`${p.title}: ${active.length}/${Number(p.seats||1)} active candidates`);
+  }
+  checks.push({
+    key:"positions_staffed",
+    label:"Every position has enough active candidates for its seats",
+    ok:(positions.results as any[]).length>0&&positionIssues.length===0,
+    detail:!(positions.results as any[]).length?"No election positions have been created.":positionIssues.length?positionIssues.join(" · "):"Every position has enough active candidates."
+  });
+
+  const duplicateRows=await env.DB.prepare(`SELECT election_id,position_id,member_id,COUNT(*) n
+    FROM election_candidates WHERE election_id=? AND status='active'
+    GROUP BY election_id,position_id,member_id HAVING COUNT(*)>1`).bind(election.id).all<any>();
+  checks.push({
+    key:"no_duplicate_candidates",
+    label:"No duplicate active candidate records",
+    ok:duplicateRows.results.length===0,
+    detail:duplicateRows.results.length?`${duplicateRows.results.length} duplicate active candidate record${duplicateRows.results.length===1?"":"s"} found.`:"No duplicate active candidate records found."
+  });
+
+  const approvedMissing=await env.DB.prepare(`SELECT ea.id,m.name,ep.title position_title FROM election_applications ea
+    JOIN members m ON m.id=ea.member_id JOIN election_positions ep ON ep.id=ea.position_id
+    LEFT JOIN election_candidates ec ON ec.election_id=ea.election_id AND ec.position_id=ea.position_id AND ec.member_id=ea.member_id AND ec.status='active'
+    WHERE ea.election_id=? AND ea.status='approved' AND ec.id IS NULL`).bind(election.id).all<any>();
+  checks.push({
+    key:"approved_candidates_linked",
+    label:"Every approved application has an active candidate record",
+    ok:approvedMissing.results.length===0,
+    detail:approvedMissing.results.length?(approvedMissing.results as any[]).map((x:any)=>`${x.name} · ${x.position_title}`).join(" · "):"All approved applications are linked to active candidates."
+  });
+
+  const withdrawnStillActive=await env.DB.prepare(`SELECT ea.id,m.name,ep.title position_title FROM election_applications ea
+    JOIN members m ON m.id=ea.member_id JOIN election_positions ep ON ep.id=ea.position_id
+    JOIN election_candidates ec ON ec.election_id=ea.election_id AND ec.position_id=ea.position_id AND ec.member_id=ea.member_id AND ec.status='active'
+    WHERE ea.election_id=? AND ea.status='withdrawn'`).bind(election.id).all<any>();
+  checks.push({
+    key:"withdrawals_synced",
+    label:"Withdrawn applications have no active candidate record",
+    ok:withdrawnStillActive.results.length===0,
+    detail:withdrawnStillActive.results.length?(withdrawnStillActive.results as any[]).map((x:any)=>`${x.name} · ${x.position_title}`).join(" · "):"Withdrawn applications and candidate records are synchronized."
+  });
+
+  const opensAt=iso(election.opens_at)||null,closesAt=iso(election.closes_at)||null;
+  const voteTimesOk=!opensAt||!closesAt||closesAt>opensAt;
+  checks.push({
+    key:"voting_times_valid",
+    label:"Voting opening and closing times are valid",
+    ok:voteTimesOk,
+    detail:voteTimesOk?(opensAt&&closesAt?`${opensAt.replace("T"," ")} → ${closesAt.replace("T"," ")}`:"Voting can be opened/closed manually."):"Voting closing time must be after opening time."
+  });
+
+  const memberCount=Number(activeMembers?.n||0);
+  checks.push({
+    key:"voters_available",
+    label:"Active registered members are available for voter snapshot",
+    ok:memberCount>0,
+    detail:memberCount>0?`${memberCount} active member${memberCount===1?"":"s"} will be included when voting opens.`:"No active registered members are available."
+  });
+
+  return {
+    ready:checks.every((x:any)=>x.ok),
+    passed:checks.filter((x:any)=>x.ok).length,
+    total:checks.length,
+    checks,
+    active_member_count:memberCount,
+    application_phase:phase
+  };
+}
+
 export async function processElectionLifecycle(env:any){
   await processApplicationReminders(env);
   const now=localNow(env.FUND_TIMEZONE || "Indian/Maldives");
   const drafts=await env.DB.prepare(`SELECT * FROM elections
     WHERE status='draft' AND opens_at IS NOT NULL AND opens_at<>'' AND opens_at<=?`).bind(now).all<any>();
   for(const election of drafts.results as any[]){
-    const pc=await env.DB.prepare("SELECT COUNT(*) n FROM election_positions WHERE election_id=?").bind(election.id).first<any>();
-    const cc=await env.DB.prepare("SELECT COUNT(*) n FROM election_candidates WHERE election_id=? AND status='active'").bind(election.id).first<any>();
-    const pending=await env.DB.prepare("SELECT COUNT(*) n FROM election_applications WHERE election_id=? AND status='pending'").bind(election.id).first<any>();
-    if(!Number(pc?.n)||!Number(cc?.n)||Number(pending?.n)>0)continue;
+    const readiness=await evaluateElectionReadiness(env,election);
+    if(!readiness.ready)continue;
     const result=await env.DB.prepare("UPDATE elections SET status='open',opened_at=datetime('now') WHERE id=? AND status='draft'").bind(election.id).run();
     if(result.meta.changes){
       await auditEntity(env,null,"election_auto_opened","election",election.id,election,{...election,status:"open"});
@@ -374,16 +469,20 @@ electionsRoute.post("/:id/candidates", requireSuperAdmin, async c=>{
   return c.json(await electionDetail(c.env,id),201);
 });
 
+electionsRoute.get("/:id/readiness", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  const id=Number(c.req.param("id"));
+  const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+  if(election.status!=="draft")return c.json({error:"Readiness check is only available before voting opens"},409);
+  return c.json(await evaluateElectionReadiness(c.env,election));
+});
+
 electionsRoute.post("/:id/open", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404); if(election.status!=="draft")return c.json({error:"Election is not draft"},409);
-  const pc=await c.env.DB.prepare("SELECT COUNT(*) n FROM election_positions WHERE election_id=?").bind(id).first<any>();
-  const cc=await c.env.DB.prepare("SELECT COUNT(*) n FROM election_candidates WHERE election_id=? AND status='active'").bind(id).first<any>();
-  const pending=await c.env.DB.prepare("SELECT COUNT(*) n FROM election_applications WHERE election_id=? AND status='pending'").bind(id).first<any>();
-  const phase=applicationPhase(election,localNow(c.env.FUND_TIMEZONE || "Indian/Maldives"));
-  if(phase==="open")return c.json({error:"Candidate applications are still open"},409);
-  if(Number(pending?.n)>0)return c.json({error:"Review all pending candidate applications before opening voting"},409);
-  if(!Number(pc?.n)||!Number(cc?.n))return c.json({error:"Add or approve at least one candidate before opening"},400);
+  const readiness=await evaluateElectionReadiness(c.env,election);
+  if(!readiness.ready)return c.json({error:"Election is not ready to open voting",readiness},409);
   await c.env.DB.batch([
     c.env.DB.prepare("INSERT OR IGNORE INTO election_voters(election_id,member_id) SELECT ?,id FROM members WHERE active=1").bind(id),
     c.env.DB.prepare("UPDATE elections SET status='open',opened_at=datetime('now') WHERE id=? AND status='draft'").bind(id)

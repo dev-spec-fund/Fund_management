@@ -420,6 +420,7 @@ export const api = {
   elections: {
     list: () => request("/api/elections"),
     get: (id) => request(`/api/elections/${id}`),
+    readiness: (id) => request(`/api/elections/${id}/readiness`),
     create: (data) => request("/api/elections", { method:"POST", body:JSON.stringify(data) }),
     update: (id,data) => request(`/api/elections/${id}`, { method:"PATCH", body:JSON.stringify(data) }),
     extendApplications: (id,applications_close_at) => request(`/api/elections/${id}/extend-applications`, { method:"POST", body:JSON.stringify({applications_close_at}) }),

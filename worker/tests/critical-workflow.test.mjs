@@ -566,7 +566,7 @@ test('EXCO election UI supports admin setup, member voting, turnout and closed r
 
   assert.match(app,/elections/);
   assert.match(admin,/Create election/);
-  assert.match(admin,/Open voting/);
+  assert.match(admin,/Open Voting/);
   assert.match(admin,/Close voting & calculate results/);
   assert.match(admin,/Secret ballot active/);
   assert.match(member,/Submit secret ballot/);
@@ -654,7 +654,7 @@ test('candidate application stage is migration controlled and separated from vot
   const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
   assert.match(route,/applicationPhase/);
   assert.match(route,/Candidate applications are not open/);
-  assert.match(route,/Review all pending candidate applications before opening voting/);
+  assert.match(route,/No applications are waiting for review/);
   assert.match(route,/election_application_\$\{decision\}/);
   assert.match(route,/INSERT INTO election_candidates/);
 });
@@ -869,4 +869,42 @@ test('v53 duplicate application safeguards remain position scoped', () => {
   assert.match(route,/An active application already exists for this member and position/);
   assert.match(route,/This member already has an application for the selected position/);
   assert.match(schema,/UNIQUE\(election_id,position_id,member_id\)/);
+});
+
+
+test('v54 pre-vote readiness is enforced server side for both manual and automatic opening', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/evaluateElectionReadiness/);
+  assert.match(route,/Election is not ready to open voting/);
+  assert.match(route,/const readiness=await evaluateElectionReadiness\(env,election\)/);
+  assert.match(route,/if\(!readiness\.ready\)continue/);
+  assert.match(route,/\/:id\/readiness/);
+});
+
+test('v54 readiness checks application review, position candidates, synchronization, times and voters', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  for(const key of [
+    'applications_closed',
+    'applications_reviewed',
+    'positions_staffed',
+    'no_duplicate_candidates',
+    'approved_candidates_linked',
+    'withdrawals_synced',
+    'voting_times_valid',
+    'voters_available'
+  ]) assert.match(route,new RegExp(key));
+  assert.match(route,/Every position has enough active candidates for its seats/);
+  assert.match(route,/Every approved application has an active candidate record/);
+  assert.match(route,/Withdrawn applications have no active candidate record/);
+});
+
+test('v54 admin UI disables Open Voting until server checklist passes', () => {
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/readiness: \(id\)/);
+  assert.match(admin,/PRE-VOTE CHECKLIST/);
+  assert.match(admin,/Ready to Open Voting/);
+  assert.match(admin,/Voting Not Ready/);
+  assert.match(admin,/readiness\.passed/);
+  assert.match(admin,/disabled=\{busy\|\|!readiness\?\.ready\}/);
 });

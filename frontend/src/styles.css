@@ -2844,3 +2844,33 @@ button:not(:disabled):active {
   .election-application-admin.v53{display:block}
   .election-application-actions{max-width:none!important;justify-content:flex-start;margin-top:7px}
 }
+
+
+/* v54 pre-vote readiness */
+.election-readiness-loading{
+  padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);
+  color:var(--soft);font-size:9px;text-align:center
+}
+.election-readiness-summary{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border-radius:10px;padding:10px 11px;margin-bottom:7px;border:1px solid var(--border)
+}
+.election-readiness-summary b{font-size:10px}
+.election-readiness-summary span{font-size:8px;font-weight:700}
+.election-readiness-summary.ready{background:var(--success-bg);border-color:var(--success-border);color:var(--success)}
+.election-readiness-summary.blocked{background:var(--warning-bg);border-color:var(--warning-border);color:var(--warning)}
+.election-readiness-list{display:grid;gap:5px}
+.election-readiness-check{
+  border:1px solid var(--border);border-radius:9px;background:var(--card);padding:8px 9px
+}
+.election-readiness-check>div{display:flex;align-items:flex-start;gap:8px}
+.election-readiness-check>div>strong{
+  width:18px;height:18px;flex:0 0 18px;display:flex;align-items:center;justify-content:center;
+  border-radius:999px;font-size:9px
+}
+.election-readiness-check.pass>div>strong{background:var(--success-bg);color:var(--success)}
+.election-readiness-check.fail>div>strong{background:var(--warning-bg);color:var(--warning)}
+.election-readiness-check span{min-width:0}
+.election-readiness-check b,.election-readiness-check small{display:block}
+.election-readiness-check b{font-size:9px;color:var(--primary-text)}
+.election-readiness-check small{font-size:8px;color:var(--soft);line-height:1.4;margin-top:2px}

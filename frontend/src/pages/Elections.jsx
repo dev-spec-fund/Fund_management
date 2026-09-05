@@ -8,6 +8,7 @@ export default function Elections(){
   const [members,setMembers]=useState(()=>api.peekCached("/api/members")||[]);
   const [selected,setSelected]=useState(null);
   const [detail,setDetail]=useState(null);
+  const [readiness,setReadiness]=useState(null);
   const [showCreate,setShowCreate]=useState(false);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
@@ -23,9 +24,15 @@ export default function Elections(){
     api.members.list().then(setMembers),
     api.elections.currentExco().then(r=>setCurrentExco(r.roles||[]))
   ]).catch(e=>setMessage(e.message));
-  const open=async(row)=>{setSelected(row);setMessage("");try{setDetail(await api.elections.get(row.id))}catch(e){setMessage(e.message)}};
+  const open=async(row)=>{setSelected(row);setReadiness(null);setMessage("");try{setDetail(await api.elections.get(row.id))}catch(e){setMessage(e.message)}};
   useEffect(()=>{load()},[]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
+  useEffect(()=>{
+    if(!detail?.id||detail.status!=="draft"){setReadiness(null);return;}
+    let active=true;
+    api.elections.readiness(detail.id).then(r=>{if(active)setReadiness(r)}).catch(e=>{if(active){setReadiness(null);setMessage(e.message)}});
+    return ()=>{active=false};
+  },[detail]);
 
   const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});await load();await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addPosition=async()=>{if(!detail||!position.title.trim())return;setBusy(true);try{const seats=Number(position.seats)||1;const d=await api.elections.addPosition(detail.id,{title:position.title,seats,max_selections:seats,min_selections:Math.max(0,Math.min(seats,Number(position.min_selections)||0))});setDetail(d);setPosition({title:"",seats:"1",min_selections:"1"})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
@@ -120,7 +127,7 @@ export default function Elections(){
       <button type="button" disabled={busy} onClick={create} style={{...approveBtn,width:"100%"}}>{busy?"Creating…":"Create draft"}</button>
     </Modal>}
 
-    {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null)}}>
+    {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setReadiness(null)}}>
       {!detail?<LoadingState>Loading election…</LoadingState>:<>
         <div className="election-admin-summary sans"><span>Status <b>{detail.status==="draft"&&detail.application_phase==="open"?"Applications Open":detail.status}</b></span><span>Turnout <b>{detail.turnout?.voted||0}/{detail.turnout?.eligible||0}</b></span></div>
         {detail.status==="draft"&&detail.applications_open_at&&<>
@@ -167,7 +174,21 @@ export default function Elections(){
             <select className="sans election-select" value={candidate.member_id} onChange={e=>setCandidate({...candidate,member_id:e.target.value})}><option value="">Choose member</option>{members.filter(m=>Number(m.active)!==0).map(m=><option key={m.id} value={m.id}>{m.member_code} · {m.name}</option>)}</select>
             <button type="button" style={{...approveBtn,width:"100%",marginTop:7}} disabled={busy} onClick={addCandidate}>Add candidate</button>
           </>}
-          <button type="button" style={{...approveBtn,width:"100%",marginTop:14}} disabled={busy} onClick={()=>changeStatus("open")}>Open voting</button>
+          <div className="sans member-section-title" style={{marginTop:16}}>PRE-VOTE CHECKLIST</div>
+          {!readiness?<div className="sans election-readiness-loading">Checking election readiness…</div>:<>
+            <div className={`sans election-readiness-summary ${readiness.ready?"ready":"blocked"}`}>
+              <b>{readiness.ready?"✓ Ready to Open Voting":"Voting Not Ready"}</b>
+              <span>{readiness.passed}/{readiness.total} checks passed</span>
+            </div>
+            <div className="election-readiness-list">
+              {readiness.checks.map(check=><div key={check.key} className={`sans election-readiness-check ${check.ok?"pass":"fail"}`}>
+                <div><strong>{check.ok?"✓":"!"}</strong><span><b>{check.label}</b><small>{check.detail}</small></span></div>
+              </div>)}
+            </div>
+          </>}
+          <button type="button" style={{...approveBtn,width:"100%",marginTop:10,opacity:readiness?.ready?1:.5}} disabled={busy||!readiness?.ready} onClick={()=>changeStatus("open")}>
+            {readiness?.ready?"Open Voting":readiness?`Open Voting · ${readiness.passed}/${readiness.total} checks`:"Checking…"}
+          </button>
         </>}
         {detail.status==="open"&&<>
           <div className="sans election-secret-note">🔒 Secret ballot active. Admins can see turnout, but not individual votes.</div>
