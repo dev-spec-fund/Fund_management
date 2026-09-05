@@ -3682,3 +3682,197 @@ textarea:focus {
 .member-reconciliation-issues>div b{min-width:30px;color:var(--warning)}
 .member-reconciliation-issues>div.error b{color:var(--danger)}
 .member-reconciliation-issues>div span{color:var(--muted)}
+
+/* v83 — Mobile readability + touch target stability pass
+   Keeps existing layout/navigation intact while eliminating 7–9px UI text
+   in dense member/governance screens and improving primary touch targets. */
+
+/* Dense secondary/meta text: never render below a readable mobile size. */
+.member-profile-kicker,
+.member-profile-summary-label,
+.member-project-meta,
+.member-project-transaction > div div,
+.member-fund-category-meta,
+.member-meeting-agenda b,
+.member-rsvp-label,
+.member-meeting-notes b,
+.member-action-meeting,
+.member-election-card span,
+.election-ballot-position>div:first-child span,
+.election-admin-position span,
+.election-field-help,
+.election-candidate-admin-row small,
+.election-runoff-admin>div:first-child span,
+.election-runoff-turnout,
+.election-runoff-title span,
+.election-position-readiness>div:first-child span,
+.election-position-readiness>div:last-child,
+.election-readiness-summary span,
+.election-readiness-check small,
+.election-summary-title span,
+.election-summary-grid span,
+.election-summary-grid small,
+.election-summary-runoff small,
+.election-summary-role span,
+.election-archive-row span small,
+.election-archive-row strong small,
+.election-voting-lock-banner span,
+.election-notification-heading span,
+.election-notification-row small,
+.member-election-stage-banner span,
+.election-dashboard-head span small,
+.election-dashboard-card-top small,
+.election-dashboard-metrics small,
+.exco-term-head small,
+.exco-handover-head small,
+.election-timeline-head small,
+.exco-term-dates,
+.exco-term-previous span,
+.exco-term-previous small,
+.exco-handover-item small,
+.election-timeline-event small,
+.election-timeline-event em,
+.exco-workboard-head small,
+.exco-workboard-item span,
+.exco-workboard-item small,
+.member-popup-exco span,
+.member-profile-exco-history span,
+.official-exco-row small,
+.election-audit-row span,
+.election-application-admin span,
+.election-my-application span,
+.election-my-application small,
+.election-ineligible span {
+  font-size: 11px !important;
+  line-height: 1.4;
+}
+
+/* Compact labels/badges that previously dropped to 7–9px. */
+.election-application-counts span,
+.election-summary-grid span,
+.election-summary-grid small,
+.election-summary-runoff small,
+.election-notification-row small,
+.election-dashboard-metrics small,
+.exco-term-previous span,
+.exco-term-previous small,
+.election-timeline-event small,
+.election-timeline-event em,
+.exco-workboard-summary span,
+.exco-workboard-item span,
+.exco-workboard-item small {
+  font-size: 10px !important;
+  letter-spacing: .15px;
+}
+
+/* Main dense-card copy should not be smaller than 11–12px. */
+.member-profile-code,
+.member-profile-section-title,
+.member-profile-section-subtitle,
+.member-election-card strong,
+.election-admin-summary span,
+.election-result-row,
+.election-candidate-admin-row b,
+.election-application-admin b,
+.election-application-admin small,
+.election-my-application b,
+.election-check,
+.election-deadline,
+.election-ineligible b,
+.election-runoff-admin>div:first-child b,
+.election-runoff-title b,
+.election-position-readiness b,
+.election-readiness-summary b,
+.election-readiness-check b,
+.election-summary-title b,
+.election-summary-grid b,
+.election-summary-runoff b,
+.election-summary-runoff strong,
+.election-summary-role b,
+.election-archive-row b,
+.election-archive-row strong,
+.election-voting-lock-banner b,
+.election-notification-heading b,
+.election-notification-row b,
+.election-notification-row strong,
+.member-election-stage-banner b,
+.election-dashboard-head b,
+.election-dashboard-card-top b,
+.election-dashboard-metrics b,
+.exco-term-head b,
+.exco-handover-head b,
+.election-timeline-head b,
+.exco-term-head>strong,
+.exco-term-previous b,
+.exco-handover-item b,
+.election-timeline-event b,
+.exco-workboard-head b,
+.exco-workboard-item b,
+.member-profile-exco-history b,
+.official-exco-row b,
+.election-audit-row b {
+  font-size: 11px !important;
+}
+
+/* Important controls: easier to tap without redesigning the page. */
+.election-candidate-admin-row button,
+.election-application-admin button,
+.election-my-application button,
+.election-runoff-admin button,
+.election-archive-row button,
+.election-notification-row button,
+.exco-handover-item button,
+.exco-workboard-head button,
+.exco-workboard-actions button,
+.member-rsvp-actions button,
+.member-action-row button {
+  min-height: 40px;
+  font-size: 11px !important;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Primary form controls in governance/member screens. */
+.election-admin-card input,
+.election-admin-card select,
+.election-admin-card textarea,
+.election-form input,
+.election-form select,
+.election-form textarea,
+.member-rsvp-actions button {
+  min-height: 40px;
+  font-size: 12px;
+}
+
+@media (max-width: 480px) {
+  .election-candidate-admin-row button,
+  .election-application-admin button,
+  .election-my-application button,
+  .election-runoff-admin button,
+  .election-archive-row button,
+  .exco-handover-item button,
+  .exco-workboard-head button,
+  .exco-workboard-actions button,
+  .member-rsvp-actions button,
+  .member-action-row button {
+    min-height: 42px;
+  }
+}
+
+/* Contribution history/reconciliation readability. */
+.member-history-advance-label,
+.member-history-reconciliation-alert span,
+.member-reconciliation-head b,
+.member-reconciliation-head small,
+.member-reconciliation-grid span,
+.member-reconciliation-grid b,
+.member-reconciliation-legacy,
+.member-reconciliation-issues>div,
+.member-history-allocation-title,
+.meeting-attendance-row small {
+  font-size: 10px !important;
+  line-height: 1.4;
+}
+.member-history-reconciliation-alert b {
+  font-size: 11px !important;
+}
