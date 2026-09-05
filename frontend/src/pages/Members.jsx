@@ -64,9 +64,9 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
           <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "var(--primary-text)" }}>Members</div>
           <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 2 }}>{activeMembers.length} active members</div>
         </div>
-        <button type="button" onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={primaryBtn}>
+        {financeAdmin && <button type="button" onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={primaryBtn}>
           <Plus size={15} /> Add
-        </button>
+        </button>}
       </div>
 
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 12, marginBottom: 10 }}>
@@ -152,8 +152,8 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
       {filtered.length === 0 && <div className="sans" style={{ textAlign: "center", fontSize: 13, color: "var(--soft)", padding: "24px 0" }}>No members match this view.</div>}
       <Pagination page={memberPage.page} total={filtered.length} onChange={setPage} />
 
-      {selected && <MemberPopup member={selected} month={month} canRemind={financeAdmin} onClose={() => setSelected(null)} onChanged={load} />}
-      {showAdd && (
+      {selected && <MemberPopup member={selected} month={month} canEdit={financeAdmin} canRemind={financeAdmin} onClose={() => setSelected(null)} onChanged={load} />}
+      {financeAdmin && showAdd && (
         <Modal onClose={() => setShowAdd(false)} title="Add member">
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
           <Field label="Phone (optional)" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />

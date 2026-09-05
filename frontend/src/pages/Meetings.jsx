@@ -248,7 +248,7 @@ export default function Meetings({admin}){
     <PageHeader
       title="Meetings"
       subtitle="Invitations, RSVP and meeting schedule"
-      action={<button type="button" onClick={()=>{setForm(emptyForm);setShowCreate(true)}} style={{...approveBtn,padding:"9px 12px"}}>+ New meeting</button>}
+      action={canFinance ? <button type="button" onClick={()=>{setForm(emptyForm);setShowCreate(true)}} style={{...approveBtn,padding:"9px 12px"}}>+ New meeting</button> : null}
     />
 
     <MessageBanner>{message}</MessageBanner>
@@ -275,13 +275,13 @@ export default function Meetings({admin}){
           </div>
           <div style={{display:"grid",gridTemplateColumns:["Cancelled","Completed"].includes(status.label)?"1fr":"1fr 1fr",gap:7,marginTop:12}}>
             <button type="button" onClick={()=>openDetails(m)} style={{...compactBtn,width:"100%",padding:"9px 10px"}}>View details</button>
-            {!["Cancelled","Completed"].includes(status.label)&&<button type="button" disabled={busy} onClick={()=>send(m)} style={{...approveBtn,width:"100%",padding:"9px 10px",opacity:busy?.6:1}}>{m.sent_at?"Resend":"Send invite"}</button>}
+            {canFinance&&!["Cancelled","Completed"].includes(status.label)&&<button type="button" disabled={busy} onClick={()=>send(m)} style={{...approveBtn,width:"100%",padding:"9px 10px",opacity:busy?.6:1}}>{m.sent_at?"Resend":"Send invite"}</button>}
           </div>
         </div>
       })}
     <Pagination page={meetingPage.page} total={(rows||[]).length} onChange={setPage}/>
 
-    {showCreate&&<Modal title="New meeting" closeDisabled={busy} onClose={()=>!busy&&setShowCreate(false)}>
+    {canFinance&&showCreate&&<Modal title="New meeting" closeDisabled={busy} onClose={()=>!busy&&setShowCreate(false)}>
       <Field label="Meeting title" value={form.title} onChange={v=>setForm({...form,title:v})}/>
       <Field label="Date" type="date" value={form.meeting_date} onChange={v=>setForm({...form,meeting_date:v})}/>
       <Field label="Time" type="time" value={form.meeting_time} onChange={v=>setForm({...form,meeting_time:v})}/>
@@ -409,7 +409,7 @@ export default function Meetings({admin}){
             {group("no","DECLINED",no,"var(--danger)")}
             {group("pending","AWAITING RESPONSE",pending,"var(--muted)")}
 
-            {!["cancelled","completed"].includes(details.status)&&<div className="meeting-actions-wrap">
+            {canFinance&&!["cancelled","completed"].includes(details.status)&&<div className="meeting-actions-wrap">
               <button type="button" disabled={busy} onClick={()=>setShowMeetingActions(v=>!v)} className="meeting-actions-trigger sans" aria-expanded={showMeetingActions}>
                 <span>Meeting actions</span><MoreHorizontal size={16}/>
               </button>

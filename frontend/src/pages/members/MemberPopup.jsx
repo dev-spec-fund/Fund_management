@@ -29,7 +29,7 @@ function formatMemberPopupDate(value){
   catch{return String(value).slice(0,10)}
 }
 
-export default function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
+export default function MemberPopup({ member, month, canEdit = false, canRemind, onClose, onChanged }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [detail, setDetail] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -205,7 +205,7 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
   return (
     <>
     {confirmationDialog}
-    <Modal onClose={onClose} title={member.name} action={<button type="button" onClick={() => setEditing(true)} style={{ background:"none", border:"none", cursor:"pointer" }}><Pencil size={17} color="var(--soft)" /></button>}>
+    <Modal onClose={onClose} title={member.name} action={canEdit ? <button type="button" onClick={() => setEditing(true)} style={{ background:"none", border:"none", cursor:"pointer" }}><Pencil size={17} color="var(--soft)" /></button> : null}>
       {actionMessage && <div className="sans" style={{fontSize:11,padding:9,borderRadius:8,marginBottom:10,background:"var(--surface-cool)",color:"var(--primary-text)"}}>{actionMessage}</div>}
       {editing ? (
         <>
@@ -304,10 +304,10 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
 
           {reminderNote && <div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5,textAlign:"center"}}>{reminderNote}</div>}
 
-          <button type="button" onClick={toggleActive} className="sans"
+          {canEdit && <button type="button" onClick={toggleActive} className="sans"
             style={{...(member.active?rejectBtn:approveBtn),width:"100%",marginTop:12}}>
             {member.active ? "Deactivate member" : "Reactivate member"}
-          </button>
+          </button>}
         </>
       )}
     </Modal>

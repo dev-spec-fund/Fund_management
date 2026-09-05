@@ -130,10 +130,13 @@ export default function App() {
   const adminView = isAdmin && mode === "admin";
   const memberView = isMember && mode === "member";
   const canFinance = adminView && adminCan(me?.admin, "finance");
+  const canManageAdmins = adminView && adminCan(me?.admin, "manage_admins");
   const memberProjectsEnabled = me?.member_features?.projects !== false;
   const tabs = useMemo(() => adminView
-    ? (canFinance ? ["overview", "pending", "members", "activity", "expenses", "projects", "reports", "meetings", "elections", "settings"] : ["overview", "members", "activity", "reports", "meetings", "elections", "settings"])
-    : ["overview", "history", "fund", "activity", ...(memberProjectsEnabled ? ["projects"] : []), "meetings", "elections", "actions", "profile"], [adminView, canFinance, memberProjectsEnabled]);
+    ? (canFinance
+      ? ["overview", "pending", "members", "activity", "expenses", "projects", "reports", "meetings", ...(canManageAdmins ? ["elections"] : []), "settings"]
+      : ["overview", "members", "activity", "reports", "meetings", ...(canManageAdmins ? ["elections"] : []), "settings"])
+    : ["overview", "history", "fund", "activity", ...(memberProjectsEnabled ? ["projects"] : []), "meetings", "elections", "actions", "profile"], [adminView, canFinance, canManageAdmins, memberProjectsEnabled]);
 
 
   useEffect(() => {
@@ -328,7 +331,7 @@ export default function App() {
     if (page === "projects" && canFinance) return <Projects admin={me.admin} />;
     if (page === "reports" && adminView) return <Reports setTab={openTab} admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} />;
     if (page === "meetings" && adminView) return <Meetings admin={me.admin} />;
-    if (page === "elections" && adminView) return <Elections />;
+    if (page === "elections" && canManageAdmins) return <Elections />;
     if (page === "settings" && adminView) return <Settings admin={me.admin} adminMonth={adminMonth} onAdminMonthChange={setAdminMonth} />;
     return null;
   };

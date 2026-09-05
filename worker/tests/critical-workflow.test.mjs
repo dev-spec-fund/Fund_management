@@ -1779,3 +1779,27 @@ test('v76 unsent meeting drafts cannot send Telegram update or reminder notifica
   assert.match(src, /Send meeting invitations before sending RSVP reminders/);
   assert.match(src, /if\(before\.sent_at\)\{[\s\S]*meeting\.cancel_notice/);
 });
+
+
+test('v77 frontend admin controls match backend permission boundaries', () => {
+  const app=fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
+  const members=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Members.jsx'),'utf8');
+  const popup=fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/MemberPopup.jsx'),'utf8');
+  const meetings=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Meetings.jsx'),'utf8');
+
+  // Election administration uses requireSuperAdmin/manage_admins on the API,
+  // so read-only Treasurer/Viewer admins must not receive the management tab.
+  assert.match(app,/const canManageAdmins = adminView && adminCan\(me\?\.admin, "manage_admins"\)/);
+  assert.match(app,/\.\.\.\(canManageAdmins \? \["elections"\] : \[\]\)/);
+  assert.match(app,/page === "elections" && canManageAdmins/);
+
+  // Member mutations and meeting mutations require finance permission server-side.
+  assert.match(members,/financeAdmin && <button[^>]+>[\s\S]*?<Plus size=\{15\} \/> Add/);
+  assert.match(members,/canEdit=\{financeAdmin\}/);
+  assert.match(popup,/action=\{canEdit \?/);
+  assert.match(popup,/\{canEdit && <button[^>]+onClick=\{toggleActive\}/);
+  assert.match(meetings,/action=\{canFinance \?/);
+  assert.match(meetings,/\{canFinance&&!\["Cancelled","Completed"\]\.includes\(status\.label\)/);
+  assert.match(meetings,/\{canFinance&&showCreate&&<Modal/);
+  assert.match(meetings,/\{canFinance&&!\["cancelled","completed"\]\.includes\(details\.status\)/);
+});
