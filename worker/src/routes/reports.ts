@@ -5,6 +5,7 @@ import { currentMonth, getBranding } from "../db";
 import { validMonth } from "../validation";
 import { sendDocument } from "../telegram";
 import { safeLogError } from "../ops";
+import { contributionDueFromRate, firstMonthContributionRule } from "../contributionRates";
 
 export const reportsRoute = new Hono<AppEnv>();
 
@@ -251,21 +252,29 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
           UNION ALL
           SELECT c.member_id,c.amount FROM contributions c WHERE c.month=? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
         ) GROUP BY member_id
-      ), eligible AS (
-        SELECT m.id,COALESCE(p.paid,0) paid,
-          COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) due_amount,
-          CASE WHEN ex.member_id IS NOT NULL THEN 1 ELSE 0 END exempt
-        FROM members m LEFT JOIN paid p ON p.member_id=m.id LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=? WHERE m.active=1
       )
-      SELECT COALESCE(SUM(CASE WHEN exempt=0 THEN due_amount ELSE 0 END),0) expected,
-             COALESCE(SUM(CASE WHEN exempt=0 THEN MIN(paid,due_amount) ELSE 0 END),0) collected,
-             SUM(CASE WHEN exempt=0 AND paid+0.005<due_amount THEN 1 ELSE 0 END) outstanding_members
-      FROM eligible
-    `).bind(month,month,month,month,month).first<any>()
+      SELECT m.id,m.joined_at,m.created_at,
+        COALESCE(p.paid,0) paid,
+        COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) base_due,
+        CASE WHEN ex.member_id IS NOT NULL THEN 1 ELSE 0 END exempt
+      FROM members m
+      LEFT JOIN paid p ON p.member_id=m.id
+      LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=?
+      WHERE m.active=1
+    `).bind(month,month,month,month,month).all<any>()
   ]);
 
   const monthNet = num(income?.total) + num(donationTotal?.total) - num(expenseTotal?.total);
   const balances = await balanceChainForMonth(c.env, month, monthNet);
+  const firstMonthRule=await firstMonthContributionRule(c.env);
+  const collectionRows=(collection?.results||[]).map((row:any)=>{
+    const due=contributionDueFromRate(Number(row.base_due||0),row.joined_at||row.created_at,month,firstMonthRule);
+    const paid=Number(row.paid||0);
+    return {...row,due,paid};
+  });
+  const collectionExpected=collectionRows.reduce((sum:number,row:any)=>sum+(Number(row.exempt)?0:Number(row.due||0)),0);
+  const collectionCollected=collectionRows.reduce((sum:number,row:any)=>sum+(Number(row.exempt)?0:Math.min(Number(row.paid||0),Number(row.due||0))),0);
+  const collectionOutstanding=collectionRows.filter((row:any)=>!Number(row.exempt)&&Number(row.due||0)>0.004&&Number(row.paid||0)+0.005<Number(row.due||0)).length;
 
   return c.json({
     month,
@@ -284,7 +293,7 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     totalReceived: lifetime?.total_received ?? 0,
     totalSpent: lifetime?.total_spent ?? 0,
     recentActivity: recent.results,
-    collection: { expected:Number(collection?.expected||0), collected:Number(collection?.collected||0), outstanding_members:Number(collection?.outstanding_members||0) },
+    collection: { expected:collectionExpected, collected:collectionCollected, outstanding_members:collectionOutstanding },
   });
 });
 
@@ -390,7 +399,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
           SELECT c.member_id,c.amount FROM contributions c WHERE c.month=? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
         ) GROUP BY member_id
       )
-      SELECT m.id,m.member_code,m.name,
+      SELECT m.id,m.member_code,m.name,m.joined_at,m.created_at,
         COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) monthly_amount,
         COALESCE(p.paid,0) paid,
         CASE WHEN ex.member_id IS NOT NULL THEN 'exempt' WHEN COALESCE(p.paid,0)<=0 THEN 'unpaid' WHEN COALESCE(p.paid,0)<COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) THEN 'partial' ELSE 'paid' END payment_status
@@ -418,6 +427,13 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
 
   const monthNet = num(income?.total) + num(donationTotal?.total) - num(expenseTotal?.total);
   const balances = await balanceChainForMonth(c.env, month, monthNet);
+  const firstMonthRule=await firstMonthContributionRule(c.env);
+  const adjustedOutstanding=(outstanding.results as any[]).map((row:any)=>{
+    const required=contributionDueFromRate(Number(row.monthly_amount||0),row.joined_at||row.created_at,month,firstMonthRule);
+    const paid=Number(row.paid||0);
+    const payment_status=String(row.payment_status)==='exempt'?'exempt':required<=0.004?'not_applicable':paid<=0?'unpaid':paid+0.005<required?'partial':'paid';
+    return {...row,monthly_amount:required,payment_status};
+  });
 
   return c.json({
     month,
@@ -433,13 +449,13 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
     expenseDetails: expenseDetails.results,
     expenseAdjustments: expenseAdjustments.results,
     outstanding: {
-      total: outstanding.results.filter((m:any)=>m.payment_status==='unpaid'||m.payment_status==='partial').reduce((s:number,m:any)=>s+Math.max(0,Number(m.monthly_amount)-Number(m.paid||0)),0),
-      members: outstanding.results.filter((m:any)=>m.payment_status==='unpaid'||m.payment_status==='partial'),
+      total: adjustedOutstanding.filter((m:any)=>m.payment_status==='unpaid'||m.payment_status==='partial').reduce((s:number,m:any)=>s+Math.max(0,Number(m.monthly_amount)-Number(m.paid||0)),0),
+      members: adjustedOutstanding.filter((m:any)=>m.payment_status==='unpaid'||m.payment_status==='partial'),
     },
-    member_statuses: outstanding.results,
+    member_statuses: adjustedOutstanding,
     collection: {
-      expected: outstanding.results.reduce((sum:number,m:any)=>sum+(m.payment_status==='exempt'?0:Number(m.monthly_amount||0)),0),
-      collected: outstanding.results.reduce((sum:number,m:any)=>sum+(m.payment_status==='exempt'?0:Math.min(Number(m.paid||0),Number(m.monthly_amount||0))),0)
+      expected: adjustedOutstanding.reduce((sum:number,m:any)=>sum+(m.payment_status==='exempt'?0:Number(m.monthly_amount||0)),0),
+      collected: adjustedOutstanding.reduce((sum:number,m:any)=>sum+(m.payment_status==='exempt'?0:Math.min(Number(m.paid||0),Number(m.monthly_amount||0))),0)
     },
     openingBalance: balances.openingBalance,
     closingBalance: balances.closingBalance,

@@ -8,7 +8,7 @@ import { boundedText, telegramId } from "../validation";
 export const settingsRoute = new Hono<AppEnv>();
 
 const FINANCE_SETTINGS = new Set(["reminder_day","notify_new_slip","notify_member_deactivated","notify_budget_exceeded","notify_monthly_report"]);
-const SUPER_SETTINGS = new Set(["fund_name","short_name","default_monthly_amount","mini_app_url","reminder_schedule","show_projects_to_members"]);
+const SUPER_SETTINGS = new Set(["fund_name","short_name","default_monthly_amount","first_month_contribution_rule","mini_app_url","reminder_schedule","show_projects_to_members"]);
 const ROLE_PERMISSIONS = ["read","finance","manage_admins","close_month","backup"] as const;
 const BUILTIN_ROLES = new Set(["super_admin","treasurer","viewer"]);
 
@@ -38,6 +38,7 @@ settingsRoute.patch("/", requireFinance, async (c) => {
     if(key==='fund_name' && (value.length<2 || value.length>120)) return c.json({error:'Group Name must be 2-120 characters'},400);
     if(key==='short_name' && (!/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,19}$/.test(value))) return c.json({error:'Short Name must be 1-20 letters, numbers, spaces, dots, hyphens or underscores'},400);
     if(key==='default_monthly_amount' && (!Number.isFinite(Number(value)) || Number(value)<=0 || Number(value)>1000000)) return c.json({error:'Invalid default monthly amount'},400);
+    if(key==='first_month_contribution_rule' && !['full','half_after_15','next_month'].includes(value)) return c.json({error:'Invalid first-month contribution rule'},400);
     if(key==='mini_app_url') { try { const u=new URL(value); if(u.protocol!=='https:') return c.json({error:'Mini App URL must use HTTPS'},400); } catch { return c.json({error:'Invalid Mini App URL'},400); } }
     if(key==='reminder_day' && value!=='off' && (!/^\d{1,2}$/.test(value) || Number(value)<1 || Number(value)>28)) return c.json({error:"Reminder day must be 1-28 or 'off'"},400);
     if((key.startsWith('notify_') || key==='show_projects_to_members') && !['0','1'].includes(value)) return c.json({error:`${key} must be 0 or 1`},400);

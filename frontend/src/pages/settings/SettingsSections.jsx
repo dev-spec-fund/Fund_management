@@ -43,6 +43,22 @@ export function GeneralSettingsSection(ctx) {
           <input disabled={!superAdmin} type="number" value={settings.default_monthly_amount ?? ""} onChange={e=>setSettings({...settings,default_monthly_amount:e.target.value})} onBlur={e=>superAdmin&&saveSetting("default_monthly_amount",e.target.value)} className="sans" style={{flex:1,border:0,outline:"none",padding:"9px 11px",fontSize:14,background:"transparent"}}/>
         </div>
         <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:6}}>Used automatically for new members. Existing member amounts are not changed.</div>
+
+        <div className="sans" style={{fontSize:12,color:"var(--muted)",margin:"14px 0 5px"}}>New member first-month rule</div>
+        <select
+          disabled={!superAdmin}
+          value={settings.first_month_contribution_rule || "half_after_15"}
+          onChange={e=>superAdmin&&saveSetting("first_month_contribution_rule",e.target.value)}
+          className="sans"
+          style={{width:"100%",border:"1px solid var(--border-strong)",borderRadius:9,padding:"10px 11px",fontSize:13,background:"var(--bg)",color:"var(--text)"}}
+        >
+          <option value="half_after_15">Full through day 15 · Half after day 15</option>
+          <option value="full">Full contribution for join month</option>
+          <option value="next_month">Start contribution from next month</option>
+        </select>
+        <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:6,lineHeight:1.45}}>
+          Default: members joining on days 1–15 pay the full amount; members joining on day 16 or later pay 50% for that first month. Following months use the full monthly contribution.
+        </div>
       </div>
 
       <SectionTitle>EXPENSE CATEGORIES</SectionTitle>

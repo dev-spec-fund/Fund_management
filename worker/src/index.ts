@@ -15,7 +15,7 @@ import { projectsRoute } from "./routes/projects";
 import { consumeRateLimit, safeLogError } from "./ops";
 import { currentMonth, getBranding, getSetting } from "./db";
 import { paidForMonth } from "./allocations";
-import { contributionRateForMonth } from "./contributionRates";
+import { contributionRateForMonth, contributionDueFromRate, firstMonthContributionRule } from "./contributionRates";
 
 const app = new Hono<AppEnv>();
 
@@ -146,7 +146,7 @@ app.get("/api/me/dashboard", async (c) => {
   const member=await c.env.DB.prepare("SELECT id,member_code,name,phone,monthly_amount,active,joined_at,created_at,telegram_id FROM members WHERE telegram_id=? AND active=1 LIMIT 1").bind(String(user.id)).first<any>();
   if(!member) return c.json({error:"Member account not linked"},404);
   const month=currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
-  const [paid,rate,exemption,pending,nextMeeting,openActions]=await Promise.all([
+  const [paid,baseRate,exemption,pending,nextMeeting,openActions]=await Promise.all([
     paidForMonth(c.env,member.id,month),
     contributionRateForMonth(c.env,member.id,month,Number(member.monthly_amount||0)),
     c.env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(member.id,month).first<any>(),
@@ -154,9 +154,11 @@ app.get("/api/me/dashboard", async (c) => {
     c.env.DB.prepare(`SELECT m.id,m.title,m.meeting_date,m.meeting_time,m.venue,m.status,r.response rsvp FROM meetings m LEFT JOIN meeting_rsvps r ON r.meeting_id=m.id AND r.member_id=? WHERE m.status!='cancelled' AND m.meeting_date>=date('now','+5 hours') ORDER BY m.meeting_date,m.meeting_time LIMIT 1`).bind(member.id).first<any>(),
     c.env.DB.prepare(`SELECT ai.id,ai.description,ai.due_date,ai.status,m.id meeting_id,m.title meeting_title FROM meeting_action_items ai JOIN meetings m ON m.id=ai.meeting_id WHERE ai.assigned_member_id=? AND ai.status='open' ORDER BY CASE WHEN ai.due_date IS NULL THEN 1 ELSE 0 END,ai.due_date,ai.id LIMIT 5`).bind(member.id).all<any>()
   ]);
-  const due=exemption?0:Math.max(0,Number(rate)-Number(paid));
-  const status=exemption?'exempt':Number(paid)<=0?'unpaid':Number(paid)+0.005<Number(rate)?'partial':'paid';
-  return c.json({member,month,contribution:{status,paid:Number(paid),due,monthly_amount:Number(rate),exemption_reason:exemption?.reason||null},pending_payments:pending.results,next_meeting:nextMeeting||null,open_actions:openActions.results});
+  const firstMonthRule=await firstMonthContributionRule(c.env);
+  const requiredAmount=contributionDueFromRate(Number(baseRate),member.joined_at||member.created_at,month,firstMonthRule);
+  const due=exemption?0:Math.max(0,requiredAmount-Number(paid));
+  const status=exemption?'exempt':requiredAmount<=0.004?'not_applicable':Number(paid)<=0?'unpaid':Number(paid)+0.005<requiredAmount?'partial':'paid';
+  return c.json({member,month,contribution:{status,paid:Number(paid),due,monthly_amount:Number(baseRate),required_amount:requiredAmount,exemption_reason:exemption?.reason||null},pending_payments:pending.results,next_meeting:nextMeeting||null,open_actions:openActions.results});
 });
 
 

@@ -12,6 +12,7 @@ export function StatusBadge({ status }) {
     partial: { label: "Partial", color: "var(--warning)", bg: "var(--warning-bg)", border: "var(--warning-border)" },
     unpaid: { label: "Unpaid", color: "var(--danger)", bg: "var(--danger-bg)", border: "var(--danger-border)" },
     exempt: { label: "Exempt", color: "var(--neutral-text)", bg: "var(--surface-neutral-soft)", border: "var(--surface-neutral-3)" },
+    not_applicable: { label: "Not due", color: "var(--muted)", bg: "var(--button-soft)", border: "var(--border-strong-2)" },
     inactive: { label: "Inactive", color: "var(--muted)", bg: "var(--button-soft)", border: "var(--border-strong-2)" },
   };
   const s = styles[status] || styles.unpaid;

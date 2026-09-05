@@ -77,11 +77,12 @@ export default function Members({ isAdmin, admin }) {
           <div className="sans" style={{ fontSize: 12, fontWeight: 700, color: "var(--success)" }}>{percent}% collected</div>
         </div>
         <div style={{ height: 6, background: "var(--surface-2)", borderRadius: 999, overflow: "hidden", margin: "7px 0 10px" }}><div style={{ width: `${percent}%`, height: "100%", background: "var(--success)", borderRadius: 999 }} /></div>
-        <div className="sans" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5, textAlign: "center", fontSize: 10, color: "var(--muted)" }}>
+        <div className="sans" style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 4, textAlign: "center", fontSize: 9, color: "var(--muted)" }}>
           <div><b style={{ display: "block", fontSize: 14, color: "var(--success)" }}>{counts.paid}</b>Paid</div>
           <div><b style={{ display: "block", fontSize: 14, color: "var(--warning)" }}>{counts.partial}</b>Partial</div>
           <div><b style={{ display: "block", fontSize: 14, color: "var(--danger)" }}>{counts.unpaid}</b>Unpaid</div>
           <div><b style={{ display: "block", fontSize: 14, color: "var(--neutral-text)" }}>{counts.exempt}</b>Exempt</div>
+          <div><b style={{ display: "block", fontSize: 14, color: "var(--soft)" }}>{counts.not_applicable||0}</b>Not due</div>
         </div>
       </div>
 
@@ -95,7 +96,7 @@ export default function Members({ isAdmin, admin }) {
       {reminderMessage && <div className="sans" style={{fontSize:10,color:reminderMessage.startsWith("Sent")?"var(--success)":"var(--danger)",margin:"0 2px 10px"}}>{reminderMessage}</div>}
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 3, marginBottom: 10 }}>
-        {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt']].map(([key,label]) => (
+        {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt'],['not_applicable','Not due']].map(([key,label]) => (
           <button type="button" key={key} onClick={() => setFilter(key)} className={filter === key ? "expense-filter-chip active sans" : "expense-filter-chip sans"}>{label}</button>
         ))}
       </div>

@@ -2,8 +2,8 @@ import type { Hono } from "hono";
 import type { AppEnv } from "../../types";
 import { requireFinance } from "../../auth";
 import { auditEntity, contributionDuplicateKey, duplicateSlip, ensureOperationalSchema, normalizeName, normalizePhone, requireOpenMonth, safeLogError, findDuplicateMembers } from "../../ops";
-import { currentMonth, getSetting, getBranding, generateMemberCode } from "../../db";
-import { ensureInitialContributionRate } from "../../contributionRates";
+import { currentMonth, currentDate, getSetting, getBranding, generateMemberCode } from "../../db";
+import { ensureInitialContributionRate, contributionDueFromRate, firstMonthContributionRule } from "../../contributionRates";
 import { sendMessage } from "../../telegram";
 import { approveWithAllocations, allocationReceipt, buildAllocationPlan, allocatedPaidSql } from "../../allocations";
 import { money, validDate, validMonth, boundedText } from "../../validation";
@@ -40,8 +40,8 @@ route.post('/pending/registrations/:id/approve', requireFinance, async c => {
     const unlinked=dup.filter((x:any)=>!x.telegram_id);
     if(unlinked.length) return c.json({error:'Possible existing member found. Choose Link Existing Member instead.',duplicates:unlinked},409);
     const code=await generateMemberCode(c.env); const amount=Number(await getSetting(c.env,'default_monthly_amount'))||250;
-    const r=await c.env.DB.prepare("INSERT INTO members(member_code,telegram_id,name,phone,monthly_amount,normalized_name,normalized_phone) VALUES(?,?,?,?,?,?,?)")
-      .bind(code,req.telegram_id,req.name,req.phone||null,amount,normalizeName(req.name),normalizePhone(req.phone)||null).run();
+    const r=await c.env.DB.prepare("INSERT INTO members(member_code,telegram_id,name,phone,monthly_amount,normalized_name,normalized_phone,joined_at) VALUES(?,?,?,?,?,?,?,?)")
+      .bind(code,req.telegram_id,req.name,req.phone||null,amount,normalizeName(req.name),normalizePhone(req.phone)||null,currentDate(c.env.FUND_TIMEZONE || 'Indian/Maldives')).run();
     await ensureInitialContributionRate(c.env,Number(r.meta.last_row_id),amount,currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives'));
     member=await c.env.DB.prepare("SELECT * FROM members WHERE id=?").bind(r.meta.last_row_id).first<any>();
   }
@@ -128,7 +128,7 @@ route.post('/payment-reminders', requireFinance, async c => {
   if(memberId!==null && (!Number.isInteger(memberId) || memberId<=0)) return c.json({error:'Invalid member'},400);
 
   const rows=await c.env.DB.prepare(`
-    SELECT m.id,m.member_code,m.name,m.telegram_id,
+    SELECT m.id,m.member_code,m.name,m.telegram_id,m.joined_at,m.created_at,
       COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) monthly_amount,
       ${allocatedPaidSql} paid,
       CASE WHEN EXISTS(SELECT 1 FROM exemptions e WHERE e.member_id=m.id AND e.month=?) THEN 1 ELSE 0 END exempt
@@ -137,8 +137,13 @@ route.post('/payment-reminders', requireFinance, async c => {
     ORDER BY m.name
   `).bind(...(memberId!==null?[month,month,month,month,month,memberId]:[month,month,month,month,month])).all<any>();
 
+  const firstMonthRule=await firstMonthContributionRule(c.env);
   const dueMembers=rows.results
-    .map((m:any)=>({...m,paid:Number(m.paid||0),due:Math.max(0,Number(m.monthly_amount||0)-Number(m.paid||0))}))
+    .map((m:any)=>{
+      const required=contributionDueFromRate(Number(m.monthly_amount||0),m.joined_at||m.created_at,month,firstMonthRule);
+      const paid=Number(m.paid||0);
+      return {...m,monthly_amount:required,paid,due:Math.max(0,required-paid)};
+    })
     .filter((m:any)=>!Number(m.exempt) && m.due>0.005);
 
   const reminderBrand=await getBranding(c.env);

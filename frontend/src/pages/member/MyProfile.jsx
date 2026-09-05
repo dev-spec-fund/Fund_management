@@ -35,8 +35,8 @@ export function MyProfile({ member, setTab }) {
   const outstanding=statuses.reduce((sum,row)=>sum+Number(row.due||0),0);
   const pendingCount=dashboard.pending_payments?.length || 0;
   const status=String(c.status||"unpaid").toLowerCase();
-  const statusLabel=status==="paid"?"Paid":status==="partial"?"Partial":status==="exempt"?"Exempt":"Unpaid";
-  const statusColor=status==="paid"?"var(--success)":status==="partial"?"var(--warning)":status==="exempt"?"var(--muted)":"var(--danger)";
+  const statusLabel=status==="paid"?"Paid":status==="partial"?"Partial":status==="exempt"?"Exempt":status==="not_applicable"?"Not due":"Unpaid";
+  const statusColor=status==="paid"?"var(--success)":status==="partial"?"var(--warning)":status==="exempt"||status==="not_applicable"?"var(--muted)":"var(--danger)";
   const joined=formatJoinedDate(m.joined_at||m.created_at);
 
   const exportPdf=async()=>{

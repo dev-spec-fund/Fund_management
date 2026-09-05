@@ -1,6 +1,6 @@
 import type { Env } from "../types";
 import { paidForMonth } from "../allocations";
-import { contributionRateForMonth } from "../contributionRates";
+import { contributionDueForMonth } from "../contributionRates";
 import { sendMessage } from "../telegram";
 import { currentMonth, ensureMemberLinked, getAdminByTelegramId, getBranding, createMemberRegistrationRequest, ensureMemberRegistrationTable } from "../db";
 import { consumeRateLimit, normalizePhone } from "../ops";
@@ -121,10 +121,10 @@ export async function handleMessage(env: Env, message: any) {
     if (!member) return sendMessage(env, chatId, "You're not registered as a member yet. Contact an admin.");
     const month = currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");
     const paid = await paidForMonth(env, member.id, month);
-    const rate = await contributionRateForMonth(env, member.id, month, Number(member.monthly_amount||0));
+    const rate = await contributionDueForMonth(env, member.id, month, Number(member.monthly_amount||0), member.joined_at||member.created_at);
     const exemption = await env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(member.id,month).first<any>();
     const due = exemption ? 0 : Math.max(0, rate-paid);
-    const status = exemption ? `✅ Exempt for ${month}.` : paid<=0 ? `⏳ Unpaid for ${month}. Due: MVR ${rate.toFixed(2)}.` : due>0.004 ? `🟡 Partial for ${month}: MVR ${paid.toFixed(2)} paid, MVR ${due.toFixed(2)} due.` : `✅ Paid for ${month}.`;
+    const status = exemption ? `✅ Exempt for ${month}.` : rate<=0.004 ? `ℹ️ No contribution due for ${month}.` : paid<=0 ? `⏳ Unpaid for ${month}. Due: MVR ${rate.toFixed(2)}.` : due>0.004 ? `🟡 Partial for ${month}: MVR ${paid.toFixed(2)} paid, MVR ${due.toFixed(2)} due.` : `✅ Paid for ${month}.`;
     return sendMessage(env, chatId, `Member ID: ${esc(member.member_code)}\n${status}`);
   }
 

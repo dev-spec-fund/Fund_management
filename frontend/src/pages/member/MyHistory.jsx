@@ -29,7 +29,7 @@ export function MyHistory({ member }) {
   const advance=Math.max(0,total-statuses.reduce((sum,x)=>sum+Number(x.paid||0),0));
   const recentStatuses=statuses.slice(-12).reverse();
   const monthLabel=(m)=>{if(!m)return"—";const [y,mo]=String(m).split("-");return new Date(Number(y),Number(mo)-1,1).toLocaleDateString("en-GB",{month:"short",year:"numeric"});};
-  const statusColor=(x)=>x==="paid"?"var(--success)":x==="partial"?"var(--warning)":x==="exempt"?"var(--muted)":"var(--danger)";
+  const statusColor=(x)=>x==="paid"?"var(--success)":x==="partial"?"var(--warning)":x==="exempt"||x==="not_applicable"?"var(--muted)":"var(--danger)";
   return <>
     <div className="theme-brand-surface" style={{background:"var(--primary)",borderRadius:16,padding:"20px 22px",marginBottom:12,color:"var(--on-primary)"}}>
       <div className="sans" style={{fontSize:11,opacity:.62,letterSpacing:1.1}}>MY MEMBER ACCOUNT</div>
@@ -44,7 +44,7 @@ export function MyHistory({ member }) {
     </div>
     <div className="sans member-section-head"><b>MONTHLY STATUS</b><div style={{display:"flex",gap:6}}><button type="button" onClick={async()=>{const {exportStatementPdf}=await import("../../utils/exports");return exportStatementPdf(member)}} style={compactBtn}>PDF</button><button type="button" onClick={async()=>{const {exportStatementCsv}=await import("../../utils/exports");return exportStatementCsv(member)}} style={compactBtn}>CSV</button></div></div>
     <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"4px 14px",marginBottom:16}}>
-      {recentStatuses.map(x=><div key={x.month} className="sans member-history-status-row"><span>{monthLabel(x.month)}</span><span style={{textAlign:"right"}}><b className="member-status-badge" style={{color:statusColor(x.status),borderColor:statusColor(x.status)}}>{x.status}</b><div style={{fontSize:10,color:"var(--soft)"}}>Paid MVR {fmt(x.paid)}{Number(x.due)>0?` · Due MVR ${fmt(x.due)}`:""}</div></span></div>)}
+      {recentStatuses.map(x=><div key={x.month} className="sans member-history-status-row"><span>{monthLabel(x.month)}</span><span style={{textAlign:"right"}}><b className="member-status-badge" style={{color:statusColor(x.status),borderColor:statusColor(x.status)}}>{x.status==="not_applicable"?"Not due":x.status}</b><div style={{fontSize:10,color:"var(--soft)"}}>Paid MVR {fmt(x.paid)}{Number(x.due)>0?` · Due MVR ${fmt(x.due)}`:""}</div></span></div>)}
     </div>
     <div className="sans member-section-title">CONTRIBUTION TRANSACTIONS</div>
     <div className="member-history-filters" role="group" aria-label="Filter contribution transactions">

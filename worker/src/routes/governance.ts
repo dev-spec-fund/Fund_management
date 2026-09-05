@@ -5,7 +5,7 @@ import { auditEntity, ensureOperationalSchema, isMonthClosed, requireOpenMonth }
 import { validMonth } from "../validation";
 import { currentMonth, getBranding } from "../db";
 import { sendMessage } from "../telegram";
-import { rateForMonthFromRows } from "../contributionRates";
+import { contributionDueFromRate, firstMonthContributionRule, rateForMonthFromRows } from "../contributionRates";
 
 export const governanceRoute = new Hono<AppEnv>();
 
@@ -26,7 +26,7 @@ async function monthMetrics(env:any, month:string){
           SELECT c.member_id,c.amount FROM contributions c WHERE c.month=? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
         ) GROUP BY member_id
       )
-      SELECT m.id,
+      SELECT m.id,m.joined_at,m.created_at,
         COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) monthly_amount,
         COALESCE(p.paid,0) paid,
         CASE WHEN ex.member_id IS NOT NULL THEN 'exempt' WHEN COALESCE(p.paid,0)<=0 THEN 'unpaid' WHEN COALESCE(p.paid,0)<COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) THEN 'partial' ELSE 'paid' END payment_status
@@ -41,9 +41,15 @@ async function monthMetrics(env:any, month:string){
     (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved' AND month < ?) +
     (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month < ?) -
     (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month < ?) balance`).bind(month,month,month).first<any>();
-  const rows=memberRows.results;
-  const totalDue=rows.reduce((s:number,r:any)=>s+(r.payment_status==='exempt'?0:n(r.monthly_amount)),0);
-  const totalCollected=rows.reduce((s:number,r:any)=>s+(r.payment_status==='exempt'?0:Math.min(n(r.paid),n(r.monthly_amount))),0);
+  const firstMonthRule=await firstMonthContributionRule(env);
+  const rows=(memberRows.results as any[]).map((r:any)=>{
+    const required=contributionDueFromRate(n(r.monthly_amount),r.joined_at||r.created_at,month,firstMonthRule);
+    const paid=n(r.paid);
+    const payment_status=String(r.payment_status)==='exempt'?'exempt':required<=0.004?'not_applicable':paid<=0?'unpaid':paid+0.005<required?'partial':'paid';
+    return {...r,monthly_amount:required,payment_status};
+  });
+  const totalDue=rows.reduce((s:number,r:any)=>s+(r.payment_status==='exempt'||r.payment_status==='not_applicable'?0:n(r.monthly_amount)),0);
+  const totalCollected=rows.reduce((s:number,r:any)=>s+(r.payment_status==='exempt'||r.payment_status==='not_applicable'?0:Math.min(n(r.paid),n(r.monthly_amount))),0);
   const counts=(status:string)=>rows.filter((r:any)=>r.payment_status===status).length;
   const contributionCash=n(cash?.total), donationCash=n(donations?.total), expenseCash=n(expenses?.total), opening=n(before?.balance);
   return {
@@ -361,6 +367,7 @@ async function yearData(env:any, year:string){
     `).bind(`${year}-%`,`${year}-%`,year).all<any>()
   ]);
 
+  const firstMonthRule=await firstMonthContributionRule(env);
   const memberContributions=await Promise.all(memberRows.results.map(async(r:any)=>{
     const [rates,exemptions]=await Promise.all([
       env.DB.prepare("SELECT amount,effective_from,effective_to FROM member_contribution_rates WHERE member_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) ORDER BY effective_from").bind(r.id,`${year}-12`,`${year}-01`).all<any>(),
@@ -372,7 +379,8 @@ async function yearData(env:any, year:string){
     for(let monthNo=1;monthNo<=count;monthNo++){
       const month=`${year}-${String(monthNo).padStart(2,'0')}`;
       if(month<joined||exempt.has(month)) continue;
-      annualTarget+=rateForMonthFromRows(rates.results as any[],month,n(r.monthly_amount));
+      const baseRate=rateForMonthFromRows(rates.results as any[],month,n(r.monthly_amount));
+      annualTarget+=contributionDueFromRate(baseRate,r.joined_at||r.created_at,month,firstMonthRule);
     }
     const appliedRaw=n(r.applied_raw);
     const applied=Math.min(annualTarget,appliedRaw);
@@ -425,14 +433,15 @@ governanceRoute.get('/analytics/:year', requireAdmin, async c=>{
     c.env.DB.prepare("SELECT COUNT(*) count,COALESCE(SUM(amount),0) total FROM financial_reversals WHERE month LIKE ?").bind(`${year}-%`).first<any>(),
     c.env.DB.prepare("SELECT COUNT(*) count FROM meetings WHERE meeting_date LIKE ?").bind(`${year}-%`).first<any>()
   ]);
+  const firstMonthRule=await firstMonthContributionRule(c.env);
   const performance=await Promise.all(memberPerformance.results.map(async(r:any)=>{
     const [rates,exemptions,member]=await Promise.all([
       c.env.DB.prepare("SELECT amount,effective_from,effective_to FROM member_contribution_rates WHERE member_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) ORDER BY effective_from").bind(r.id,`${year}-12`,`${year}-01`).all<any>(),
       c.env.DB.prepare("SELECT month FROM exemptions WHERE member_id=? AND month LIKE ?").bind(r.id,`${year}-%`).all<any>(),
       c.env.DB.prepare("SELECT joined_at,created_at FROM members WHERE id=?").bind(r.id).first<any>()
     ]);
-    const ex=new Set(exemptions.results.map((x:any)=>String(x.month))); const joined=String(member?.joined_at||member?.created_at||`${year}-01`).slice(0,7);
-    let target=0; for(let m=1;m<=lastMonth;m++){const month=`${year}-${String(m).padStart(2,'0')}`;if(month<joined||ex.has(month))continue;target+=rateForMonthFromRows(rates.results as any[],month,n(r.monthly_amount));}
+    const ex=new Set(exemptions.results.map((x:any)=>String(x.month))); const joinedAt=member?.joined_at||member?.created_at||`${year}-01-01`; const joined=String(joinedAt).slice(0,7);
+    let target=0; for(let m=1;m<=lastMonth;m++){const month=`${year}-${String(m).padStart(2,'0')}`;if(month<joined||ex.has(month))continue;const baseRate=rateForMonthFromRows(rates.results as any[],month,n(r.monthly_amount));target+=contributionDueFromRate(baseRate,joinedAt,month,firstMonthRule);}
     const appliedRaw=n(r.applied_raw); const applied=Math.min(target,appliedRaw); const advance=Math.max(0,appliedRaw-target)+n(r.future_allocated);
     return {...r,collected:applied,applied,advance,annual_target:target,outstanding:Math.max(0,target-applied),rate:target>0?Math.min(100,applied/target*100):null};
   }));

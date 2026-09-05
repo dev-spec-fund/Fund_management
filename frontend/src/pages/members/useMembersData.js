@@ -35,7 +35,7 @@ export default function useMembersData(isAdmin) {
     }).catch(() => {});
   }, [isAdmin]);
 
-  const outstandingByMember = new Map((monthlySummary?.outstanding?.members || []).map((member) => [Number(member.id), member]));
+  const outstandingByMember = new Map((monthlySummary?.member_statuses || monthlySummary?.outstanding?.members || []).map((member) => [Number(member.id), member]));
   const activeMembers = members.filter((member) => member.active);
   const memberStatus = (member) => {
     if (!member.active) return "inactive";
@@ -45,10 +45,9 @@ export default function useMembersData(isAdmin) {
     const status = memberStatus(member);
     result[status] = (result[status] || 0) + 1;
     return result;
-  }, { paid: 0, partial: 0, unpaid: 0, exempt: 0 });
-  const expected = activeMembers.reduce((sum, member) => sum + Number(member.monthly_amount || 0), 0);
-  const dueTotal = Number(monthlySummary?.outstanding?.total || 0);
-  const collected = Math.max(0, expected - dueTotal);
+  }, { paid: 0, partial: 0, unpaid: 0, exempt: 0, not_applicable: 0 });
+  const expected = Number(monthlySummary?.collection?.expected ?? activeMembers.reduce((sum, member) => sum + Number(member.monthly_amount || 0), 0));
+  const collected = Number(monthlySummary?.collection?.collected ?? Math.max(0, expected - Number(monthlySummary?.outstanding?.total || 0)));
   const percent = expected > 0 ? Math.min(100, Math.round((collected / expected) * 100)) : 0;
   const filtered = members.filter((member) => {
     const query = search.trim().toLowerCase();

@@ -2,7 +2,7 @@ import type { Env } from "../types";
 import { approveWithAllocations, allocationReceipt } from "../allocations";
 import { ensureInitialContributionRate } from "../contributionRates";
 import { sendMessage, answerCallback, editMessageText, editMessageCaption } from "../telegram";
-import { currentMonth, getAdminByTelegramId, logAudit, generateMemberCode, getSetting, getBranding, ensureMemberRegistrationTable } from "../db";
+import { currentMonth, currentDate, getAdminByTelegramId, logAudit, generateMemberCode, getSetting, getBranding, ensureMemberRegistrationTable } from "../db";
 import { adminCan, consumeRateLimit, duplicateSlip, normalizeName, normalizePhone, requireOpenMonth } from "../ops";
 import { esc, miniAppUrl } from "../botSupport";
 
@@ -89,8 +89,8 @@ export async function handleCallback(env: Env, callback: any) {
       const defaultMonthly = Number(await getSetting(env, "default_monthly_amount")) || 250;
       const displayName = [callback.from.first_name, callback.from.last_name].filter(Boolean).join(" ") || admin.name;
       const insert = await env.DB.prepare(
-        "INSERT INTO members (member_code, telegram_id, name, monthly_amount, normalized_name, normalized_phone) VALUES (?, ?, ?, ?, ?, NULL)"
-      ).bind(memberCode, telegramId, displayName, defaultMonthly, normalizeName(displayName)).run();
+        "INSERT INTO members (member_code, telegram_id, name, monthly_amount, normalized_name, normalized_phone, joined_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
+      ).bind(memberCode, telegramId, displayName, defaultMonthly, normalizeName(displayName), currentDate(env.FUND_TIMEZONE || "Indian/Maldives")).run();
       member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(insert.meta.last_row_id).first<any>();
       await ensureInitialContributionRate(env,Number(insert.meta.last_row_id),defaultMonthly,currentMonth(env.FUND_TIMEZONE || "Indian/Maldives"));
       await logAudit(env, admin.id, "self_register_admin_as_member", `${member.member_code} — ${member.name}`);
@@ -135,8 +135,8 @@ export async function handleCallback(env: Env, callback: any) {
       const memberCode = await generateMemberCode(env);
       const defaultMonthly = Number(await getSetting(env, "default_monthly_amount")) || 250;
       const insert = await env.DB.prepare(
-        "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount, normalized_name, normalized_phone) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).bind(memberCode, request.telegram_id, request.name, request.phone || null, defaultMonthly, normalizeName(request.name), normalizePhone(request.phone) || null).run();
+        "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount, normalized_name, normalized_phone, joined_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(memberCode, request.telegram_id, request.name, request.phone || null, defaultMonthly, normalizeName(request.name), normalizePhone(request.phone) || null, currentDate(env.FUND_TIMEZONE || "Indian/Maldives")).run();
       member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(insert.meta.last_row_id).first<any>();
       await ensureInitialContributionRate(env,Number(insert.meta.last_row_id),defaultMonthly,currentMonth(env.FUND_TIMEZONE || "Indian/Maldives"));
     }

@@ -92,10 +92,10 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
   const memberPaid = Number(memberStatus?.paid || 0);
   const memberDue = Number(memberStatus?.due || 0);
-  const memberRate = Number(memberStatus?.monthly_amount || member?.monthly_amount || 0);
+  const memberRate = Number(memberStatus?.required_amount ?? memberStatus?.monthly_amount ?? member?.monthly_amount ?? 0);
   const memberState = String(memberStatus?.status || "unpaid").toLowerCase();
-  const memberStateLabel = memberState === "paid" ? "Paid" : memberState === "partial" ? "Partial" : memberState === "exempt" ? "Exempt" : "Unpaid";
-  const memberStateColor = memberState === "paid" ? "var(--success)" : memberState === "partial" ? "var(--warning)" : memberState === "exempt" ? "var(--muted)" : "var(--danger)";
+  const memberStateLabel = memberState === "paid" ? "Paid" : memberState === "partial" ? "Partial" : memberState === "exempt" ? "Exempt" : memberState === "not_applicable" ? "Not due" : "Unpaid";
+  const memberStateColor = memberState === "paid" ? "var(--success)" : memberState === "partial" ? "var(--warning)" : memberState === "exempt" || memberState === "not_applicable" ? "var(--muted)" : "var(--danger)";
 
   return (
     <>
@@ -115,7 +115,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
               </div>
               <div className="member-contribution-hero-amount">MVR {fmt(memberPaid)} <span>/ {fmt(memberRate)}</span></div>
               <div className="sans member-contribution-hero-bottom">
-                <span>{memberState === "exempt" ? "No contribution due this month" : memberDue > 0 ? `MVR ${fmt(memberDue)} outstanding` : "Contribution complete for this month"}</span>
+                <span>{memberState === "exempt" || memberState === "not_applicable" ? "No contribution due this month" : memberDue > 0 ? `MVR ${fmt(memberDue)} outstanding` : "Contribution complete for this month"}</span>
                 <strong>View history ›</strong>
               </div>
             </>

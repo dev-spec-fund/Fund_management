@@ -311,3 +311,46 @@ test('admin acceptance polish keeps reporting month consistent and mobile admin 
   assert.match(reportSections,/annual-top-member/);
   assert.match(settingsSections,/admin-audit-row/);
 });
+
+
+test('first-month contribution policy defaults to half after day 15 and is used consistently', () => {
+  const db = dbWithSchema();
+  assert.equal(
+    db.prepare("SELECT value FROM settings WHERE key='first_month_contribution_rule'").get()?.value,
+    'half_after_15'
+  );
+  db.close();
+
+  const rates = fs.readFileSync(path.join(root,'src/contributionRates.ts'),'utf8');
+  const members = fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
+  const reports = fs.readFileSync(path.join(root,'src/routes/reports.ts'),'utf8');
+  const governance = fs.readFileSync(path.join(root,'src/routes/governance.ts'),'utf8');
+  const pending = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
+  const scheduled = fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
+  const allocations = fs.readFileSync(path.join(root,'src/allocations.ts'),'utf8');
+  const settings = fs.readFileSync(path.resolve(root,'../frontend/src/pages/settings/SettingsSections.jsx'),'utf8');
+
+  assert.match(rates, /day>15/);
+  assert.match(rates, /rate\/2/);
+  assert.match(rates, /month<joinMonth/);
+  assert.match(rates, /rule==="next_month"/);
+  assert.match(members, /contributionDueFromRate/);
+  assert.match(reports, /adjustedOutstanding/);
+  assert.match(reports, /collectionExpected/);
+  assert.match(governance, /firstMonthContributionRule/);
+  assert.match(pending, /contributionDueFromRate/);
+  assert.match(scheduled, /contributionDueForMonth/);
+  assert.match(allocations, /contributionDueFromRate/);
+  assert.match(settings, /first_month_contribution_rule/);
+});
+
+test('new member inserts explicitly store a Maldives-local joined date', () => {
+  const members = fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
+  const pending = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
+  const callbacks = fs.readFileSync(path.join(root,'src/bot/callbacks.ts'),'utf8');
+
+  assert.match(members, /joined_at/);
+  assert.match(members, /currentDate\(c\.env\.FUND_TIMEZONE/);
+  assert.match(pending, /currentDate\(c\.env\.FUND_TIMEZONE/);
+  assert.match(callbacks, /currentDate\(env\.FUND_TIMEZONE/);
+});

@@ -1,7 +1,59 @@
 import type { Env } from "./types";
-import { currentMonth } from "./db";
+import { currentMonth, getSetting } from "./db";
 
 export type ContributionRate = { amount:number; effective_from:string; effective_to?:string|null };
+
+export type FirstMonthContributionRule = "full" | "half_after_15" | "next_month";
+
+export function normalizeFirstMonthContributionRule(value:any): FirstMonthContributionRule {
+  const rule=String(value||"").trim();
+  return rule==="full" || rule==="next_month" ? rule : "half_after_15";
+}
+
+export async function firstMonthContributionRule(env:Env): Promise<FirstMonthContributionRule> {
+  return normalizeFirstMonthContributionRule(await getSetting(env,"first_month_contribution_rule"));
+}
+
+export function contributionDueFromRate(
+  baseRate:number,
+  joinedAt:string|null|undefined,
+  month:string,
+  rule:FirstMonthContributionRule="half_after_15"
+): number {
+  const rate=Math.max(0,Number(baseRate||0));
+  const joined=String(joinedAt||"").slice(0,10);
+  const joinMonth=joined.slice(0,7);
+  if(/^\d{4}-\d{2}$/.test(joinMonth)){
+    if(month<joinMonth) return 0;
+    if(month===joinMonth){
+      if(rule==="next_month") return 0;
+      if(rule==="half_after_15"){
+        const day=Number(joined.slice(8,10));
+        if(Number.isFinite(day) && day>15) return Number((rate/2).toFixed(2));
+      }
+    }
+  }
+  return Number(rate.toFixed(2));
+}
+
+export async function contributionDueForMonth(
+  env:Env,
+  memberId:number,
+  month:string,
+  fallback=0,
+  joinedAt?:string|null
+): Promise<number> {
+  const [baseRate,rule,member]=await Promise.all([
+    contributionRateForMonth(env,memberId,month,fallback),
+    firstMonthContributionRule(env),
+    joinedAt===undefined
+      ? env.DB.prepare("SELECT joined_at,created_at FROM members WHERE id=?").bind(memberId).first<any>()
+      : Promise.resolve(null)
+  ]);
+  const joined=joinedAt===undefined ? (member?.joined_at||member?.created_at||null) : joinedAt;
+  return contributionDueFromRate(baseRate,joined,month,rule);
+}
+
 
 export async function contributionRateForMonth(env: Env, memberId:number, month:string, fallback=0): Promise<number> {
   const row=await env.DB.prepare(`SELECT amount FROM member_contribution_rates

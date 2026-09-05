@@ -3,7 +3,7 @@ import { sendInBatches } from "./telegram";
 import { currentDayOfMonth, currentMonth, getSetting, getBranding } from "./db";
 import { isMonthClosed, safeLogError } from "./ops";
 import { allocatedPaidSql } from "./allocations";
-import { contributionRateForMonth } from "./contributionRates";
+import { contributionDueForMonth } from "./contributionRates";
 
 /** Runs daily and evaluates reminder dates in FUND_TIMEZONE (Indian/Maldives by default). */
 export async function runScheduled(env: Env) {
@@ -25,7 +25,7 @@ export async function runScheduled(env: Env) {
 
     const messages:any[]=[];
     for (const member of members.results as any[]) {
-      const rate=await contributionRateForMonth(env,member.id,month,Number(member.monthly_amount||0));
+      const rate=await contributionDueForMonth(env,member.id,month,Number(member.monthly_amount||0),member.joined_at||member.created_at);
       const paid=Number(member.paid||0), due=Math.max(0,rate-paid);
       if (due <= 0.005) continue;
       const status=paid>0?"partially paid":"unpaid";

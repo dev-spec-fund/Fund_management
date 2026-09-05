@@ -239,6 +239,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES ('fund_name', 'Kanditheemu Yo
 INSERT OR IGNORE INTO settings (key, value) VALUES ('short_name', 'KYS');
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ('default_monthly_amount', '250');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('first_month_contribution_rule', 'half_after_15');
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ('reminder_day', '5');
 

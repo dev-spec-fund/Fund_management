@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance, requireMemberOrAdmin } from "../auth";
-import { logAudit, generateMemberCode, currentMonth, getSetting, getBranding } from "../db";
+import { logAudit, generateMemberCode, currentMonth, currentDate, getSetting, getBranding } from "../db";
 import { auditEntity, ensureOperationalSchema, findDuplicateMembers, normalizeName, normalizePhone, requireOpenMonth } from "../ops";
 import { boundedText, flag, money, telegramId, validMonth } from "../validation";
 import { paidForMonth } from "../allocations";
-import { contributionRateForMonth, rateForMonthFromRows, setContributionRate, ensureInitialContributionRate } from "../contributionRates";
+import { contributionRateForMonth, contributionDueForMonth, contributionDueFromRate, firstMonthContributionRule, rateForMonthFromRows, setContributionRate, ensureInitialContributionRate } from "../contributionRates";
 import { downloadTelegramFile, sendPhoto } from "../telegram";
 
 export const membersRoute = new Hono<AppEnv>();
@@ -40,11 +40,11 @@ membersRoute.get("/:id/monthly-status", requireAdmin, async (c) => {
   const id = Number(c.req.param("id"));
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
-  const member = await c.env.DB.prepare("SELECT id,monthly_amount FROM members WHERE id=?").bind(id).first<any>();
+  const member = await c.env.DB.prepare("SELECT id,monthly_amount,joined_at,created_at FROM members WHERE id=?").bind(id).first<any>();
   if (!member) return c.json({error:"Not found"},404);
   const ex = await c.env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(id,month).first<any>();
   const total = await paidForMonth(c.env,id,month);
-  const rate = await contributionRateForMonth(c.env,id,month,Number(member.monthly_amount));
+  const rate = await contributionDueForMonth(c.env,id,month,Number(member.monthly_amount),member.joined_at||member.created_at);
   const status = ex ? "exempt" : total <= 0 ? "unpaid" : total + 0.005 < rate ? "partial" : "paid";
   return c.json({month,status,paid:total,due:ex?0:Math.max(0,rate-total),monthly_amount:rate,exemption_reason:ex?.reason||null});
 });
@@ -91,12 +91,14 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
     const hasAllocation=allocations.results.some((a:any)=>Number(a.contribution_id)===Number(x.id));
     if(!hasAllocation) allocationMap.set(x.month,(allocationMap.get(x.month)||0)+Number(x.amount||0));
   }
+  const firstMonthRule=await firstMonthContributionRule(c.env);
   member.monthly_amount=rateForMonthFromRows(rates.results as any[],nowMonth,Number(member.monthly_amount));
   const statuses = months.map(month=>{
     const paid=allocationMap.get(month)||0;
     const ex=exSet.get(month) as any;
-    const rate=rateForMonthFromRows(rates.results as any[],month,Number(member.monthly_amount));
-    const status=ex?'exempt':paid<=0?'unpaid':paid+0.005<rate?'partial':'paid';
+    const baseRate=rateForMonthFromRows(rates.results as any[],month,Number(member.monthly_amount));
+    const rate=contributionDueFromRate(baseRate,member.joined_at||member.created_at,month,firstMonthRule);
+    const status=ex?'exempt':rate<=0.004?'not_applicable':paid<=0?'unpaid':paid+0.005<rate?'partial':'paid';
     return {month,status,paid,due:ex?0:Math.max(0,rate-paid),monthly_amount:rate,reason:ex?.reason||null};
   });
   const organization=await getBranding(c.env);
@@ -141,8 +143,8 @@ membersRoute.post("/", requireFinance, async (c) => {
   if (duplicates.length) return c.json({error:"Possible duplicate member",duplicates},409);
   const memberCode = await generateMemberCode(c.env);
   const res = await c.env.DB.prepare(
-    "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount, normalized_name, normalized_phone) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).bind(memberCode, tg, name, phone || null, monthly, normalizeName(name), normalizePhone(phone)||null).run();
+    "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount, normalized_name, normalized_phone, joined_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(memberCode, tg, name, phone || null, monthly, normalizeName(name), normalizePhone(phone)||null,currentDate(c.env.FUND_TIMEZONE || "Indian/Maldives")).run();
   await ensureInitialContributionRate(c.env,Number(res.meta.last_row_id),monthly,currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives"));
   await auditEntity(c.env, admin.id, "member_created", "member", Number(res.meta.last_row_id), null, {member_code:memberCode,...body});
   return c.json({ id: res.meta.last_row_id, member_code: memberCode }, 201);
