@@ -70,8 +70,12 @@ route.patch('/pending/contributions/:id', requireFinance, async c => {
   const amount=money(body.amount??before.amount); const ref=body.ref_number===undefined?before.ref_number:boundedText(body.ref_number,120); const bankDate=body.bank_date===undefined?before.bank_date:body.bank_date;
   if(amount===null || !validDate(bankDate)) return c.json({error:'Invalid amount or bank date'},400);
   const dup=await duplicateSlip(c.env,ref,amount,bankDate,id); if(dup) return c.json({error:`Duplicate slip matches ${dup.txn_id}`,duplicate:dup},409);
-  await c.env.DB.prepare(`UPDATE contributions SET amount=?,ref_number=?,bank_date=?,month=?,duplicate_key=?,corrected_by=?,corrected_at=datetime('now') WHERE id=? AND status='pending'`)
+  const changed=await c.env.DB.prepare(`UPDATE contributions SET amount=?,ref_number=?,bank_date=?,month=?,duplicate_key=?,corrected_by=?,corrected_at=datetime('now') WHERE id=? AND status='pending'`)
     .bind(amount,ref||null,bankDate||null,month,contributionDuplicateKey(ref,amount,bankDate),admin.id,id).run();
+  if(!changed.meta.changes){
+    const current=await c.env.DB.prepare("SELECT status FROM contributions WHERE id=?").bind(id).first<any>();
+    return c.json({error:`Contribution is already ${current?.status||'reviewed'}. Refresh before editing.`},409);
+  }
   const after=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
   await auditEntity(c.env,admin.id,'contribution_ocr_corrected','contribution',id,before,after); return c.json(after);
 });

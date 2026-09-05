@@ -183,6 +183,13 @@ test('frontend crashes are reported to the authenticated production error log en
   assert.match(apiSource, /keepalive: true/);
 });
 
+test('pending contribution correction conflicts if another admin reviews it first', () => {
+  const pendingSource = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
+  assert.match(pendingSource, /const changed=await c\.env\.DB\.prepare\(`UPDATE contributions SET amount=\?,ref_number=\?,bank_date=\?,month=\?,duplicate_key=\?,corrected_by=\?,corrected_at=datetime\('now'\) WHERE id=\? AND status='pending'`\)/);
+  assert.match(pendingSource, /if\(!changed\.meta\.changes\)/);
+  assert.match(pendingSource, /Contribution is already .* Refresh before editing/);
+});
+
 test('critical financial workflow guards remain wired after stability hardening', () => {
   const governanceSource = fs.readFileSync(path.join(root,'src/routes/governance.ts'),'utf8');
   const pendingSource = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
