@@ -51,7 +51,10 @@ export function MemberElections(){
           {!!detail.applications?.length&&<div className="election-my-applications">{detail.applications.map(a=><div key={a.id} className="sans election-my-application"><div><b>{detail.positions.find(p=>Number(p.id)===Number(a.position_id))?.title||"Position"}</b><span>{a.status}</span>{a.review_reason&&<small>{a.review_reason}</small>}</div>{a.status==="pending"&&detail.application_phase==="open"&&<button type="button" onClick={()=>withdrawApplication(a)}>Withdraw</button>}</div>)}</div>}
           {detail.application_phase==="open"&&<>
             <div className="sans member-section-title">APPLY FOR AN AVAILABLE POSITION</div>
-            <select className="sans election-select" value={applyPosition} onChange={e=>setApplyPosition(e.target.value)}><option value="">Choose position</option>{detail.positions.map(p=><option key={p.id} value={p.id}>{p.title} · {p.seats} seat{Number(p.seats)===1?"":"s"}</option>)}</select>
+            <div className="sans election-deadline">Applications close: <b>{String(detail.applications_close_at||"").replace("T"," ").slice(0,16)}</b></div>
+            {detail.positions.map(p=>{const rule=detail.application_eligibility?.[String(p.id)];return rule&&!rule.eligible?<div key={p.id} className="sans election-ineligible"><b>{p.title}</b><span>{rule.reasons.join(" ")}</span></div>:null})}
+
+            <select className="sans election-select" value={applyPosition} onChange={e=>setApplyPosition(e.target.value)}><option value="">Choose position</option>{detail.positions.map(p=>{const rule=detail.application_eligibility?.[String(p.id)];return <option key={p.id} value={p.id} disabled={rule&&!rule.eligible}>{p.title} · {p.seats} seat{Number(p.seats)===1?"":"s"}{rule&&!rule.eligible?" · Not eligible":""}</option>})}</select>
             <textarea className="sans election-application-statement" maxLength={600} placeholder="Short candidate statement / reason for applying (optional)" value={applyStatement} onChange={e=>setApplyStatement(e.target.value)}/>
             <button type="button" disabled={busy||!applyPosition} onClick={apply} style={{...approveBtn,width:"100%",marginBottom:12}}>{busy?"Submitting…":"Submit candidate application"}</button>
           </>}

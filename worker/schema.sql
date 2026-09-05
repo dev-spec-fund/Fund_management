@@ -535,8 +535,9 @@ CREATE TABLE IF NOT EXISTS elections (
   certified_by INTEGER REFERENCES admins(id),
   applications_open_at TEXT,
   applications_close_at TEXT,
-  applications_notified_at TEXT,
-  applications_reminder_at TEXT
+  min_membership_days INTEGER NOT NULL DEFAULT 0,
+  require_good_standing INTEGER NOT NULL DEFAULT 0,
+  application_reminder_sent_at TEXT
 );
 CREATE TABLE IF NOT EXISTS election_positions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -545,6 +546,8 @@ CREATE TABLE IF NOT EXISTS election_positions (
   seats INTEGER NOT NULL DEFAULT 1,
   max_selections INTEGER NOT NULL DEFAULT 1,
   min_selections INTEGER NOT NULL DEFAULT 1,
+  min_membership_days INTEGER,
+  require_good_standing INTEGER,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS election_candidates (
@@ -605,4 +608,7 @@ CREATE INDEX IF NOT EXISTS idx_election_applications_review
 
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(31,'election_applications');
 
-INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(32,'election_application_notifications');
+CREATE INDEX IF NOT EXISTS idx_elections_application_reminders
+  ON elections(status, applications_open_at, applications_close_at, application_reminder_sent_at);
+
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(32,'election_application_eligibility');

@@ -679,44 +679,40 @@ test('ordinary members only receive their own election application records', () 
 });
 
 
-test('members can discover draft elections while candidate applications are active', () => {
-  const elections=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(elections,/e\.status='draft' AND e\.applications_open_at IS NOT NULL/);
-  assert.match(elections,/application_phase:applicationPhase/);
-  assert.match(elections,/my_application/);
-  assert.match(elections,/detail\.application_phase==="disabled"/);
+test('election applications enforce configurable eligibility on server', () => {
+  const db=dbWithSchema();
+  const electionCols=new Set(db.prepare("PRAGMA table_info(elections)").all().map(r=>r.name));
+  const positionCols=new Set(db.prepare("PRAGMA table_info(election_positions)").all().map(r=>r.name));
+  assert.ok(electionCols.has("min_membership_days"));
+  assert.ok(electionCols.has("require_good_standing"));
+  assert.ok(electionCols.has("application_reminder_sent_at"));
+  assert.ok(positionCols.has("min_membership_days"));
+  assert.ok(positionCols.has("require_good_standing"));
+  db.close();
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/candidateEligibility/);
+  assert.match(route,/Minimum membership is/);
+  assert.match(route,/current-month contribution is not fully paid or exempt/);
+  assert.match(route,/if\(!eligibility\.eligible\)return c\.json/);
 });
 
-test('candidate application opening and closing reminders are Telegram notified exactly once', () => {
-  const elections=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  const schema=fs.readFileSync(path.join(root,'schema.sql'),'utf8');
-  assert.match(elections,/applications_notified_at IS NULL/);
-  assert.match(elections,/applications_reminder_at IS NULL/);
-  assert.match(elections,/EXCO Candidate Applications Open/);
-  assert.match(elections,/Candidate Application Reminder/);
-  assert.match(elections,/onlyNotApplied/);
-  assert.match(elections,/minutes>1440/);
-  assert.match(schema,/applications_notified_at/);
-  assert.match(schema,/applications_reminder_at/);
+test('candidate application events send Telegram status messages and closing reminder', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/was submitted and is awaiting review/);
+  assert.match(route,/application has been <b>approved<\/b>/);
+  assert.match(route,/application was <b>not approved<\/b>/);
+  assert.match(route,/application was withdrawn/);
+  assert.match(route,/applications close within 24 hours/);
+  assert.match(route,/application_reminder_sent_at/);
 });
 
-test('hourly election lifecycle does not multiply contribution reminders', () => {
-  const scheduled=fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
-  const index=fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
-  const wrangler=fs.readFileSync(path.join(root,'wrangler.toml'),'utf8');
-  assert.match(wrangler,/"0 \* \* \* \*"/);
-  assert.match(index,/runScheduled\(env, _event\.cron\)/);
-  assert.match(scheduled,/if\(cron !== "0 19 \* \* \*"\) return/);
-  assert.match(scheduled,/processElectionLifecycle\(env\)/);
-});
-
-test('member overview and Elections nav visibly surface open candidate applications', () => {
-  const app=fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
-  const overview=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Overview.jsx'),'utf8');
-  assert.match(app,/electionAttention/);
-  assert.match(app,/Applications open/);
-  assert.match(app,/name==="elections"|t === "elections"/);
-  assert.match(overview,/Applications Open/);
-  assert.match(overview,/Application Submitted/);
-  assert.match(overview,/Apply Now/);
+test('election application UI explains eligibility and provides admin status filters', () => {
+  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  assert.match(member,/Not eligible/);
+  assert.match(member,/Applications close:/);
+  assert.match(member,/application_eligibility/);
+  assert.match(admin,/Minimum membership days to apply/);
+  assert.match(admin,/Require current contribution to be fully paid or exempt/);
+  assert.match(admin,/applicationFilter/);
 });

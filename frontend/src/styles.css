@@ -2716,70 +2716,15 @@ button:not(:disabled):active {
   border-radius:9px;background:var(--bg);color:var(--text);padding:10px;margin:7px 0;font-size:10px
 }
 
-
-/* v48 election application visibility / notification polish */
-.app-nav-item{position:relative}
-.app-nav-attention{
-  position:absolute;
-  top:5px;
-  right:7px;
-  width:7px;
-  height:7px;
-  border-radius:999px;
-  background:var(--danger);
-  border:2px solid var(--card);
-  box-sizing:content-box;
-}
-.member-election-overview{
-  width:100%;
-  border:1px solid var(--success-border-2);
-  border-radius:14px;
-  background:var(--surface-success-soft);
-  color:var(--text);
-  padding:13px 14px;
-  margin-top:10px;
-  text-align:left;
-  cursor:pointer;
-}
-.member-election-overview.submitted{
-  border-color:var(--border);
-  background:var(--card);
-}
-.member-election-overview-top,
-.member-election-overview-bottom{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-.member-election-overview-top span{
-  font-size:9px;
-  letter-spacing:.7px;
-  color:var(--soft);
-  font-weight:800;
-}
-.member-election-overview-top strong{
-  font-size:9px;
-  color:var(--success);
-}
-.member-election-overview-title{
-  font-size:14px;
-  font-weight:750;
-  color:var(--primary-text);
-  margin-top:5px;
-}
-.member-election-overview-bottom{
-  margin-top:7px;
-  font-size:10px;
-  color:var(--muted);
-}
-.member-election-overview-bottom span{
-  min-width:0;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-.member-election-overview-bottom strong{
-  flex:0 0 auto;
-  color:var(--success);
-}
+/* v48 election eligibility / application overview */
+.election-check{display:flex;align-items:flex-start;gap:8px;font-size:9px;color:var(--muted);line-height:1.4;margin:9px 0 12px}
+.election-check input{margin-top:1px}
+.election-application-counts{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px}
+.election-application-counts button{border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);padding:7px 3px;font:inherit}
+.election-application-counts button.active{border-color:var(--primary);background:var(--button-soft)}
+.election-application-counts b,.election-application-counts span{display:block;text-align:center}
+.election-application-counts b{font-size:12px}.election-application-counts span{font-size:7px;text-transform:uppercase;color:var(--soft);margin-top:2px}
+.election-deadline{font-size:9px;color:var(--muted);padding:8px 9px;background:var(--bg);border-radius:8px;margin-bottom:8px}
+.election-deadline b{color:var(--primary-text)}
+.election-ineligible{padding:8px 9px;border-radius:8px;background:var(--danger-bg);color:var(--danger);margin-bottom:6px}
+.election-ineligible b,.election-ineligible span{display:block}.election-ineligible b{font-size:9px}.election-ineligible span{font-size:8px;margin-top:2px;line-height:1.4}
