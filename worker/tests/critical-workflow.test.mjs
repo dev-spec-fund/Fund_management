@@ -1814,3 +1814,10 @@ test('v78 meeting lifecycle blocks invalid draft and completed transitions', () 
   assert.ok(completedGuards >= 3, 'edit, update-notification and reminder paths should all reject completed meetings');
 });
 
+
+
+test('reversed expenses cannot be edited back into approved state', () => {
+  const expenses = fs.readFileSync(path.join(root,'src/routes/expenses.ts'),'utf8');
+  assert.match(expenses, /if\(before\.status!==['"]approved['"]\)return c\.json\(\{error:`\$\{String\(before\.status\|\|'Changed'\)/);
+  assert.doesNotMatch(expenses, /if\(before\.status===['"]voided['"]\)return c\.json\(\{error:['"]Voided expenses cannot be edited/);
+});

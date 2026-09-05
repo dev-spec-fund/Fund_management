@@ -233,7 +233,7 @@ expensesRoute.patch("/:id", requireFinance, async (c) => {
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const body=await c.req.json<any>();
   const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
   if(!before)return c.json({error:"Not found"},404);
-  if(before.status==='voided')return c.json({error:"Voided expenses cannot be edited"},409);
+  if(before.status!=='approved')return c.json({error:`${String(before.status||'Changed').replace(/^./,x=>x.toUpperCase())} expenses cannot be edited`},409);
   const originalMonth=before.transaction_month??String(before.expense_date||before.created_at).slice(0,7);
   if(!validMonth(originalMonth)) return c.json({error:"Existing expense month is invalid"},409);
   // A closed accounting period is immutable. An expense cannot be moved out of it.
