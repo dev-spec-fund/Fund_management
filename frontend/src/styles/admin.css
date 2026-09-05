@@ -1,0 +1,1001 @@
+/* Expenses module */
+.expenses-sticky-controls {
+  z-index: 21;
+}
+
+.expense-filter-row {
+  display:flex;
+  gap:6px;
+  overflow-x:auto;
+  padding-bottom:5px;
+  scrollbar-width:none;
+}
+.expense-filter-row::-webkit-scrollbar { display:none; }
+.expense-filter-chip {
+  flex:0 0 auto;
+  min-height:30px;
+  border:1px solid var(--border-strong-2);
+  background:var(--button-soft);
+  color:var(--primary-text);
+  border-radius:999px;
+  padding:5px 10px;
+  font-size:10px;
+  font-weight:650;
+  cursor:pointer;
+}
+.expense-filter-chip.active {
+  background:var(--primary);
+  border-color:var(--primary);
+  color:var(--on-primary);
+}
+
+.expense-search-row {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:7px;
+  margin-top:3px;
+}
+.expense-search {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  border:1px solid var(--border);
+  background:var(--card);
+  border-radius:10px;
+  padding:7px 9px;
+  color:var(--soft);
+  min-width:0;
+}
+.expense-search input {
+  flex:1;
+  min-width:0;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:var(--text);
+  font-size:12px;
+}
+.expense-search button {
+  border:0;
+  background:transparent;
+  color:var(--soft);
+  padding:0;
+  display:flex;
+  cursor:pointer;
+}
+.expense-filter-toggle {
+  min-height:34px;
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--primary-text);
+  border-radius:10px;
+  padding:7px 9px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  font-size:10px;
+  font-weight:650;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.expense-filter-toggle.active {
+  border-color:var(--border-strong-2);
+  background:var(--button-soft);
+}
+.expense-secondary-filters {
+  margin-top:7px;
+  padding:8px 9px 4px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--card);
+}
+.expense-secondary-filter-label {
+  font-size:9px;
+  color:var(--soft);
+  text-transform:uppercase;
+  letter-spacing:.7px;
+  margin-bottom:6px;
+}
+
+.expense-row {
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  background:var(--card);
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:11px;
+  padding:10px 11px;
+  margin-bottom:7px;
+  cursor:pointer;
+  text-align:left;
+}
+.expense-row:active { background:var(--button-soft); }
+.expense-row-main { min-width:0; flex:1 1 auto; }
+.expense-row-title-line {
+  display:flex;
+  gap:6px;
+  align-items:center;
+  min-width:0;
+}
+.expense-row-title {
+  font-size:12px;
+  line-height:1.25;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.expense-status-badge {
+  flex:0 0 auto;
+  font-size:8px;
+  line-height:1;
+  padding:3px 5px;
+  border-radius:999px;
+  border:1px solid;
+}
+.expense-row-meta {
+  display:flex;
+  gap:4px;
+  align-items:center;
+  flex-wrap:wrap;
+  font-size:9px;
+  color:var(--soft);
+  margin-top:4px;
+  line-height:1.35;
+}
+.expense-row-foot {
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin-top:4px;
+  font-size:9px;
+  color:var(--muted);
+}
+.expense-document-indicator {
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+}
+.expense-document-missing { color:var(--warning); }
+.expense-row-amount {
+  flex:0 0 auto;
+  color:var(--danger);
+  font-weight:750;
+  font-size:12px;
+  line-height:1.25;
+  white-space:nowrap;
+  padding-top:1px;
+}
+
+/* v67: keep horizontally scrolling admin tabs comfortably inside the viewport. */
+.admin-tab-strip {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.admin-tab-strip::-webkit-scrollbar { display: none; }
+.admin-tab-strip > button:first-child { margin-left: 2px; }
+.admin-tab-strip > button:last-child { margin-right: 2px; }
+
+
+/* v68: compact mobile shell/navigation.
+   Keeps the existing visual identity while giving page content more vertical room. */
+.app-brand-header {
+  padding: 13px 20px 9px;
+}
+.app-brand-kicker {
+  font-size: 9px;
+  line-height: 1.1;
+  letter-spacing: 1.8px;
+  opacity: .68;
+  text-transform: uppercase;
+}
+.app-brand-title {
+  font-size: 23px;
+  line-height: 1.05;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.app-brand-name {
+  font-size: 9px;
+  line-height: 1.15;
+  opacity: .68;
+  margin-top: 2px;
+}
+
+.app-mode-wrap {
+  flex-shrink: 0;
+  padding: 9px 16px 0;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+.app-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--border);
+  border-radius: 11px;
+  padding: 3px;
+}
+.app-mode-switch > button {
+  min-height: 34px;
+}
+
+.admin-tab-strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  padding: 0 18px;
+  margin-top: 11px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-padding-inline: 18px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+.admin-tab-strip > button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  scroll-snap-align: center;
+}
+
+.app-page-content {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 15px 18px max(20px, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 380px) {
+  .app-brand-header { padding: 11px 16px 8px; }
+  .app-brand-title { font-size: 21px; }
+  .app-mode-wrap { padding-left: 14px; padding-right: 14px; }
+  .admin-tab-strip { padding-left: 14px; padding-right: 14px; gap: 16px; scroll-padding-inline: 14px; }
+  .app-page-content { padding-left: 15px; padding-right: 15px; }
+}
+
+
+/* v69: Projects detail hierarchy and collapsible transaction sections. */
+.project-detail-summary {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px;
+  margin-bottom:10px;
+}
+.project-detail-topline {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  color:var(--soft);
+  font-size:10px;
+  margin-bottom:9px;
+}
+.project-status-pill {
+  font-size:9px;
+  font-weight:750;
+  letter-spacing:.5px;
+}
+.project-open-cost {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  color:var(--muted);
+  padding:3px 0 10px;
+}
+.project-finance-grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:6px;
+}
+.project-finance-metric {
+  min-width:0;
+  border:1px solid var(--divider);
+  border-radius:9px;
+  padding:8px 7px;
+}
+.project-finance-metric > span {
+  display:block;
+  font-size:8px;
+  color:var(--soft);
+  text-transform:uppercase;
+  letter-spacing:.5px;
+}
+.project-finance-metric > strong {
+  display:block;
+  font-size:11px;
+  margin-top:3px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.project-finance-metric.danger > strong { color:var(--danger); }
+.project-finance-metric.success > strong { color:var(--success-strong); }
+.project-budget-progress {
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  margin-top:7px;
+  color:var(--muted);
+  font-size:9px;
+}
+.project-budget-progress strong { color:var(--danger); }
+.project-detail-meta {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.project-description {
+  font-size:10px;
+  color:var(--muted);
+  line-height:1.5;
+  margin-top:9px;
+}
+
+.project-section-header {
+  width:100%;
+  border:0;
+  border-top:1px solid var(--divider);
+  background:transparent;
+  color:var(--text);
+  padding:10px 1px 8px;
+  margin-top:4px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  cursor:pointer;
+  text-align:left;
+}
+.project-section-label {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  font-size:10px;
+  font-weight:750;
+  text-transform:uppercase;
+  letter-spacing:.45px;
+  color:var(--muted);
+}
+.project-section-label small {
+  min-width:18px;
+  height:18px;
+  padding:0 5px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--button-soft);
+  color:var(--primary-text);
+  font-size:9px;
+}
+.project-section-right {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  color:var(--muted);
+  font-size:10px;
+}
+.project-section-right strong {
+  color:var(--text);
+  font-size:10px;
+}
+.project-section-right svg {
+  transition:transform .16s ease;
+}
+.project-section-right svg.open { transform:rotate(180deg); }
+.project-section-empty {
+  font-size:10px;
+  color:var(--soft);
+  padding:2px 0 10px;
+}
+.project-transaction-row {
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  border-top:1px solid var(--divider);
+  padding:8px 1px;
+}
+.project-transaction-main {
+  min-width:0;
+  font-size:10px;
+}
+.project-transaction-main > b {
+  display:block;
+  font-size:10px;
+  margin-bottom:2px;
+}
+.project-transaction-main > div {
+  font-size:9px;
+  color:var(--soft);
+  line-height:1.35;
+}
+.project-transaction-main > div.warning { color:var(--warning); }
+.project-transaction-amount {
+  flex:0 0 auto;
+  white-space:nowrap;
+  font-size:10px;
+}
+.project-transaction-amount.success { color:var(--success); }
+.project-transaction-amount.danger { color:var(--danger); }
+.project-transaction-amount.muted { color:var(--muted); }
+.project-history-row {
+  border-top:1px solid var(--divider);
+  padding:7px 1px;
+}
+.project-history-row > div:first-child {
+  font-size:10px;
+  font-weight:650;
+}
+.project-history-row > div:last-child {
+  font-size:9px;
+  color:var(--soft);
+  margin-top:2px;
+}
+
+
+/* v70: compact Reports and Meetings actions. */
+.report-header-actions {
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.report-action-menu-wrap {
+  position:relative;
+}
+.report-header-action {
+  min-height:32px;
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--primary-text);
+  border-radius:9px;
+  padding:6px 9px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  font-size:10px;
+  font-weight:650;
+  cursor:pointer;
+}
+.report-action-menu {
+  position:absolute;
+  right:0;
+  top:37px;
+  z-index:12;
+  width:190px;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:11px;
+  padding:5px;
+  box-shadow:0 10px 28px var(--shadow);
+}
+.report-action-menu.compact { width:180px; }
+.report-action-menu > button {
+  width:100%;
+  border:0;
+  background:transparent;
+  color:var(--text);
+  padding:8px 9px;
+  border-radius:8px;
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  cursor:pointer;
+  text-align:left;
+}
+.report-action-menu > button:active {
+  background:var(--button-soft);
+}
+.report-action-menu > button.danger {
+  color:var(--danger);
+}
+.report-action-menu > button span {
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.report-action-menu > button b {
+  font-size:10px;
+  font-weight:700;
+}
+.report-action-menu > button small {
+  font-size:8px;
+  color:var(--soft);
+  line-height:1.3;
+}
+
+.meeting-actions-wrap {
+  position:relative;
+  margin-top:14px;
+}
+.meeting-actions-trigger {
+  width:100%;
+  min-height:38px;
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--primary-text);
+  border-radius:10px;
+  padding:8px 10px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size:11px;
+  font-weight:700;
+  cursor:pointer;
+}
+.meeting-actions-menu {
+  margin-top:6px;
+  border:1px solid var(--border);
+  background:var(--card);
+  border-radius:10px;
+  padding:5px;
+}
+.meeting-actions-menu > button {
+  width:100%;
+  border:0;
+  background:transparent;
+  color:var(--text);
+  border-radius:8px;
+  padding:9px 8px;
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  text-align:left;
+  cursor:pointer;
+}
+.meeting-actions-menu > button:active {
+  background:var(--button-soft);
+}
+.meeting-actions-menu > button.danger {
+  color:var(--danger);
+}
+.meeting-actions-menu > button span {
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.meeting-actions-menu > button b {
+  font-size:10px;
+  font-weight:700;
+}
+.meeting-actions-menu > button small {
+  font-size:8px;
+  color:var(--soft);
+  line-height:1.35;
+}
+
+
+/* v71: final app-wide visual consistency pass. */
+:root {
+  --ui-radius-sm: 9px;
+  --ui-radius: 11px;
+  --ui-radius-lg: 14px;
+  --ui-section-gap: 12px;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: 'Inter', sans-serif;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled):active {
+  transform: translateY(.25px);
+}
+
+.page-sticky-controls {
+  border-bottom-color: var(--divider);
+}
+
+/* Keep common list cards visually related across admin/member views. */
+.expense-row,
+.project-detail-summary,
+.expense-secondary-filters,
+.report-action-menu,
+.meeting-actions-menu,
+.meeting-actions-trigger,
+.expense-filter-toggle,
+.expense-search {
+  border-radius: var(--ui-radius);
+}
+
+/* Make secondary information readable without competing with primary content. */
+.expense-row-meta,
+.expense-row-foot,
+.project-transaction-main > div,
+.project-history-row > div:last-child,
+.report-action-menu > button small,
+.meeting-actions-menu > button small {
+  line-height: 1.4;
+}
+
+/* Touch targets stay compact but comfortably tappable. */
+.admin-tab-strip > button {
+  min-height: 38px;
+}
+.expense-filter-chip {
+  min-height: 30px;
+}
+.report-header-action,
+.expense-filter-toggle {
+  min-height: 34px;
+}
+
+/* Modal surfaces use the same compact rhythm as the main app. */
+.app-modal-sheet {
+  border-radius: 16px 16px 0 0 !important;
+}
+.app-modal-header {
+  min-height: 56px !important;
+  padding-left: 18px !important;
+  padding-right: 14px !important;
+}
+.app-modal-header > div:first-child {
+  font-size: 16px !important;
+  line-height: 1.2;
+}
+.app-modal-body {
+  padding: 12px 18px calc(20px + env(safe-area-inset-bottom)) !important;
+}
+
+/* Inputs across older screens inherit a consistent control shape. */
+.app-modal-body input:not([type="checkbox"]):not([type="radio"]),
+.app-modal-body select,
+.app-modal-body textarea {
+  border-radius: var(--ui-radius-sm) !important;
+}
+
+/* Prevent extremely faint helper text in dark mode. */
+:root[data-theme="dark"] {
+  --soft: #929991;
+  --soft-2: #858C84;
+  --soft-3: #7B827A;
+}
+
+
+
+
+/* v73: normalize iOS/Telegram WebView native date, time and month controls.
+   Keep the native picker, but remove WebKit's oversized internal control box. */
+@media (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  input.native-date-time-control,
+  input[type="date"],
+  input[type="time"],
+  input[type="month"],
+  input[type="datetime-local"] {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    display: block !important;
+    width: 100% !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    padding: 0 12px !important;
+    line-height: 44px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    text-align: left !important;
+    vertical-align: middle !important;
+  }
+
+  input.native-date-time-control::-webkit-date-and-time-value,
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="time"]::-webkit-date-and-time-value,
+  input[type="month"]::-webkit-date-and-time-value,
+  input[type="datetime-local"]::-webkit-date-and-time-value {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    height: 42px !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: normal !important;
+    text-align: left !important;
+  }
+
+  input.native-date-time-control::-webkit-datetime-edit,
+  input[type="date"]::-webkit-datetime-edit,
+  input[type="time"]::-webkit-datetime-edit,
+  input[type="month"]::-webkit-datetime-edit,
+  input[type="datetime-local"]::-webkit-datetime-edit {
+    display: flex !important;
+    align-items: center !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  input.native-date-time-control::-webkit-datetime-edit-fields-wrapper,
+  input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+  input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+  input[type="month"]::-webkit-datetime-edit-fields-wrapper,
+  input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
+    padding: 0 !important;
+  }
+
+  input.native-date-time-control::-webkit-calendar-picker-indicator,
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    display: block !important;
+    flex: 0 0 22px !important;
+    width: 22px !important;
+    height: 22px !important;
+    margin: 0 0 0 auto !important;
+    padding: 0 !important;
+    opacity: .82 !important;
+    cursor: pointer;
+  }
+
+  input.native-month-control {
+    text-align: center !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+  input.native-month-control::-webkit-date-and-time-value,
+  input.native-month-control::-webkit-datetime-edit {
+    justify-content: center !important;
+    text-align: center !important;
+  }
+}
+
+
+/* v82: production bottom navigation.
+   Consolidates v75/v79/v80/v81 into one maintained rule set. */
+:root {
+  --nav-motion-duration: 250ms;
+  --nav-motion-ease: cubic-bezier(.4, 0, .2, 1);
+}
+
+.admin-tab-strip.app-icon-nav {
+  position: fixed;
+  left: 50%;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 45;
+
+  display: grid !important;
+  align-items: center;
+  justify-content: stretch;
+  gap: 2px;
+
+  width: calc(100% - 20px);
+  max-width: 456px;
+  min-height: 48px;
+  margin: 0;
+  padding: 6px;
+
+  overflow: visible;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 96%, transparent);
+  box-shadow: 0 8px 28px rgba(0,0,0,.16);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  scrollbar-width: none;
+
+  transition:
+    grid-template-columns var(--nav-motion-duration) var(--nav-motion-ease),
+    background-color 180ms ease-out,
+    border-color 180ms ease-out !important;
+  animation: app-nav-enter 190ms ease-out both;
+}
+
+.admin-tab-strip.app-icon-nav::before,
+.admin-tab-strip.app-icon-nav::after {
+  display: none;
+}
+
+.app-nav-item {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 36px;
+  min-height: 36px;
+  flex: none !important;
+
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-2);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+
+  transition:
+    padding var(--nav-motion-duration) var(--nav-motion-ease),
+    gap 200ms var(--nav-motion-ease),
+    color 180ms ease-out,
+    background-color var(--nav-motion-duration) var(--nav-motion-ease),
+    transform 100ms ease-out !important;
+}
+
+.app-nav-item.active {
+  padding-left: 9px;
+  padding-right: 9px;
+  gap: 5px;
+  background: var(--primary) !important;
+  color: var(--on-primary);
+}
+
+.app-nav-item:not(.active):active {
+  background: var(--button-soft);
+  color: var(--primary-text);
+}
+
+.app-nav-item:active {
+  transform: scale(.975) !important;
+}
+
+.app-nav-item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.app-nav-item > svg {
+  flex: 0 0 17px;
+  width: 17px;
+  height: 17px;
+  transform: scale(1);
+  opacity: .82;
+  transition:
+    transform 200ms var(--nav-motion-ease),
+    opacity 180ms ease-out,
+    color 180ms ease-out !important;
+}
+
+.app-nav-item.active > svg {
+  transform: scale(1.04);
+  opacity: 1;
+}
+
+.app-nav-label {
+  max-width: 0 !important;
+  opacity: 0 !important;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+  transform: translateX(-2px);
+  transition:
+    max-width 150ms var(--nav-motion-ease),
+    opacity 100ms ease-out,
+    transform 140ms var(--nav-motion-ease) !important;
+}
+
+.app-nav-item.active .app-nav-label {
+  max-width: 0 !important;
+  opacity: 0 !important;
+}
+
+.app-nav-item.active .app-nav-label.visible {
+  max-width: 74px !important;
+  opacity: 1 !important;
+  transform: translateX(0);
+  transition:
+    max-width 170ms var(--nav-motion-ease) 55ms,
+    opacity 130ms ease-out 80ms,
+    transform 160ms var(--nav-motion-ease) 60ms !important;
+}
+
+.app-page-content {
+  padding-bottom: calc(82px + env(safe-area-inset-bottom)) !important;
+}
+
+.page-panel {
+  padding-bottom: 2px;
+}
+
+.page-panel--active {
+  animation: nav-page-crossfade 145ms ease-out both !important;
+}
+
+@keyframes nav-page-crossfade {
+  from { opacity: .88; }
+  to { opacity: 1; }
+}
+
+@keyframes app-nav-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+:root[data-theme="dark"] .admin-tab-strip.app-icon-nav {
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  border-color: var(--border-strong);
+  box-shadow: 0 8px 28px rgba(0,0,0,.34);
+}
+
+@media (max-width: 390px) {
+  .admin-tab-strip.app-icon-nav {
+    width: calc(100% - 14px);
+    gap: 1px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .app-nav-item,
+  .app-nav-item.active {
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+
+  .app-nav-label {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 350px) {
+  .app-nav-item > svg {
+    flex-basis: 15px;
+    width: 15px;
+    height: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-tab-strip.app-icon-nav,
+  .app-nav-item,
+  .app-nav-item > svg,
+  .app-nav-label {
+    transition: none !important;
+  }
+
+  .admin-tab-strip.app-icon-nav,
+  .page-panel--active {
+    animation: none !important;
+  }
+
+  .app-nav-item:active {
+    transform: none !important;
+  }
+}
+
+/* Telegram-backed document preview loading indicator. */
+.preview-loading-spinner {
+  color: var(--primary);
+  animation: preview-spinner-rotate 850ms linear infinite;
+}
+@keyframes preview-spinner-rotate { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .preview-loading-spinner { animation-duration: 1600ms; }
+}
+
+

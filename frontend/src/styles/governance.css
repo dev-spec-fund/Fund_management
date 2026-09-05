@@ -1,0 +1,1325 @@
+/* v45 EXCO elections */
+.member-election-card{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border:1px solid var(--border);border-radius:13px;background:var(--card);
+  padding:13px 14px;margin-bottom:8px;color:var(--text);text-align:left;cursor:pointer;
+}
+.member-election-card>div:first-child{min-width:0;flex:1}
+.member-election-card b,.member-election-card span,.member-election-card strong{display:block}
+.member-election-card b{font-size:13px;color:var(--primary-text)}
+.member-election-card span{font-size:9px;color:var(--soft);margin-top:3px}
+.member-election-card>div:last-child{text-align:right;flex:0 0 auto}
+.member-election-card strong{font-size:10px;color:var(--primary-text)}
+.election-secret-note{
+  padding:10px 11px;border-radius:10px;background:var(--button-soft);color:var(--muted);
+  font-size:10px;line-height:1.5;margin-bottom:12px;
+}
+.election-voted{
+  padding:14px;border-radius:11px;background:var(--success-bg);color:var(--success);
+  font-size:12px;font-weight:700;text-align:center;margin-bottom:10px;
+}
+.election-ballot-position{margin:0 0 15px}
+.election-ballot-position>div:first-child{display:flex;justify-content:space-between;gap:8px;margin-bottom:7px}
+.election-ballot-position>div:first-child b{font-size:12px}
+.election-ballot-position>div:first-child span{font-size:9px;color:var(--soft)}
+.election-candidate{
+  width:100%;min-height:42px;display:flex;align-items:center;justify-content:space-between;
+  border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);
+  padding:9px 11px;margin-bottom:6px;text-align:left;cursor:pointer;font-size:11px;
+}
+.election-candidate.selected{border-color:var(--primary);background:var(--button-soft);color:var(--primary-text)}
+.election-candidate b{font-size:14px;color:var(--success)}
+.election-admin-summary{
+  display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px
+}
+.election-admin-summary span{padding:10px;border-radius:9px;background:var(--bg);font-size:10px;color:var(--muted)}
+.election-admin-summary b{display:block;color:var(--primary-text);font-size:13px;margin-top:2px;text-transform:capitalize}
+.election-admin-position{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--divider)
+}
+.election-admin-position b{font-size:11px}
+.election-admin-position span{font-size:9px;color:var(--soft)}
+.election-select{
+  width:100%;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:9px;
+  background:var(--bg);color:var(--text);padding:10px;margin-top:7px;font-size:11px
+}
+.election-admin-position+div input{
+  min-width:0;width:100%;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:8px;
+  background:var(--bg);color:var(--text);padding:8px;font-size:10px
+}
+.election-result-block{border:1px solid var(--border);border-radius:11px;padding:10px 12px;margin-bottom:9px;background:var(--card)}
+.election-result-block>b{font-size:11px;color:var(--primary-text)}
+.election-result-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--divider);font-size:10px}
+.election-result-row:first-of-type{margin-top:6px}
+.election-result-row strong{font-size:12px}
+
+
+/* v46 election integrity / certification */
+.election-position-create{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 58px 58px auto;
+  gap:6px;
+  margin-top:8px;
+}
+.election-position-create input{
+  min-width:0;width:100%;box-sizing:border-box;border:1px solid var(--border-strong);
+  border-radius:8px;background:var(--bg);color:var(--text);padding:8px;font-size:10px;
+}
+.election-field-help{font-size:8px;color:var(--soft);margin-top:4px}
+.election-candidate-admin-row{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:7px 0;border-bottom:1px solid var(--divider);
+}
+.election-candidate-admin-row span{min-width:0}
+.election-candidate-admin-row b,.election-candidate-admin-row small{display:block}
+.election-candidate-admin-row b{font-size:10px;color:var(--primary-text)}
+.election-candidate-admin-row small{font-size:8px;color:var(--soft);margin-top:2px;text-transform:uppercase}
+.election-candidate-admin-row button{
+  border:1px solid var(--danger-border);border-radius:8px;background:var(--danger-bg);
+  color:var(--danger);padding:5px 7px;font:inherit;font-size:8px;font-weight:700;cursor:pointer;
+}
+.election-certification{
+  padding:10px 11px;border-radius:10px;margin-bottom:10px;background:var(--success-bg);
+  color:var(--success);font-size:10px;font-weight:750;text-align:center;
+}
+.election-certification.pending{background:var(--warning-bg);color:var(--warning)}
+.election-tie-note{
+  margin:7px 0 3px;padding:7px 8px;border-radius:8px;background:var(--warning-bg);
+  color:var(--warning);font-size:9px;line-height:1.4;
+}
+.election-audit-row{padding:8px 0;border-bottom:1px solid var(--divider)}
+.election-audit-row b,.election-audit-row span{display:block}
+.election-audit-row b{font-size:9px;color:var(--primary-text);text-transform:capitalize}
+.election-audit-row span{font-size:8px;color:var(--soft);margin-top:2px}
+@media(max-width:390px){
+  .election-position-create{grid-template-columns:minmax(0,1fr) 52px 52px}
+  .election-position-create button{grid-column:1/-1;width:100%}
+}
+
+
+/* v47 candidate application stage */
+.election-application-admin{
+  display:flex;justify-content:space-between;gap:9px;align-items:center;
+  padding:9px 0;border-bottom:1px solid var(--divider);
+}
+.election-application-admin>div:first-child{min-width:0}
+.election-application-admin b,.election-application-admin span,.election-application-admin small{display:block}
+.election-application-admin b{font-size:10px;color:var(--primary-text)}
+.election-application-admin span{font-size:8px;color:var(--soft);margin-top:2px;text-transform:capitalize}
+.election-application-admin small{font-size:9px;color:var(--muted);margin-top:4px;line-height:1.35}
+.election-application-admin>div:last-child{display:flex;gap:4px}
+.election-application-admin button{
+  border:0;border-radius:7px;background:var(--success-bg);color:var(--success);
+  padding:6px 7px;font:inherit;font-size:8px;font-weight:750;cursor:pointer
+}
+.election-application-admin button.reject{background:var(--danger-bg);color:var(--danger)}
+.election-application-status{
+  padding:11px;border-radius:10px;margin-bottom:10px;text-align:center;
+  font-size:10px;font-weight:750;background:var(--bg);color:var(--muted)
+}
+.election-application-status.open{background:var(--success-bg);color:var(--success)}
+.election-application-status.upcoming{background:var(--warning-bg);color:var(--warning)}
+.election-my-application{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:9px 10px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px
+}
+.election-my-application b,.election-my-application span,.election-my-application small{display:block}
+.election-my-application b{font-size:10px}
+.election-my-application span{font-size:8px;color:var(--soft);text-transform:uppercase;margin-top:2px}
+.election-my-application small{font-size:8px;color:var(--muted);margin-top:3px}
+.election-my-application button{
+  border:0;border-radius:7px;background:var(--danger-bg);color:var(--danger);
+  padding:6px 7px;font:inherit;font-size:8px;font-weight:700
+}
+.election-application-statement{
+  width:100%;min-height:78px;resize:vertical;box-sizing:border-box;border:1px solid var(--border-strong);
+  border-radius:9px;background:var(--bg);color:var(--text);padding:10px;margin:7px 0;font-size:10px
+}
+
+/* v48 election eligibility / application overview */
+.election-check{display:flex;align-items:flex-start;gap:8px;font-size:9px;color:var(--muted);line-height:1.4;margin:9px 0 12px}
+.election-check input{margin-top:1px}
+.election-application-counts{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px}
+.election-application-counts button{border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);padding:7px 3px;font:inherit}
+.election-application-counts button.active{border-color:var(--primary);background:var(--button-soft)}
+.election-application-counts b,.election-application-counts span{display:block;text-align:center}
+.election-application-counts b{font-size:12px}.election-application-counts span{font-size:7px;text-transform:uppercase;color:var(--soft);margin-top:2px}
+.election-deadline{font-size:9px;color:var(--muted);padding:8px 9px;background:var(--bg);border-radius:8px;margin-bottom:8px}
+.election-deadline b{color:var(--primary-text)}
+.election-ineligible{padding:8px 9px;border-radius:8px;background:var(--danger-bg);color:var(--danger);margin-bottom:6px}
+.election-ineligible b,.election-ineligible span{display:block}.election-ineligible b{font-size:9px}.election-ineligible span{font-size:8px;margin-top:2px;line-height:1.4}
+
+/* v49: simple candidate policy — every registered active member may apply. */
+.election-application-open-note{
+  padding:8px 9px;border-radius:8px;background:var(--button-soft);color:var(--muted);
+  margin-bottom:8px;font-size:8px;line-height:1.4
+}
+
+
+/* v50 election finalization, runoffs and EXCO roles */
+.member-exco-badge,
+.member-profile-exco-badge{
+  display:inline-flex;align-items:center;width:max-content;border-radius:999px;
+  background:var(--button-soft);color:var(--primary-text);border:1px solid var(--border-strong);
+  font-size:8px;font-weight:800;letter-spacing:.25px;padding:3px 7px;
+}
+.member-profile-exco-badge{margin-top:5px}
+.member-popup-exco{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--button-soft);border:1px solid var(--border);border-radius:10px;
+  padding:9px 10px;margin-top:10px
+}
+.member-popup-exco span{font-size:8px;color:var(--soft);font-weight:750;letter-spacing:.45px}
+.member-popup-exco b{font-size:11px;color:var(--primary-text)}
+.member-profile-exco-history{padding:8px 0;border-bottom:1px solid var(--divider)}
+.member-profile-exco-history b,.member-profile-exco-history span{display:block}
+.member-profile-exco-history b{font-size:10px;color:var(--primary-text)}
+.member-profile-exco-history span{font-size:8px;color:var(--soft);margin-top:3px}
+.official-exco-card{
+  border:1px solid var(--border);border-radius:13px;background:var(--card);
+  padding:11px 12px;margin-bottom:12px
+}
+.official-exco-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:8px 0;border-top:1px solid var(--divider)
+}
+.official-exco-row:first-of-type{border-top:0}
+.official-exco-row span{min-width:0}
+.official-exco-row b,.official-exco-row small{display:block}
+.official-exco-row b{font-size:9px;color:var(--soft);text-transform:uppercase}
+.official-exco-row small{font-size:8px;color:var(--soft);margin-top:2px}
+.official-exco-row strong{font-size:11px;color:var(--primary-text);text-align:right}
+.election-runoff-admin{
+  border:1px solid var(--warning-border);border-radius:11px;background:var(--warning-bg);
+  padding:10px 11px;margin:8px 0
+}
+.election-runoff-admin>div:first-child b,.election-runoff-admin>div:first-child span{display:block}
+.election-runoff-admin>div:first-child b{font-size:10px;color:var(--warning)}
+.election-runoff-admin>div:first-child span{font-size:8px;color:var(--muted);margin-top:3px}
+.election-runoff-admin button{
+  width:100%;border:0;border-radius:8px;background:var(--card);color:var(--primary-text);
+  padding:8px;font:inherit;font-size:9px;font-weight:750;margin-top:7px
+}
+.election-runoff-turnout{font-size:8px;color:var(--muted);margin-top:6px}
+.election-runoff-ballot{
+  border:1px solid var(--warning-border);background:var(--warning-bg);border-radius:12px;
+  padding:10px;margin:10px 0
+}
+.election-runoff-title{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
+.election-runoff-title b{font-size:10px;color:var(--warning)}
+.election-runoff-title span{font-size:8px;color:var(--muted)}
+
+/* v52 election application deadline controls */
+.election-extend-deadline{
+  width:100%;border:1px solid var(--border-strong);border-radius:9px;
+  background:var(--card);color:var(--primary-text);padding:9px 10px;
+  font-size:9px;font-weight:750;margin:-4px 0 12px;cursor:pointer
+}
+.election-extend-deadline:disabled{opacity:.55;cursor:default}
+
+
+/* v53 election application management */
+.election-application-admin.v53{
+  align-items:flex-start;
+  gap:10px;
+}
+.election-application-main{min-width:0;flex:1}
+.election-application-meta{opacity:.85}
+.election-application-reason{
+  padding:5px 6px;border-radius:6px;background:var(--bg);margin-top:5px
+}
+.election-application-actions{
+  display:flex!important;flex-wrap:wrap;justify-content:flex-end;gap:4px;max-width:150px
+}
+.election-application-actions button.neutral{
+  background:var(--button-soft);color:var(--primary-text)
+}
+.election-position-readiness{
+  border:1px solid var(--border);border-radius:10px;padding:9px 10px;margin-bottom:7px;background:var(--card)
+}
+.election-position-readiness.ready{border-color:var(--success-border);background:var(--success-bg)}
+.election-position-readiness.attention{border-color:var(--warning-border);background:var(--warning-bg)}
+.election-position-readiness>div:first-child{
+  display:flex;justify-content:space-between;align-items:center;gap:8px
+}
+.election-position-readiness b{font-size:10px;color:var(--primary-text)}
+.election-position-readiness>div:first-child span{font-size:8px;color:var(--soft)}
+.election-position-counts{
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:6px;font-size:8px;color:var(--muted)
+}
+.election-position-counts strong{margin-left:auto;color:var(--primary-text)}
+.election-my-application.status-approved{border-color:var(--success-border)}
+.election-my-application.status-rejected{border-color:var(--danger-border)}
+.election-my-application.status-withdrawn{border-color:var(--warning-border)}
+.election-member-application-status{
+  font-size:8px!important;font-weight:800!important;color:var(--primary-text)!important
+}
+.election-member-application-date{
+  margin-top:4px!important;color:var(--soft)!important;line-height:1.35
+}
+.election-member-application-reason{
+  margin-top:4px!important;padding:5px 6px;border-radius:6px;background:var(--bg);line-height:1.4
+}
+@media(max-width:420px){
+  .election-application-admin.v53{display:block}
+  .election-application-actions{max-width:none!important;justify-content:flex-start;margin-top:7px}
+}
+
+
+/* v54 pre-vote readiness */
+.election-readiness-loading{
+  padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);
+  color:var(--soft);font-size:9px;text-align:center
+}
+.election-readiness-summary{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border-radius:10px;padding:10px 11px;margin-bottom:7px;border:1px solid var(--border)
+}
+.election-readiness-summary b{font-size:10px}
+.election-readiness-summary span{font-size:8px;font-weight:700}
+.election-readiness-summary.ready{background:var(--success-bg);border-color:var(--success-border);color:var(--success)}
+.election-readiness-summary.blocked{background:var(--warning-bg);border-color:var(--warning-border);color:var(--warning)}
+.election-readiness-list{display:grid;gap:5px}
+.election-readiness-check{
+  border:1px solid var(--border);border-radius:9px;background:var(--card);padding:8px 9px
+}
+.election-readiness-check>div{display:flex;align-items:flex-start;gap:8px}
+.election-readiness-check>div>strong{
+  width:18px;height:18px;flex:0 0 18px;display:flex;align-items:center;justify-content:center;
+  border-radius:999px;font-size:9px
+}
+.election-readiness-check.pass>div>strong{background:var(--success-bg);color:var(--success)}
+.election-readiness-check.fail>div>strong{background:var(--warning-bg);color:var(--warning)}
+.election-readiness-check span{min-width:0}
+.election-readiness-check b,.election-readiness-check small{display:block}
+.election-readiness-check b{font-size:9px;color:var(--primary-text)}
+.election-readiness-check small{font-size:8px;color:var(--soft);line-height:1.4;margin-top:2px}
+
+
+/* v55 official election summary / governance record */
+.election-summary-card{
+  border:1px solid var(--border);border-radius:13px;background:var(--card);
+  padding:11px 12px;margin:10px 0 12px
+}
+.election-summary-title{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px}
+.election-summary-title b{font-size:10px;color:var(--primary-text)}
+.election-summary-title span{font-size:8px;color:var(--soft);text-align:right}
+.election-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.election-summary-grid>div{
+  border:1px solid var(--border);border-radius:9px;background:var(--bg);padding:8px 9px;min-width:0
+}
+.election-summary-grid span,.election-summary-grid b,.election-summary-grid small{display:block}
+.election-summary-grid span{font-size:7px;color:var(--soft);text-transform:uppercase;font-weight:750}
+.election-summary-grid b{font-size:9px;color:var(--primary-text);margin-top:3px;line-height:1.35;word-break:break-word}
+.election-summary-grid small{font-size:7px;color:var(--soft);margin-top:3px;line-height:1.35}
+.election-summary-section{margin-top:11px}
+.election-summary-runoff,.election-summary-role{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:10px;
+  padding:8px 0;border-top:1px solid var(--divider)
+}
+.election-summary-runoff span{min-width:0;flex:1}
+.election-summary-runoff b,.election-summary-runoff small{display:block}
+.election-summary-runoff b{font-size:9px;color:var(--primary-text)}
+.election-summary-runoff small{font-size:7px;color:var(--soft);margin-top:2px}
+.election-summary-runoff strong{font-size:8px;color:var(--muted);text-align:right;max-width:45%}
+.election-summary-role span{font-size:8px;color:var(--soft);text-transform:uppercase;font-weight:750}
+.election-summary-role b{font-size:9px;color:var(--primary-text);text-align:right}
+.election-summary-record-note{
+  margin-top:10px;padding-top:8px;border-top:1px solid var(--divider);
+  font-size:7px;color:var(--soft);text-align:center
+}
+@media(max-width:360px){
+  .election-summary-grid{grid-template-columns:1fr}
+}
+
+
+/* v56 election archive and exports */
+.election-archive-card{
+  border:1px solid var(--border);border-radius:13px;background:var(--card);
+  padding:11px 12px;margin-bottom:12px
+}
+.election-archive-row{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border:0;border-top:1px solid var(--divider);background:transparent;color:var(--text);
+  padding:9px 0;text-align:left;cursor:pointer
+}
+.election-archive-row:first-of-type{border-top:0}
+.election-archive-row span{min-width:0;flex:1}
+.election-archive-row b,.election-archive-row small,.election-archive-row strong{display:block}
+.election-archive-row b{font-size:10px;color:var(--primary-text)}
+.election-archive-row span small{font-size:8px;color:var(--soft);margin-top:2px}
+.election-archive-row strong{font-size:10px;color:var(--primary-text);text-align:right}
+.election-archive-row strong small{font-size:7px;color:var(--soft);margin-top:2px}
+.election-export-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0 12px}
+.election-export-actions button{
+  border:1px solid var(--border-strong);border-radius:9px;background:var(--button-soft);
+  color:var(--primary-text);padding:9px 10px;font:inherit;font-size:9px;font-weight:800;cursor:pointer
+}
+.election-export-actions button:disabled{opacity:.55}
+
+/* v57 election application/candidate auto-repair */
+.election-auto-repair-btn{
+  width:100%;margin-top:7px;border:1px solid var(--border-strong);border-radius:7px;
+  background:var(--button-soft);color:var(--primary-text);padding:7px 9px;
+  font-size:8px;font-weight:800;cursor:pointer
+}
+.election-auto-repair-btn:disabled{opacity:.55}
+
+
+/* v58 immutable election setup after voter snapshot */
+.election-voting-lock-banner{
+  border:1px solid var(--success-border);border-radius:11px;background:var(--success-bg);
+  padding:10px 11px;margin-bottom:9px
+}
+.election-voting-lock-banner b,.election-voting-lock-banner span{display:block}
+.election-voting-lock-banner b{font-size:10px;color:var(--success)}
+.election-voting-lock-banner span{font-size:8px;color:var(--muted);line-height:1.4;margin-top:3px}
+.election-candidate-admin-row.locked{align-items:center}
+.election-locked-label{
+  flex:0 0 auto;font-size:7px;font-weight:800;letter-spacing:.45px;
+  color:var(--soft);border:1px solid var(--border);border-radius:999px;padding:3px 6px
+}
+.election-lock-warning{
+  border:1px solid var(--warning-border);border-radius:8px;background:var(--warning-bg);
+  color:var(--warning);font-size:8px;line-height:1.4;padding:8px 9px;margin-top:8px
+}
+
+
+/* v60 election notification delivery + member stage polish */
+.election-notification-status{
+  border:1px solid var(--border);border-radius:11px;background:var(--card);
+  padding:10px 11px;margin:8px 0 12px
+}
+.election-notification-heading{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px
+}
+.election-notification-heading b{font-size:9px;color:var(--primary-text)}
+.election-notification-heading span{font-size:8px;color:var(--soft)}
+.election-notification-row{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  border-top:1px solid var(--divider);padding:7px 0
+}
+.election-notification-row span{min-width:0;flex:1}
+.election-notification-row b,.election-notification-row small{display:block}
+.election-notification-row b{font-size:9px;color:var(--primary-text)}
+.election-notification-row small{font-size:7px;color:var(--soft);margin-top:2px}
+.election-notification-row strong{font-size:8px;color:var(--success);text-align:right;white-space:nowrap}
+.election-notification-row strong.has-fail{color:var(--warning)}
+
+.member-election-stage-pill{
+  display:inline-flex!important;width:max-content;margin-top:5px;padding:3px 6px;border-radius:999px;
+  border:1px solid var(--border);background:var(--button-soft);font-size:7px!important;
+  font-weight:800!important;color:var(--primary-text)!important
+}
+.member-election-card.stage-active .member-election-stage-pill{background:var(--success-bg);border-color:var(--success-border);color:var(--success)!important}
+.member-election-card.stage-certified .member-election-stage-pill,
+.member-election-card.stage-done .member-election-stage-pill{background:var(--success-bg);border-color:var(--success-border);color:var(--success)!important}
+.member-election-card.stage-waiting .member-election-stage-pill{background:var(--warning-bg);border-color:var(--warning-border);color:var(--warning)!important}
+.member-election-card.stage-muted .member-election-stage-pill{opacity:.8}
+
+.member-election-stage-banner{
+  border:1px solid var(--border);border-radius:11px;padding:10px 11px;margin-bottom:9px;background:var(--card)
+}
+.member-election-stage-banner b,.member-election-stage-banner span{display:block}
+.member-election-stage-banner b{font-size:10px;color:var(--primary-text)}
+.member-election-stage-banner span{font-size:8px;color:var(--muted);line-height:1.45;margin-top:3px}
+.member-election-stage-banner.active{background:var(--success-bg);border-color:var(--success-border)}
+.member-election-stage-banner.active b,
+.member-election-stage-banner.done b,
+.member-election-stage-banner.certified b{color:var(--success)}
+.member-election-stage-banner.done,
+.member-election-stage-banner.certified{background:var(--success-bg);border-color:var(--success-border)}
+.member-election-stage-banner.waiting{background:var(--warning-bg);border-color:var(--warning-border)}
+.member-election-stage-banner.waiting b{color:var(--warning)}
+
+
+/* v61 election dashboard */
+.election-dashboard{
+  border:1px solid var(--border);border-radius:14px;background:var(--card);
+  padding:11px 12px;margin-bottom:12px
+}
+.election-dashboard-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px
+}
+.election-dashboard-head span{min-width:0}
+.election-dashboard-head b,.election-dashboard-head small{display:block}
+.election-dashboard-head b{font-size:10px;color:var(--primary-text)}
+.election-dashboard-head span small{font-size:8px;color:var(--soft);margin-top:2px}
+.election-dashboard-head>strong{
+  font-size:16px;color:var(--primary-text);text-align:right;line-height:1
+}
+.election-dashboard-head>strong small{
+  display:block;font-size:7px;color:var(--soft);font-weight:700;margin-top:3px
+}
+.election-dashboard-alerts{display:grid;gap:5px;margin-bottom:9px}
+.election-dashboard-alert{
+  width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;
+  border:1px solid var(--warning-border);border-radius:8px;background:var(--warning-bg);
+  color:var(--warning);padding:7px 8px;text-align:left;cursor:pointer
+}
+.election-dashboard-alert.danger{border-color:var(--danger-border);background:var(--danger-bg);color:var(--danger)}
+.election-dashboard-alert.action{border-color:var(--border-strong);background:var(--button-soft);color:var(--primary-text)}
+.election-dashboard-alert span{font-size:8px;font-weight:800}
+.election-dashboard-alert small{font-size:7px;color:inherit;opacity:.85;text-align:right}
+.election-dashboard-empty{
+  padding:10px;border:1px dashed var(--border);border-radius:9px;
+  text-align:center;color:var(--soft);font-size:8px
+}
+.election-dashboard-card{
+  width:100%;display:block;border:1px solid var(--border);border-radius:11px;background:var(--bg);
+  padding:10px;margin-top:7px;text-align:left;color:var(--text);cursor:pointer
+}
+.election-dashboard-card-top{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:10px
+}
+.election-dashboard-card-top span{min-width:0}
+.election-dashboard-card-top b,.election-dashboard-card-top small{display:block}
+.election-dashboard-card-top b{font-size:10px;color:var(--primary-text)}
+.election-dashboard-card-top small{font-size:7px;color:var(--soft);margin-top:2px}
+.election-dashboard-card-top strong{
+  flex:0 0 auto;font-size:8px;color:var(--primary-text);background:var(--button-soft);
+  border:1px solid var(--border);border-radius:999px;padding:4px 7px
+}
+.election-dashboard-metrics{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:9px
+}
+.election-dashboard-metrics>div{
+  min-width:0;border:1px solid var(--border);border-radius:8px;background:var(--card);padding:7px
+}
+.election-dashboard-metrics span,.election-dashboard-metrics b,.election-dashboard-metrics small{display:block}
+.election-dashboard-metrics span{font-size:6px;color:var(--soft);text-transform:uppercase;font-weight:800}
+.election-dashboard-metrics b{font-size:8px;color:var(--primary-text);margin-top:3px}
+.election-dashboard-metrics small{font-size:7px;color:var(--soft);margin-top:2px}
+.election-dashboard-metrics small.fail{color:var(--danger);font-weight:800}
+.election-dashboard-readiness{
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+  border-radius:8px;padding:6px 8px;margin-top:7px;font-size:8px
+}
+.election-dashboard-readiness.ready{background:var(--success-bg);border:1px solid var(--success-border);color:var(--success)}
+.election-dashboard-readiness.blocked{background:var(--warning-bg);border:1px solid var(--warning-border);color:var(--warning)}
+.election-dashboard-runoff{
+  margin-top:7px;border-radius:8px;padding:7px 8px;background:var(--warning-bg);
+  border:1px solid var(--warning-border);color:var(--warning);font-size:8px
+}
+.election-dashboard-runoff span{display:block}
+@media(max-width:420px){
+  .election-dashboard-metrics{grid-template-columns:1fr 1fr}
+}
+
+
+/* v62-v63 election governance timeline + EXCO term handover */
+.exco-term-card,.exco-handover-card,.election-governance-timeline{
+  border:1px solid var(--border);border-radius:13px;background:var(--card);
+  padding:11px 12px;margin-bottom:12px
+}
+.exco-term-head,.exco-handover-head,.election-timeline-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:10px
+}
+.exco-term-head span,.exco-handover-head span,.election-timeline-head span{min-width:0}
+.exco-term-head b,.exco-term-head small,
+.exco-handover-head b,.exco-handover-head small,
+.election-timeline-head b,.election-timeline-head small{display:block}
+.exco-term-head b,.exco-handover-head b,.election-timeline-head b{font-size:10px;color:var(--primary-text)}
+.exco-term-head small,.exco-handover-head small,.election-timeline-head small{font-size:7px;color:var(--soft);margin-top:2px;line-height:1.35}
+.exco-term-head>strong{font-size:10px;color:var(--primary-text);text-align:right}
+.exco-handover-head>strong,.election-timeline-head>strong{font-size:13px;color:var(--primary-text)}
+.exco-term-dates{display:flex;justify-content:space-between;gap:10px;margin-top:9px;font-size:8px;color:var(--soft)}
+.exco-term-dates b{color:var(--primary-text)}
+.exco-permission-note{
+  margin-top:9px;border:1px solid var(--border);border-radius:8px;background:var(--bg);
+  padding:7px 8px;font-size:7px;line-height:1.45;color:var(--soft)
+}
+.exco-term-previous{
+  margin-top:9px;border-top:1px solid var(--divider);padding-top:8px
+}
+.exco-term-previous span,.exco-term-previous b,.exco-term-previous small{display:block}
+.exco-term-previous span{font-size:7px;color:var(--soft);text-transform:uppercase;font-weight:800}
+.exco-term-previous b{font-size:9px;color:var(--primary-text);margin-top:2px}
+.exco-term-previous small{font-size:7px;color:var(--soft);margin-top:2px}
+.exco-handover-progress{
+  height:5px;border-radius:999px;background:var(--bg);overflow:hidden;margin:9px 0
+}
+.exco-handover-progress i{display:block;height:100%;border-radius:999px;background:currentColor;color:var(--success)}
+.exco-handover-item{
+  display:flex;align-items:flex-start;gap:8px;border-top:1px solid var(--divider);
+  padding:8px 0;cursor:pointer
+}
+.exco-handover-item input{margin-top:2px}
+.exco-handover-item span{min-width:0;flex:1}
+.exco-handover-item b,.exco-handover-item small{display:block}
+.exco-handover-item b{font-size:9px;color:var(--primary-text)}
+.exco-handover-item small{font-size:7px;color:var(--soft);margin-top:2px}
+.exco-handover-item.done b{text-decoration:line-through;opacity:.72}
+.exco-handover-complete{
+  width:100%;border:0;border-radius:9px;background:var(--primary);color:white;
+  padding:9px;font-size:9px;font-weight:800;margin-top:8px;cursor:pointer
+}
+.exco-handover-complete:disabled{opacity:.45;cursor:default}
+.exco-handover-completed{
+  margin-top:8px;border-radius:8px;background:var(--success-bg);border:1px solid var(--success-border);
+  color:var(--success);padding:8px;text-align:center;font-size:8px;font-weight:800
+}
+.election-timeline-list{position:relative;margin-top:9px}
+.election-timeline-event{
+  position:relative;display:flex;gap:9px;padding:0 0 10px 1px
+}
+.election-timeline-event>i{
+  width:9px;height:9px;flex:0 0 9px;border-radius:999px;background:var(--border-strong);
+  margin-top:3px;box-shadow:0 0 0 3px var(--card);z-index:1
+}
+.election-timeline-event:not(:last-child):after{
+  content:"";position:absolute;left:5px;top:10px;bottom:-1px;width:1px;background:var(--divider)
+}
+.election-timeline-event.notification>i{background:var(--primary)}
+.election-timeline-event.milestone>i{background:var(--success)}
+.election-timeline-event span{min-width:0;flex:1}
+.election-timeline-event b,.election-timeline-event small,.election-timeline-event em{display:block}
+.election-timeline-event b{font-size:9px;color:var(--primary-text)}
+.election-timeline-event small{font-size:7px;color:var(--soft);margin-top:2px}
+.election-timeline-event em{font-size:7px;color:var(--muted);margin-top:2px;font-style:normal}
+.election-governance-review{
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;border-top:1px solid var(--divider);
+  padding-top:8px;font-size:7px;color:var(--soft)
+}
+.election-governance-review b{color:var(--primary-text)}
+@media(max-width:420px){
+  .exco-term-dates,.election-governance-review{display:block}
+  .exco-term-dates span,.election-governance-review span{display:block;margin-top:4px}
+}
+
+/* v64 EXCO responsibilities + workboard */
+.exco-workboard-card{border:1px solid var(--border);border-radius:13px;background:var(--card);padding:11px 12px;margin-bottom:12px}
+.exco-workboard-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.exco-workboard-head b,.exco-workboard-head small{display:block}
+.exco-workboard-head b{font-size:10px;color:var(--primary-text)}
+.exco-workboard-head small{font-size:7px;color:var(--soft);margin-top:2px}
+.exco-workboard-head button{border:1px solid var(--border);background:var(--button-soft);color:var(--primary-text);border-radius:8px;padding:6px 9px;font-size:8px;font-weight:800}
+.exco-workboard-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:9px 0}
+.exco-workboard-summary span{border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:7px;font-size:7px;color:var(--soft);text-align:center}
+.exco-workboard-summary b{display:block;font-size:11px;color:var(--primary-text);margin-bottom:2px}
+.exco-workboard-item{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--divider);padding:9px 0}
+.exco-workboard-item>div:first-child{min-width:0;flex:1}
+.exco-workboard-item b,.exco-workboard-item span,.exco-workboard-item small{display:block}
+.exco-workboard-item b{font-size:9px;color:var(--primary-text)}
+.exco-workboard-item span,.exco-workboard-item small{font-size:7px;color:var(--soft);margin-top:2px}
+.exco-workboard-item.overdue b,.exco-workboard-item.overdue small{color:var(--danger)}
+.exco-workboard-actions{display:flex;gap:5px;align-items:center}
+.exco-workboard-actions button{border:1px solid var(--border);background:var(--button-soft);border-radius:7px;padding:6px 7px;font-size:7px;font-weight:800;color:var(--primary-text)}
+.exco-workboard-actions>span{color:var(--success)!important;font-weight:800}
+@media(max-width:420px){.exco-workboard-summary{grid-template-columns:1fr 1fr}.exco-workboard-item{align-items:flex-start}.exco-workboard-actions{flex-direction:column}}
+
+
+/* v65 formal meeting resolutions */
+.meeting-resolution-term{
+  font-size:9px;color:var(--soft);background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;padding:7px 8px;margin-bottom:7px
+}
+.meeting-resolution-term b{color:var(--primary-text)}
+.meeting-resolution-card{
+  border:1px solid var(--border);border-radius:10px;background:var(--bg);
+  padding:9px 10px;margin-bottom:7px
+}
+.meeting-resolution-card.adopted{border-color:var(--success-border)}
+.meeting-resolution-card.rejected{border-color:var(--danger-border)}
+.meeting-resolution-card.superseded{opacity:.72}
+.meeting-resolution-top{display:flex;justify-content:space-between;align-items:flex-start;gap:9px}
+.meeting-resolution-top span{min-width:0;flex:1}
+.meeting-resolution-top b,.meeting-resolution-top small{display:block}
+.meeting-resolution-top b{font-size:10px;color:var(--primary-text)}
+.meeting-resolution-top small{font-size:7px;color:var(--soft);margin-top:2px;text-transform:capitalize}
+.meeting-resolution-top strong{font-size:8px;color:var(--muted);text-align:right;max-width:36%}
+.meeting-resolution-text{font-size:10px;line-height:1.5;color:var(--muted);white-space:pre-wrap;margin-top:7px}
+.meeting-resolution-meta{font-size:7px;color:var(--soft);line-height:1.4;margin-top:6px}
+.meeting-resolution-meta b{color:var(--primary-text)}
+.meeting-resolution-actions{display:flex;gap:5px;margin-top:7px}
+.meeting-resolution-actions button{
+  border:1px solid var(--border);border-radius:7px;background:var(--button-soft);
+  color:var(--primary-text);padding:5px 8px;font-size:7px;font-weight:800
+}
+.meeting-resolution-create{
+  border-top:1px solid var(--divider);margin-top:9px;padding-top:9px;display:grid;gap:6px
+}
+.meeting-resolution-create input,.meeting-resolution-create textarea,.meeting-resolution-create select{
+  width:100%;min-width:0;border:1px solid var(--border-strong);border-radius:8px;
+  background:var(--bg);color:var(--text);padding:8px;font-size:11px;box-sizing:border-box
+}
+.meeting-resolution-create textarea{resize:vertical}
+.meeting-resolution-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.meeting-resolution-followup{
+  display:flex;align-items:center;gap:7px;font-size:9px;color:var(--muted);padding:3px 0
+}
+.meeting-resolution-followup input{width:auto}
+.meeting-resolution-warning{
+  font-size:8px;line-height:1.4;color:var(--warning);background:var(--warning-bg);
+  border:1px solid var(--warning-border);border-radius:8px;padding:7px 8px
+}
+@media(max-width:420px){
+  .meeting-resolution-grid{grid-template-columns:1fr}
+  .meeting-resolution-top{display:block}
+  .meeting-resolution-top strong{display:block;max-width:none;text-align:left;margin-top:4px}
+}
+
+
+/* v66 member-visible governance archive */
+.member-governance-card{
+  border:1px solid var(--border);border-radius:13px;background:var(--card);
+  padding:0;margin-bottom:12px;overflow:hidden
+}
+.member-governance-head{
+  width:100%;border:0;background:transparent;color:var(--text);padding:11px 12px;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;cursor:pointer
+}
+.member-governance-head span{min-width:0;flex:1}
+.member-governance-head b,.member-governance-head small{display:block}
+.member-governance-head b{font-size:10px;color:var(--primary-text)}
+.member-governance-head small{font-size:7px;color:var(--soft);margin-top:2px}
+.member-governance-head strong{font-size:9px;color:var(--soft)}
+.member-governance-body{border-top:1px solid var(--divider);padding:10px 11px}
+.member-governance-privacy{
+  border:1px solid var(--border);border-radius:8px;background:var(--bg);
+  padding:7px 8px;font-size:7px;color:var(--soft);line-height:1.4;margin-bottom:9px
+}
+.member-governance-term{
+  border:1px solid var(--border);border-radius:11px;background:var(--bg);
+  padding:10px;margin-top:8px
+}
+.member-governance-term:first-of-type{margin-top:0}
+.member-governance-term-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.member-governance-term-head span{min-width:0;flex:1}
+.member-governance-term-head b,.member-governance-term-head small{display:block}
+.member-governance-term-head b{font-size:10px;color:var(--primary-text)}
+.member-governance-term-head small{font-size:7px;color:var(--soft);margin-top:2px}
+.member-governance-term-head strong{
+  font-size:7px;color:var(--primary-text);border:1px solid var(--border);
+  border-radius:999px;padding:3px 6px;background:var(--button-soft)
+}
+.member-governance-election{font-size:8px;color:var(--soft);margin-top:7px}
+.member-governance-election b{color:var(--primary-text)}
+.member-governance-section{margin-top:10px}
+.member-governance-row,.member-governance-work{
+  display:flex;justify-content:space-between;gap:10px;align-items:flex-start;
+  border-top:1px solid var(--divider);padding:7px 0
+}
+.member-governance-row span{font-size:8px;color:var(--soft)}
+.member-governance-row b{font-size:9px;color:var(--primary-text);text-align:right}
+.member-governance-handover{
+  margin-top:8px;border:1px solid var(--success-border);background:var(--success-bg);
+  color:var(--success);border-radius:8px;padding:7px 8px;font-size:8px;font-weight:800
+}
+.member-governance-resolution{
+  border-top:1px solid var(--divider);padding:8px 0
+}
+.member-governance-resolution>div:first-child b,.member-governance-resolution>div:first-child small{display:block}
+.member-governance-resolution>div:first-child b{font-size:9px;color:var(--primary-text)}
+.member-governance-resolution>div:first-child small{font-size:7px;color:var(--soft);margin-top:2px}
+.member-governance-resolution p{font-size:9px;line-height:1.45;color:var(--muted);margin:6px 0;white-space:pre-wrap}
+.member-governance-meta,.member-governance-followup{font-size:7px;color:var(--soft);line-height:1.4}
+.member-governance-followup{
+  margin-top:5px;border:1px solid var(--border);border-radius:7px;background:var(--card);padding:6px 7px
+}
+.member-governance-followup b{color:var(--primary-text)}
+.member-governance-work span{min-width:0;flex:1}
+.member-governance-work b,.member-governance-work small{display:block}
+.member-governance-work b{font-size:9px;color:var(--primary-text)}
+.member-governance-work small{font-size:7px;color:var(--soft);margin-top:2px}
+.member-governance-work strong{color:var(--success)}
+
+/* v67 member overview election card */
+.member-overview-election{
+  width:100%;display:flex;align-items:stretch;justify-content:space-between;gap:12px;
+  border:1px solid var(--success-border);border-radius:14px;
+  background:linear-gradient(135deg,var(--success-bg),var(--card));
+  color:var(--text);padding:13px 14px;margin-top:10px;text-align:left;cursor:pointer;
+  min-height:112px;overflow:hidden
+}
+.member-overview-election-main{min-width:0;flex:1}
+.member-overview-election-label{
+  display:inline-flex;align-items:center;width:max-content;max-width:100%;
+  border-radius:999px;background:var(--button-soft);border:1px solid var(--success-border);
+  color:var(--success);padding:3px 7px;font-size:7px;font-weight:850;letter-spacing:.7px
+}
+.member-overview-election-title{
+  font-size:21px;line-height:1.08;font-weight:650;color:var(--primary-text);margin-top:7px
+}
+.member-overview-election-name{
+  font-size:10px;font-weight:700;color:var(--muted);margin-top:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.member-overview-election-note{
+  font-size:9px;color:var(--soft);margin-top:7px;line-height:1.35;
+  white-space:normal;overflow-wrap:anywhere
+}
+.member-overview-election-action{
+  flex:0 0 92px;align-self:center;display:flex;align-items:center;justify-content:flex-end;gap:5px;
+  color:var(--success);font-size:9px;font-weight:850;text-align:right;white-space:nowrap
+}
+.member-overview-election-action strong{font-size:18px;line-height:1;font-weight:500}
+@media(max-width:380px){
+  .member-overview-election{gap:8px;padding:12px}
+  .member-overview-election-title{font-size:19px}
+  .member-overview-election-action{flex-basis:76px;font-size:8px}
+}
+
+
+/* v68 UI smoothing + mobile polish */
+:root {
+  --ui-fast: 120ms;
+  --ui-medium: 180ms;
+  --ui-slow: 240ms;
+  --ui-ease: cubic-bezier(.22,.8,.24,1);
+}
+
+/* Tap/press feedback across the Mini App without affecting disabled controls. */
+button,
+[role="button"],
+.expense-row,
+.member-election-card,
+.election-archive-row,
+.project-card,
+.activity-row {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  transition:
+    transform var(--ui-fast) ease-out,
+    opacity var(--ui-fast) ease-out,
+    background-color var(--ui-medium) ease-out,
+    border-color var(--ui-medium) ease-out,
+    box-shadow var(--ui-medium) ease-out;
+}
+
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(.985);
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: default !important;
+}
+
+/* Prevent small layout jumps while data is loading or switching pages. */
+.page-panel {
+  min-height: 100%;
+  opacity: 1;
+}
+.page-panel--active {
+  animation: v68-page-fade var(--ui-medium) var(--ui-ease) both !important;
+}
+@keyframes v68-page-fade {
+  from { opacity: .82; }
+  to { opacity: 1; }
+}
+
+/* Dedicated scroll viewport tuning for Telegram/iOS. */
+.app-page-content {
+  scroll-behavior: smooth;
+  scroll-padding-top: 12px;
+  scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+}
+.app-page-content > * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Modal enter animation and cleaner iPhone safe-area behavior. */
+.app-modal-overlay {
+  animation: v68-overlay-in var(--ui-medium) ease-out both;
+  background: color-mix(in srgb, var(--overlay) 94%, transparent) !important;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.app-modal-sheet {
+  animation: v68-sheet-in var(--ui-slow) var(--ui-ease) both;
+  box-shadow: 0 -18px 42px rgba(0,0,0,.22);
+}
+.app-modal-header {
+  min-height: 56px !important;
+  padding-top: max(5px, env(safe-area-inset-top) * .15) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.app-modal-body {
+  scroll-padding-top: 10px;
+  scroll-padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+@keyframes v68-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes v68-sheet-in {
+  from { opacity: .7; translate: 0 16px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* Consistent loading treatment instead of sudden text-only state changes. */
+.app-page-state {
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.app-page-state--compact {
+  min-height: 74px;
+}
+.app-loading-pulse {
+  width: 24px;
+  height: 24px;
+  display: block;
+  border-radius: 999px;
+  margin: 0 auto 10px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--primary);
+  animation: v68-loading-spin .72s linear infinite;
+}
+.app-page-state-title {
+  transition: opacity var(--ui-medium) ease-out;
+}
+@keyframes v68-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Smooth card appearance and more stable text wrapping. */
+.member-election-card,
+.election-archive-row,
+.official-exco-card,
+.exco-term-card,
+.exco-handover-card,
+.exco-workboard-card,
+.election-dashboard,
+.election-summary-card,
+.member-governance-card,
+.meeting-resolution-card,
+.expense-row {
+  contain: layout style;
+}
+.member-election-card,
+.expense-row,
+.election-dashboard-card,
+.election-archive-row {
+  transition:
+    background-color var(--ui-medium) ease-out,
+    border-color var(--ui-medium) ease-out,
+    box-shadow var(--ui-medium) ease-out,
+    opacity var(--ui-medium) ease-out !important;
+}
+.member-election-card b,
+.member-election-card span,
+.expense-row b,
+.expense-row span,
+.election-dashboard-card b,
+.election-dashboard-card span {
+  overflow-wrap: anywhere;
+}
+
+/* Inputs/selects use consistent touch targets on phones. */
+input,
+select,
+textarea {
+  min-height: 40px;
+  box-sizing: border-box;
+}
+textarea {
+  min-height: 76px;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--focus) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus) 20%, transparent);
+  transition: border-color var(--ui-fast) ease-out, box-shadow var(--ui-fast) ease-out;
+}
+
+/* Bottom navigation: stable spacing and a little more breathing room above iPhone home indicator. */
+.admin-tab-strip.app-icon-nav {
+  bottom: max(8px, env(safe-area-inset-bottom)) !important;
+  padding-bottom: 6px !important;
+  min-height: 48px;
+}
+.app-nav-item {
+  touch-action: manipulation;
+}
+
+/* Long admin/member pages: keep section spacing consistent and avoid cramped controls. */
+.member-section-title {
+  margin-top: 14px;
+}
+.election-dashboard,
+.official-exco-card,
+.exco-term-card,
+.exco-handover-card,
+.exco-workboard-card,
+.election-archive-card,
+.member-governance-card {
+  scroll-margin-top: 12px;
+}
+
+/* Small-screen refinements. */
+@media (max-width: 420px) {
+  .app-modal-sheet {
+    border-radius: 18px 18px 0 0 !important;
+  }
+  .app-modal-body {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+  .app-modal-header {
+    padding-left: 14px !important;
+    padding-right: 10px !important;
+  }
+  .election-dashboard,
+  .official-exco-card,
+  .exco-term-card,
+  .exco-handover-card,
+  .exco-workboard-card,
+  .election-archive-card,
+  .member-governance-card {
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .app-page-content {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .admin-tab-strip.app-icon-nav {
+    width: calc(100% - 10px) !important;
+  }
+}
+
+/* Respect accessibility settings and keep the app snappy on lower-end devices. */
+@media (prefers-reduced-motion: reduce) {
+  html,
+  .app-page-content {
+    scroll-behavior: auto !important;
+  }
+  .app-modal-overlay,
+  .app-modal-sheet,
+  .page-panel--active,
+  .app-loading-pulse {
+    animation: none !important;
+  }
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    transition: none !important;
+  }
+}
+
+
+/* v71 Super Admin deletion for completely unused draft elections */
+.election-delete-zone{
+  margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)
+}
+.election-delete-zone-copy b,.election-delete-zone-copy span,.election-delete-zone-copy small{display:block}
+.election-delete-zone-copy b{font-size:8px;letter-spacing:.55px;color:var(--danger)}
+.election-delete-zone-copy span{font-size:8px;line-height:1.45;color:var(--soft);margin-top:3px}
+.election-delete-zone-copy small{font-size:7px;line-height:1.4;color:var(--warning);margin-top:4px}
+.election-delete-unused-btn{
+  width:100%;margin-top:8px;border:1px solid var(--danger-border);border-radius:9px;
+  background:var(--danger-bg);color:var(--danger);padding:9px 10px;
+  font-size:9px;font-weight:800;cursor:pointer
+}
+.election-delete-unused-btn:disabled{opacity:.5}
+
+
+/* v72 meetings, member metadata and advance allocation history */
+.meeting-audience-field{display:block;font-size:11px;color:var(--muted);margin-bottom:10px}
+.meeting-audience-field>span,.meeting-audience-field>small{display:block}
+.meeting-audience-field>span{margin-bottom:5px}
+.meeting-audience-field>small{font-size:8px;color:var(--soft);margin-top:4px}
+.meeting-audience-field select{width:100%;border:1px solid var(--border-strong-2);border-radius:9px;background:var(--card);color:var(--text);padding:9px 10px}
+.meeting-audience-badge,.member-meeting-audience{
+  display:inline-flex;width:max-content;margin-top:7px;border:1px solid var(--border);
+  border-radius:999px;background:var(--button-soft);padding:4px 7px;font-size:8px;font-weight:800;color:var(--primary-text)
+}
+.meeting-attendance-card{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:4px 10px 10px}
+.meeting-attendance-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid var(--divider);padding:8px 0}
+.meeting-attendance-row>span{min-width:0;flex:1}
+.meeting-attendance-row b,.meeting-attendance-row small{display:block}
+.meeting-attendance-row b{font-size:10px;color:var(--primary-text)}
+.meeting-attendance-row small{font-size:7px;color:var(--soft);margin-top:2px}
+.meeting-attendance-row select{min-width:132px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);padding:7px;font-size:9px}
+.meeting-complete-btn{width:100%;margin-top:9px;border:1px solid var(--success-border);border-radius:9px;background:var(--success-bg);color:var(--success);padding:9px;font-size:9px;font-weight:800}
+.meeting-complete-btn:disabled{opacity:.45}
+.meeting-completed-note{margin-top:8px;border:1px solid var(--success-border);border-radius:8px;background:var(--success-bg);color:var(--success);padding:8px;text-align:center;font-size:8px;font-weight:800}
+.member-meeting-attendance-result{margin-top:7px;font-size:8px;color:var(--soft)}
+.member-meeting-attendance-result b{color:var(--primary-text);text-transform:capitalize}
+.member-list-meta{font-size:9px;color:var(--soft);margin-top:4px}
+.member-list-meta b{color:var(--primary-text)}
+.member-history-allocation-breakdown{margin-top:9px;border-top:1px solid var(--divider);padding-top:7px}
+.member-history-allocation-title{font-size:7px;font-weight:800;letter-spacing:.5px;color:var(--soft);margin-bottom:4px}
+.member-history-allocation-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:9px;color:var(--muted)}
+.member-history-allocation-row b{color:var(--primary-text)}
+@media(max-width:390px){.meeting-attendance-row{align-items:flex-start}.meeting-attendance-row select{min-width:118px}}
+
+
+/* v73 future advance allocation visibility */
+.member-history-status-row.advance{
+  background:color-mix(in srgb,var(--success-bg) 42%,transparent);
+}
+.member-history-advance-label{
+  display:inline-block;margin-left:6px;border:1px solid var(--success-border);
+  border-radius:999px;padding:2px 5px;font-size:7px;font-weight:800;
+  color:var(--success);vertical-align:middle
+}
+
+
+/* v74 contribution allocation reconciliation */
+.member-history-reconciliation-alert{
+  margin:0 0 12px;border:1px solid var(--warning-border);border-radius:11px;
+  background:var(--warning-bg);padding:10px 11px;color:var(--warning)
+}
+.member-history-reconciliation-alert b,.member-history-reconciliation-alert span{display:block}
+.member-history-reconciliation-alert b{font-size:10px}
+.member-history-reconciliation-alert span{font-size:8px;line-height:1.45;margin-top:3px;color:var(--muted)}
+.member-reconciliation-card{
+  border:1px solid var(--border);border-radius:10px;padding:10px;margin:0 0 14px;background:var(--bg)
+}
+.member-reconciliation-card.ok{border-color:var(--success-border)}
+.member-reconciliation-card.error{border-color:var(--danger-border)}
+.member-reconciliation-head{display:flex;justify-content:space-between;align-items:flex-start;gap:9px}
+.member-reconciliation-head span{min-width:0;flex:1}
+.member-reconciliation-head b,.member-reconciliation-head small{display:block}
+.member-reconciliation-head b{font-size:9px;color:var(--primary-text)}
+.member-reconciliation-head small{font-size:7px;color:var(--soft);margin-top:2px}
+.member-reconciliation-head strong{font-size:11px;color:var(--success)}
+.member-reconciliation-card.error .member-reconciliation-head strong{color:var(--danger)}
+.member-reconciliation-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.member-reconciliation-grid span{font-size:7px;color:var(--soft);border:1px solid var(--border);border-radius:8px;padding:6px 7px}
+.member-reconciliation-grid b{display:block;font-size:9px;color:var(--primary-text);margin-top:2px}
+.member-reconciliation-legacy{font-size:7px;line-height:1.4;color:var(--warning);margin-top:7px}
+.member-reconciliation-issues{margin-top:7px}
+.member-reconciliation-issues>div{display:flex;gap:6px;align-items:flex-start;border-top:1px solid var(--divider);padding:6px 0;font-size:7px;line-height:1.4}
+.member-reconciliation-issues>div b{min-width:30px;color:var(--warning)}
+.member-reconciliation-issues>div.error b{color:var(--danger)}
+.member-reconciliation-issues>div span{color:var(--muted)}
+
+/* v83 — Mobile readability + touch target stability pass
+   Keeps existing layout/navigation intact while eliminating 7–9px UI text
+   in dense member/governance screens and improving primary touch targets. */
+
+/* Dense secondary/meta text: never render below a readable mobile size. */
+.member-profile-kicker,
+.member-profile-summary-label,
+.member-project-meta,
+.member-project-transaction > div div,
+.member-fund-category-meta,
+.member-meeting-agenda b,
+.member-rsvp-label,
+.member-meeting-notes b,
+.member-action-meeting,
+.member-election-card span,
+.election-ballot-position>div:first-child span,
+.election-admin-position span,
+.election-field-help,
+.election-candidate-admin-row small,
+.election-runoff-admin>div:first-child span,
+.election-runoff-turnout,
+.election-runoff-title span,
+.election-position-readiness>div:first-child span,
+.election-position-readiness>div:last-child,
+.election-readiness-summary span,
+.election-readiness-check small,
+.election-summary-title span,
+.election-summary-grid span,
+.election-summary-grid small,
+.election-summary-runoff small,
+.election-summary-role span,
+.election-archive-row span small,
+.election-archive-row strong small,
+.election-voting-lock-banner span,
+.election-notification-heading span,
+.election-notification-row small,
+.member-election-stage-banner span,
+.election-dashboard-head span small,
+.election-dashboard-card-top small,
+.election-dashboard-metrics small,
+.exco-term-head small,
+.exco-handover-head small,
+.election-timeline-head small,
+.exco-term-dates,
+.exco-term-previous span,
+.exco-term-previous small,
+.exco-handover-item small,
+.election-timeline-event small,
+.election-timeline-event em,
+.exco-workboard-head small,
+.exco-workboard-item span,
+.exco-workboard-item small,
+.member-popup-exco span,
+.member-profile-exco-history span,
+.official-exco-row small,
+.election-audit-row span,
+.election-application-admin span,
+.election-my-application span,
+.election-my-application small,
+.election-ineligible span {
+  font-size: 11px !important;
+  line-height: 1.4;
+}
+
+/* Compact labels/badges that previously dropped to 7–9px. */
+.election-application-counts span,
+.election-summary-grid span,
+.election-summary-grid small,
+.election-summary-runoff small,
+.election-notification-row small,
+.election-dashboard-metrics small,
+.exco-term-previous span,
+.exco-term-previous small,
+.election-timeline-event small,
+.election-timeline-event em,
+.exco-workboard-summary span,
+.exco-workboard-item span,
+.exco-workboard-item small {
+  font-size: 10px !important;
+  letter-spacing: .15px;
+}
+
+/* Main dense-card copy should not be smaller than 11–12px. */
+.member-profile-code,
+.member-profile-section-title,
+.member-profile-section-subtitle,
+.member-election-card strong,
+.election-admin-summary span,
+.election-result-row,
+.election-candidate-admin-row b,
+.election-application-admin b,
+.election-application-admin small,
+.election-my-application b,
+.election-check,
+.election-deadline,
+.election-ineligible b,
+.election-runoff-admin>div:first-child b,
+.election-runoff-title b,
+.election-position-readiness b,
+.election-readiness-summary b,
+.election-readiness-check b,
+.election-summary-title b,
+.election-summary-grid b,
+.election-summary-runoff b,
+.election-summary-runoff strong,
+.election-summary-role b,
+.election-archive-row b,
+.election-archive-row strong,
+.election-voting-lock-banner b,
+.election-notification-heading b,
+.election-notification-row b,
+.election-notification-row strong,
+.member-election-stage-banner b,
+.election-dashboard-head b,
+.election-dashboard-card-top b,
+.election-dashboard-metrics b,
+.exco-term-head b,
+.exco-handover-head b,
+.election-timeline-head b,
+.exco-term-head>strong,
+.exco-term-previous b,
+.exco-handover-item b,
+.election-timeline-event b,
+.exco-workboard-head b,
+.exco-workboard-item b,
+.member-profile-exco-history b,
+.official-exco-row b,
+.election-audit-row b {
+  font-size: 11px !important;
+}
+
+/* Important controls: easier to tap without redesigning the page. */
+.election-candidate-admin-row button,
+.election-application-admin button,
+.election-my-application button,
+.election-runoff-admin button,
+.election-archive-row button,
+.election-notification-row button,
+.exco-handover-item button,
+.exco-workboard-head button,
+.exco-workboard-actions button,
+.member-rsvp-actions button,
+.member-action-row button {
+  min-height: 40px;
+  font-size: 11px !important;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Primary form controls in governance/member screens. */
+.election-admin-card input,
+.election-admin-card select,
+.election-admin-card textarea,
+.election-form input,
+.election-form select,
+.election-form textarea,
+.member-rsvp-actions button {
+  min-height: 40px;
+  font-size: 12px;
+}
+
+@media (max-width: 480px) {
+  .election-candidate-admin-row button,
+  .election-application-admin button,
+  .election-my-application button,
+  .election-runoff-admin button,
+  .election-archive-row button,
+  .exco-handover-item button,
+  .exco-workboard-head button,
+  .exco-workboard-actions button,
+  .member-rsvp-actions button,
+  .member-action-row button {
+    min-height: 42px;
+  }
+}
+
+/* Contribution history/reconciliation readability. */
+.member-history-advance-label,
+.member-history-reconciliation-alert span,
+.member-reconciliation-head b,
+.member-reconciliation-head small,
+.member-reconciliation-grid span,
+.member-reconciliation-grid b,
+.member-reconciliation-legacy,
+.member-reconciliation-issues>div,
+.member-history-allocation-title,
+.meeting-attendance-row small {
+  font-size: 10px !important;
+  line-height: 1.4;
+}
+.member-history-reconciliation-alert b {
+  font-size: 11px !important;
+}
+
+/* v84 election admin workflow clarity */
+.election-stage-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:8px 0 12px;padding:8px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.election-stage-strip>div{min-width:0;text-align:center;color:var(--soft);font-size:10px;font-weight:700}
+.election-stage-strip i{display:flex;align-items:center;justify-content:center;width:24px;height:24px;margin:0 auto 4px;border-radius:50%;background:var(--muted);font-style:normal;font-size:10px}
+.election-stage-strip .done,.election-stage-strip .current{color:var(--text)}
+.election-stage-strip .done i{background:var(--success-bg);color:var(--success)}
+.election-stage-strip .current i{background:var(--text);color:var(--card)}
+.election-stage-strip.cancelled{display:block;text-align:center}
+.election-stage-strip.cancelled>div{display:none}
+.election-stage-strip.cancelled>b{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--danger)}
+.election-admin-more{margin:10px 0;border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
+.election-admin-more>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:9px 11px;cursor:pointer;list-style:none}
+.election-admin-more>summary::-webkit-details-marker{display:none}
+.election-admin-more>summary span{display:flex;min-width:0;flex-direction:column;gap:2px;text-align:left}
+.election-admin-more>summary b{font-size:12px}
+.election-admin-more>summary small{font-size:10px;color:var(--soft);font-weight:500}
+.election-admin-more>summary strong{font-size:10px;color:var(--soft);white-space:nowrap}
+.election-admin-more[open]>summary{border-bottom:1px solid var(--line)}
+.election-admin-more-body{padding:10px}
+.election-admin-more-body>.election-notification-status:first-child,.election-admin-more-body>.election-governance-timeline:first-child{margin-top:0}
+.election-setup-details{margin-top:12px}
+.election-danger-details{margin-top:12px}
+.election-danger-details>summary b{color:var(--danger)}
+.election-danger-details .election-delete-zone{margin:0}
+.election-audit-details{margin-top:14px}
+@media(max-width:380px){.election-stage-strip{gap:2px;padding:7px 4px}.election-stage-strip>div{font-size:9px}.election-stage-strip i{width:22px;height:22px}}

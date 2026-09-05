@@ -1,0 +1,500 @@
+
+:root {
+  color-scheme: light;
+  --bg: #F7F5EF;
+  --card: #FFFFFF;
+  --text: #1F2A22;
+  --text-strong: #222222;
+  --primary: #1F3D2B;
+  --primary-text: #1F3D2B;
+  --topbar: #17212B;
+  --on-primary: #F7F5EF;
+  --on-topbar: #FFFFFF;
+  --overlay: rgba(31,42,34,0.50);
+  --shadow: rgba(31,61,43,0.12);
+  --focus-ring: rgba(47,90,61,0.10);
+  --shimmer: rgba(255,255,255,0.52);
+  --muted: #6B7268;
+  --muted-2: #7A8078;
+  --soft: #777E75;
+  --soft-2: #858B82;
+  --soft-3: #949A90;
+  --soft-4: #A2A79C;
+  --border: #E9E4D8;
+  --border-strong: #D9D3C4;
+  --border-strong-2: #DED8CA;
+  --border-2: #E2DDD0;
+  --divider: #F0EDE3;
+  --divider-2: #EEE9DE;
+  --divider-3: #F5F1E8;
+  --surface-2: #ECE8DE;
+  --skeleton: #E9E6DE;
+  --button-soft: #F1EFE7;
+  --toggle-off: #D8D4C8;
+  --surface-warm: #F3F0E7;
+  --focus-bg: #F4F8F5;
+  --surface-cool: #F2F5F3;
+  --surface-success-soft: #EEF4F0;
+  --surface-neutral-soft: #EEF1F3;
+  --surface-neutral: #EEF0F1;
+  --surface-neutral-2: #E0E6E2;
+  --surface-neutral-3: #D7DEE3;
+  --neutral-text: #51606A;
+  --neutral-text-2: #59645B;
+  --focus: #2F5A3D;
+  --success: #3A6B3E;
+  --success-strong: #315C35;
+  --success-bg: #EAF1EE;
+  --success-bg-2: #DDECD9;
+  --success-bg-3: #E3EBDD;
+  --success-border: #CFE0D6;
+  --success-border-2: #D3E3D9;
+  --danger: #A6432F;
+  --danger-strong: #8E3F2E;
+  --danger-bg: #FDEDE8;
+  --danger-bg-2: #FAECE8;
+  --danger-bg-3: #FBF1EE;
+  --danger-bg-4: #FFF7F3;
+  --danger-border: #F2D6D0;
+  --danger-border-2: #EFD5CF;
+  --danger-border-3: #E9CFC5;
+  --warning: #7A5A18;
+  --warning-2: #8A6B24;
+  --warning-3: #A46B24;
+  --warning-4: #B58A3D;
+  --warning-bg: #FFF6E5;
+  --warning-bg-2: #FFF7E8;
+  --warning-bg-3: #FBF4DF;
+  --warning-border: #EFD9A9;
+  --warning-border-2: #E8D7A8;
+  --accent: #C98A4B;
+}
+
+
+  :root[data-theme="dark"] {
+    /* Neutral charcoal foundation: green is an accent, not the page tint. */
+    --bg: #111310;
+    --card: #1A1D19;
+    --text: #E7EAE5;
+    --text-strong: #F5F6F2;
+    --primary: #244832;
+    --primary-text: #9DCC9B;
+    --topbar: #11171B;
+    --on-primary: #F4F1E8;
+    --on-topbar: #F5F7F8;
+
+    --muted: #AAB0A8;
+    --muted-2: #949B93;
+    --soft: #858C84;
+    --soft-2: #7A8179;
+    --soft-3: #70776F;
+    --soft-4: #666D66;
+
+    --border: #30342E;
+    --border-strong: #3A4038;
+    --border-strong-2: #353B34;
+    --border-2: #2C312B;
+    --divider: #292D28;
+    --divider-2: #2D312B;
+    --divider-3: #242824;
+
+    --surface-2: #20241F;
+    --skeleton: #252A24;
+    --button-soft: #222621;
+    --toggle-off: #4A5049;
+    --surface-warm: #25251F;
+    --focus-bg: #202821;
+    --surface-cool: #202522;
+    --surface-success-soft: #1D2920;
+    --surface-neutral-soft: #202422;
+    --surface-neutral: #222624;
+    --surface-neutral-2: #2A2F2B;
+    --surface-neutral-3: #333936;
+    --neutral-text: #A8B1B4;
+    --neutral-text-2: #A7AEA7;
+
+    --focus: #86B592;
+    --success: #83BB82;
+    --success-strong: #91C790;
+    --success-bg: #1E2C21;
+    --success-bg-2: #233326;
+    --success-bg-3: #273329;
+    --success-border: #3B513E;
+    --success-border-2: #435B46;
+
+    --danger: #E28C78;
+    --danger-strong: #F09A86;
+    --danger-bg: #33231F;
+    --danger-bg-2: #30211E;
+    --danger-bg-3: #2D211E;
+    --danger-bg-4: #291E1B;
+    --danger-border: #5A3A32;
+    --danger-border-2: #634239;
+    --danger-border-3: #573A33;
+
+    --warning: #D9BA78;
+    --warning-2: #D1B16F;
+    --warning-3: #D0A865;
+    --warning-4: #C19B5B;
+    --warning-bg: #2E281C;
+    --warning-bg-2: #2B261B;
+    --warning-bg-3: #29251B;
+    --warning-border: #554728;
+    --warning-border-2: #554829;
+
+    --accent: #C8945E;
+    --overlay: rgba(0,0,0,0.68);
+    --shadow: rgba(0,0,0,0.34);
+    --focus-ring: rgba(134,181,146,0.20);
+    --shimmer: rgba(255,255,255,0.08);
+  }
+
+  /* Native controls can otherwise retain a bright platform surface. */
+  :root[data-theme="dark"] input,
+  :root[data-theme="dark"] textarea,
+  :root[data-theme="dark"] select,
+  :root[data-theme="dark"] option {
+    color-scheme: dark;
+  }
+
+  /* Keep cards distinct from the page without adding a green glow. */
+  :root[data-theme="dark"] [style*="box-shadow"],
+  :root[data-theme="dark"] [style*="boxShadow"] {
+    --theme-shadow: var(--shadow);
+  }
+
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  overscroll-behavior-x: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS Safari/Telegram WebView may not preserve inherited control typography.
+   Keep all interactive form controls on the app's UI font explicitly. */
+button, input, textarea, select {
+  font: inherit;
+  font-family: 'Inter', sans-serif !important;
+  color: var(--text);
+}
+
+input::placeholder, textarea::placeholder { color: var(--soft); opacity: 1; }
+button { -webkit-tap-highlight-color: transparent; }
+button:disabled { cursor: not-allowed !important; opacity: .55; }
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--focus) !important;
+  background: var(--focus-bg) !important;
+  box-shadow: 0 0 0 2px var(--focus-ring) !important;
+  outline: none !important;
+}
+
+.sans { font-family: 'Inter', sans-serif; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* Perceived-speed polish: keep first load visually stable and make tab changes feel native. */
+.page-panel--active {
+  animation: page-enter 110ms ease-out both;
+}
+
+@keyframes page-enter {
+  from { opacity: 0.82; }
+  to { opacity: 1; }
+}
+
+.page-skeleton {
+  width: 100%;
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.skeleton-block {
+  position: relative;
+  overflow: hidden;
+  background: var(--skeleton);
+  border-radius: 8px;
+}
+
+.skeleton-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--shimmer), transparent);
+  animation: skeleton-shimmer 1.15s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-panel--active { animation: none !important; }
+  .skeleton-block::after { animation: none !important; display: none; }
+}
+
+
+/* System dark-theme refinement */
+::selection { background: color-mix(in srgb, var(--primary) 55%, transparent); color: var(--text-strong); }
+
+
+  :root[data-theme="dark"] body { background: var(--bg); }
+
+  /* Make the two main green brand surfaces feel deliberate rather than luminous. */
+  :root[data-theme="dark"] .theme-brand-surface {
+    background: linear-gradient(145deg, #274B35 0%, #213D2C 100%) !important;
+    color: var(--on-primary) !important;
+  }
+
+  /* Safari autofill can otherwise flash a light field in Telegram WebView. */
+  :root[data-theme="dark"] input:-webkit-autofill,
+  :root[data-theme="dark"] input:-webkit-autofill:hover,
+  :root[data-theme="dark"] input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--text) !important;
+    -webkit-box-shadow: 0 0 0 1000px var(--card) inset !important;
+    transition: background-color 9999s ease-out 0s;
+  }
+
+
+/* v23: fixed app shell + one dedicated content scroller.
+   Header, Ledger branding, mode switch and tabs stay visible; only page content moves. */
+.app-scroll-root {
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: none;
+}
+
+.app-page-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable both-edges;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+
+.app-page-content--loading {
+  flex: 1 1 auto;
+}
+
+/* Hidden warm pages never own scrolling; the content viewport is the sole normal scroller. */
+.page-panel {
+  width: 100%;
+  overflow: visible;
+}
+
+/* v24: modal scrolling. The overlay must not use touch-action:none because
+   iOS/Telegram intersects touch-action across ancestors and can then block the
+   modal body itself. The page behind is already locked by Modal. */
+.app-modal-overlay {
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.app-modal-sheet {
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.app-modal-header {
+  position: relative;
+  z-index: 2;
+}
+
+.app-modal-body {
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+/* v28: iOS/Telegram activity repaint safety. Avoid transformed compositing layers
+   around the main scroller and force a clean paint boundary for filter results. */
+.activity-results {
+  position: relative;
+  contain: layout paint;
+  transform: none !important;
+  will-change: auto;
+}
+
+.app-page-content,
+.page-panel,
+.page-panel--active {
+  transform: none !important;
+  will-change: auto;
+}
+
+/* v33: Activity date/type filters stay available while the result list scrolls. */
+
+.page-sticky-controls {
+  box-sizing: border-box;
+  width: 100%;
+}
+.activity-filter-sticky,
+.reports-filter-sticky,
+.settings-subnav-sticky,
+.expenses-sticky-controls {
+  position: sticky;
+  /* .app-page-content uses compact 15px top padding. Pull sticky controls
+     through that padding so rows never appear in the gap above them. */
+  top: -15px;
+  z-index: 20;
+  isolation: isolate;
+  background: var(--bg);
+  padding: 19px 0 8px;
+  margin: -15px 0 9px;
+  border-bottom: 1px solid var(--divider);
+  box-shadow: 0 6px 10px -10px var(--shadow);
+}
+
+/* Keep each sticky control area visually aligned while its page body scrolls below it. */
+.activity-filter-sticky {
+  z-index: 21;
+}
+.activity-date-select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.activity-clear-filter {
+  min-height: 32px;
+  border: 1px solid var(--border-strong-2);
+  border-radius: 9px;
+  background: var(--button-soft);
+  color: var(--primary-text);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.activity-custom-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 7px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+.activity-custom-range label {
+  display: block;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+.activity-custom-range label > span {
+  display: block;
+  margin: 0 0 4px 2px;
+}
+.activity-custom-range input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 11px;
+}
+.activity-custom-range > button {
+  min-height: 38px;
+  border: 1px solid var(--primary);
+  border-radius: 9px;
+  background: var(--primary);
+  color: var(--on-primary);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.activity-type-filters {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.activity-type-filters::-webkit-scrollbar { display: none; }
+.activity-filter-error {
+  margin-top: 8px;
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 10px;
+}
+.activity-filter-loading {
+  margin-top: 7px;
+  color: var(--soft);
+  font-size: 10px;
+}
+@media (max-width: 390px) {
+  .activity-custom-range {
+    grid-template-columns: 1fr 1fr;
+  }
+  .activity-custom-range > button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+
+/* v34/v36: Reports controls use the shared sticky-control shell. */
+.reports-month-selector {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 8px;
+}
+
+
+/* v35/v36: Settings sub-navigation uses the shared sticky-control shell. */
+.settings-subnav-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.settings-subnav-scroll::-webkit-scrollbar {
+  display: none;
+}
+

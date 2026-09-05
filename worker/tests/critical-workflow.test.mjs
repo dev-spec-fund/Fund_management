@@ -7,6 +7,17 @@ import { DatabaseSync } from 'node:sqlite';
 const root = path.resolve(import.meta.dirname, '..');
 const schema = fs.readFileSync(path.join(root, 'schema.sql'), 'utf8');
 
+function frontendCss() {
+  const frontend = path.resolve(root, '../frontend/src');
+  return [
+    'styles.css',
+    'styles/base.css',
+    'styles/admin.css',
+    'styles/member.css',
+    'styles/governance.css',
+  ].map((file) => fs.readFileSync(path.join(frontend, file), 'utf8')).join('\n');
+}
+
 function dbWithSchema() {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
@@ -1431,7 +1442,7 @@ test('v66 member election prefetch includes governance archive', () => {
 
 test('v67 member overview election card uses compact collision-safe layout', () => {
   const overview=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Overview.jsx'),'utf8');
-  const css=fs.readFileSync(path.resolve(root,'../frontend/src/styles.css'),'utf8');
+  const css=frontendCss();
   assert.match(overview,/MemberElectionOverviewCard/);
   assert.match(overview,/Applications Open/);
   assert.match(overview,/Application Pending/);
@@ -1454,7 +1465,7 @@ test('v67 overview election card prioritizes immediate member election action', 
 
 
 test('v68 global UI smoothing adds modal, page, loading and tap polish', () => {
-  const css=fs.readFileSync(path.resolve(root,'../frontend/src/styles.css'),'utf8');
+  const css=frontendCss();
   assert.match(css,/v68 UI smoothing \+ mobile polish/);
   assert.match(css,/v68-page-fade/);
   assert.match(css,/v68-overlay-in/);
@@ -1702,7 +1713,7 @@ test('v73 member history keeps future advance out of outstanding and in advance 
 
 test('v73 future monthly status is visibly labelled as advance allocation', () => {
   const history=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MyHistory.jsx'),'utf8');
-  const css=fs.readFileSync(path.resolve(root,'../frontend/src/styles.css'),'utf8');
+  const css=frontendCss();
   assert.match(history,/member-history-advance-label/);
   assert.match(history,/Allocated/);
   assert.match(css,/member-history-status-row\.advance/);
