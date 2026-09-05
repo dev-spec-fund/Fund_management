@@ -1682,3 +1682,29 @@ test('v72 meeting audience and attendance schema is migration controlled', () =>
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
   assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
+
+
+test('v73 member statement extends monthly status through latest future allocation', () => {
+  const members=fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
+  assert.match(members,/latestAllocatedMonth/);
+  assert.match(members,/statusEndMonth=latestAllocatedMonth>nowMonth\?latestAllocatedMonth:nowMonth/);
+  assert.match(members,/const isAdvance=month>nowMonth/);
+  assert.match(members,/advance:isAdvance/);
+});
+
+test('v73 member history keeps future advance out of outstanding and in advance total', () => {
+  const history=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MyHistory.jsx'),'utf8');
+  assert.match(history,/statuses\.filter\(x=>!x\.advance\).*x\.due/);
+  assert.match(history,/statuses\.filter\(x=>x\.advance\).*x\.paid/);
+  assert.match(history,/Advance \$\{x\.status\}/);
+  assert.match(history,/x\.advance\?"Remaining":"Due"/);
+});
+
+test('v73 future monthly status is visibly labelled as advance allocation', () => {
+  const history=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MyHistory.jsx'),'utf8');
+  const css=fs.readFileSync(path.resolve(root,'../frontend/src/styles.css'),'utf8');
+  assert.match(history,/member-history-advance-label/);
+  assert.match(history,/Allocated/);
+  assert.match(css,/member-history-status-row\.advance/);
+  assert.match(css,/member-history-advance-label/);
+});

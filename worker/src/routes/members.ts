@@ -95,7 +95,12 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
   for (const r of balanceItems) { running += Number(r.amount||0); balanceHistory.push({...r,balance:running}); }
   const firstMonth = member.joined_at?.slice(0,7) || currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
   const nowMonth = currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
-  const months:string[]=[]; let [y,m]=firstMonth.split('-').map(Number); const [ey,em]=nowMonth.split('-').map(Number);
+  const latestAllocatedMonth=(allocations.results as any[]).reduce((latest:any,row:any)=>{
+    const month=String(row.month||'');
+    return /^\d{4}-\d{2}$/.test(month) && month>latest ? month : latest;
+  },nowMonth);
+  const statusEndMonth=latestAllocatedMonth>nowMonth?latestAllocatedMonth:nowMonth;
+  const months:string[]=[]; let [y,m]=firstMonth.split('-').map(Number); const [ey,em]=statusEndMonth.split('-').map(Number);
   while (y<ey || (y===ey && m<=em)) { months.push(`${y}-${String(m).padStart(2,'0')}`); m++; if(m>12){m=1;y++;} }
   const exSet = new Map(exemptions.results.map((x:any)=>[x.month,x]));
   const allocationMap=new Map<string,number>();
@@ -112,8 +117,9 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
     const ex=exSet.get(month) as any;
     const baseRate=rateForMonthFromRows(rates.results as any[],month,Number(member.monthly_amount));
     const rate=contributionDueFromRate(baseRate,member.joined_at||member.created_at,month,firstMonthRule);
+    const isAdvance=month>nowMonth;
     const status=ex?'exempt':rate<=0.004?'not_applicable':paid<=0?'unpaid':paid+0.005<rate?'partial':'paid';
-    return {month,status,paid,due:ex?0:Math.max(0,rate-paid),monthly_amount:rate,reason:ex?.reason||null};
+    return {month,status,paid,due:ex?0:Math.max(0,rate-paid),monthly_amount:rate,reason:ex?.reason||null,advance:isAdvance};
   });
   const organization=await getBranding(c.env);
   return c.json({organization,member,contributions:contributions.results,allocations:allocations.results,donations:donations.results,monthly_status:statuses,balance_history:balanceHistory,contribution_rates:rates.results});

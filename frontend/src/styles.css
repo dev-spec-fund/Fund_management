@@ -3640,3 +3640,14 @@ textarea:focus {
 .member-history-allocation-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:9px;color:var(--muted)}
 .member-history-allocation-row b{color:var(--primary-text)}
 @media(max-width:390px){.meeting-attendance-row{align-items:flex-start}.meeting-attendance-row select{min-width:118px}}
+
+
+/* v73 future advance allocation visibility */
+.member-history-status-row.advance{
+  background:color-mix(in srgb,var(--success-bg) 42%,transparent);
+}
+.member-history-advance-label{
+  display:inline-block;margin-left:6px;border:1px solid var(--success-border);
+  border-radius:999px;padding:2px 5px;font-size:7px;font-weight:800;
+  color:var(--success);vertical-align:middle
+}
