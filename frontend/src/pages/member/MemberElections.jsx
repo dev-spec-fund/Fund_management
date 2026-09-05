@@ -8,6 +8,8 @@ export function MemberElections(){
   const [detail,setDetail]=useState(null);
   const [selected,setSelected]=useState(null);
   const [choices,setChoices]=useState({});
+  const [applyPosition,setApplyPosition]=useState("");
+  const [applyStatement,setApplyStatement]=useState("");
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const {confirm,confirmationDialog}=useConfirmDialog();
@@ -21,6 +23,14 @@ export function MemberElections(){
     if(current.length>=Number(position.max_selections))return;
     setChoices({...choices,[key]:[...current,candidateId]});
   };
+  const apply=async()=>{
+    if(!detail||!applyPosition)return setMessage("Choose a position to apply for.");
+    setBusy(true);try{await api.elections.apply(detail.id,{position_id:Number(applyPosition),statement:applyStatement});setMessage("Candidate application submitted for review.");setDetail(await api.elections.get(detail.id));setApplyPosition("");setApplyStatement("");await load()}catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
+  const withdrawApplication=async(a)=>{
+    if(!await confirm({title:"Withdraw application?",message:"You can apply again only if the application period is still open.",confirmLabel:"Withdraw",tone:"danger"}))return;
+    setBusy(true);try{await api.elections.withdrawApplication(detail.id,a.id);setDetail(await api.elections.get(detail.id));setMessage("Application withdrawn.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
   const submit=async()=>{
     if(!detail||detail.my_vote)return;
     if(!await confirm({title:"Submit secret ballot?",message:"Your vote cannot be changed after submission. Your selections are stored separately from your member identity.",confirmLabel:"Submit vote",tone:"primary"}))return;
@@ -32,11 +42,21 @@ export function MemberElections(){
     <MessageBanner>{message}</MessageBanner>
     {!rows.length?<EmptyState>No elections available.</EmptyState>:rows.map(e=><button key={e.id} type="button" onClick={()=>open(e)} className="member-election-card">
       <div><b className="sans">{e.title}</b><span className="sans">{e.term||""}</span></div>
-      <div className="sans"><strong>{e.status==="open"?(e.my_vote?"Vote submitted ✓":"Vote now ›"):e.status==="closed"?"View results ›":String(e.status)}</strong><span>{e.turnout?.voted||0}/{e.turnout?.eligible||0} voted · {Number(e.turnout?.percent||0).toFixed(1)}%</span></div>
+      <div className="sans"><strong>{e.status==="draft"?"View applications ›":e.status==="open"?(e.my_vote?"Vote submitted ✓":"Vote now ›"):e.status==="closed"?"View results ›":String(e.status)}</strong><span>{e.turnout?.voted||0}/{e.turnout?.eligible||0} voted · {Number(e.turnout?.percent||0).toFixed(1)}%</span></div>
     </button>)}
     {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null)}}>
       {!detail?<LoadingState>Loading ballot…</LoadingState>:<>
-        <div className="sans election-secret-note">🔒 Secret ballot. The system records that you voted, but ballot selections are stored without your member ID.</div>
+        <div className="sans election-secret-note">🔒 Secret ballot. The system records that you voted, but ballot selections are stored without your member ID.</div>        {detail.status==="draft"&&<>
+          <div className={`sans election-application-status ${detail.application_phase}`}>{detail.application_phase==="open"?"Candidate applications are open":detail.application_phase==="upcoming"?"Candidate applications have not opened yet":"Candidate applications are closed"}</div>
+          {!!detail.applications?.length&&<div className="election-my-applications">{detail.applications.map(a=><div key={a.id} className="sans election-my-application"><div><b>{detail.positions.find(p=>Number(p.id)===Number(a.position_id))?.title||"Position"}</b><span>{a.status}</span>{a.review_reason&&<small>{a.review_reason}</small>}</div>{a.status==="pending"&&detail.application_phase==="open"&&<button type="button" onClick={()=>withdrawApplication(a)}>Withdraw</button>}</div>)}</div>}
+          {detail.application_phase==="open"&&<>
+            <div className="sans member-section-title">APPLY FOR AN AVAILABLE POSITION</div>
+            <select className="sans election-select" value={applyPosition} onChange={e=>setApplyPosition(e.target.value)}><option value="">Choose position</option>{detail.positions.map(p=><option key={p.id} value={p.id}>{p.title} · {p.seats} seat{Number(p.seats)===1?"":"s"}</option>)}</select>
+            <textarea className="sans election-application-statement" maxLength={600} placeholder="Short candidate statement / reason for applying (optional)" value={applyStatement} onChange={e=>setApplyStatement(e.target.value)}/>
+            <button type="button" disabled={busy||!applyPosition} onClick={apply} style={{...approveBtn,width:"100%",marginBottom:12}}>{busy?"Submitting…":"Submit candidate application"}</button>
+          </>}
+        </>}
+
         {detail.status==="open"&&!detail.eligible&&<div className="sans member-inline-error">You are not eligible to vote in this election.</div>}
         {detail.status==="open"&&detail.eligible&&detail.my_vote&&<div className="sans election-voted">✓ Your vote has been submitted.</div>}
         {detail.status==="open"&&detail.eligible&&!detail.my_vote&&<>

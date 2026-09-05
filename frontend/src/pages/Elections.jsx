@@ -11,7 +11,7 @@ export default function Elections(){
   const [showCreate,setShowCreate]=useState(false);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
-  const [form,setForm]=useState({title:"",term:"",opens_at:"",closes_at:""});
+  const [form,setForm]=useState({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});
   const [position,setPosition]=useState({title:"",seats:"1",min_selections:"1"});
   const [candidate,setCandidate]=useState({position_id:"",member_id:""});
   const {confirm,confirmationDialog}=useConfirmDialog();
@@ -21,9 +21,14 @@ export default function Elections(){
   useEffect(()=>{load()},[]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
 
-  const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",opens_at:"",closes_at:""});await load();await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
+  const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});await load();await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addPosition=async()=>{if(!detail||!position.title.trim())return;setBusy(true);try{const seats=Number(position.seats)||1;const d=await api.elections.addPosition(detail.id,{title:position.title,seats,max_selections:seats,min_selections:Math.max(0,Math.min(seats,Number(position.min_selections)||0))});setDetail(d);setPosition({title:"",seats:"1",min_selections:"1"})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addCandidate=async()=>{if(!detail||!candidate.position_id||!candidate.member_id)return;setBusy(true);try{const d=await api.elections.addCandidate(detail.id,candidate);setDetail(d);setCandidate({position_id:"",member_id:""})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
+  const reviewApplication=async(a,decision)=>{
+    const reason=decision==="rejected"?(window.prompt(`Reason for rejecting ${a.member_name}:`)??null):"";
+    if(reason===null)return;
+    setBusy(true);try{setDetail(await api.elections.reviewApplication(detail.id,a.id,decision,reason));setMessage(`Application ${decision}.`)}catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
   const withdrawCandidate=async(c)=>{
     const reason=window.prompt(`Reason for withdrawing ${c.display_name}:`);
     if(reason===null)return;
@@ -52,15 +57,23 @@ export default function Elections(){
     {showCreate&&<Modal title="Create EXCO election" onClose={()=>setShowCreate(false)}>
       <Field label="Election title" value={form.title} onChange={v=>setForm({...form,title:v})}/>
       <Field label="Term (optional)" value={form.term} onChange={v=>setForm({...form,term:v})}/>
-      <Field label="Voting opens (optional)" type="datetime-local" value={form.opens_at} onChange={v=>setForm({...form,opens_at:v})}/>
+      <Field label="Candidate applications open" type="datetime-local" value={form.applications_open_at} onChange={v=>setForm({...form,applications_open_at:v})}/>
+      <Field label="Candidate applications close" type="datetime-local" value={form.applications_close_at} onChange={v=>setForm({...form,applications_close_at:v})}/>
+      <Field label="Voting opens" type="datetime-local" value={form.opens_at} onChange={v=>setForm({...form,opens_at:v})}/>
       <Field label="Voting closes (optional)" type="datetime-local" value={form.closes_at} onChange={v=>setForm({...form,closes_at:v})}/>
       <button type="button" disabled={busy} onClick={create} style={{...approveBtn,width:"100%"}}>{busy?"Creating…":"Create draft"}</button>
     </Modal>}
 
     {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null)}}>
       {!detail?<LoadingState>Loading election…</LoadingState>:<>
-        <div className="election-admin-summary sans"><span>Status <b>{detail.status}</b></span><span>Turnout <b>{detail.turnout?.voted||0}/{detail.turnout?.eligible||0}</b></span></div>
+        <div className="election-admin-summary sans"><span>Status <b>{detail.status==="draft"&&detail.application_phase==="open"?"Applications Open":detail.status}</b></span><span>Turnout <b>{detail.turnout?.voted||0}/{detail.turnout?.eligible||0}</b></span></div>
+        {detail.status==="draft"&&detail.applications_open_at&&<div className="sans election-secret-note">Candidate applications: <b>{detail.application_phase}</b> · {String(detail.applications_open_at).replace("T"," ")} → {String(detail.applications_close_at||"").replace("T"," ")}</div>}
         {detail.status==="draft"&&<>
+          <div className="sans member-section-title">APPLICATIONS</div>
+          {!detail.applications?.length?<div className="sans election-field-help" style={{marginBottom:10}}>No candidate applications yet.</div>:detail.applications.map(a=><div key={a.id} className="election-application-admin">
+            <div className="sans"><b>{a.member_name}</b><span>{a.position_title} · {a.status}</span>{a.statement&&<small>{a.statement}</small>}</div>
+            {a.status==="pending"&&<div><button type="button" disabled={busy} onClick={()=>reviewApplication(a,"approved")}>Approve</button><button type="button" className="reject" disabled={busy} onClick={()=>reviewApplication(a,"rejected")}>Reject</button></div>}
+          </div>)}
           <div className="sans member-section-title">POSITIONS</div>
           {detail.positions.map(p=><div key={p.id} className="election-admin-position"><b className="sans">{p.title}</b><span className="sans">{p.seats} seat{Number(p.seats)===1?"":"s"} · select {p.min_selections}–{p.max_selections} · {p.candidates.length} candidates</span></div>)}
           <div className="election-position-create">

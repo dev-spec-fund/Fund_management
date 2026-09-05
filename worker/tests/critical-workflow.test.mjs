@@ -458,7 +458,7 @@ test('contribution review Telegram messages are persisted and synchronized from 
   assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"rejected"/);
   assert.match(callbacks,/recordContributionReviewMessage/);
   assert.match(callbacks,/syncContributionReviewMessages/);
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 30/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 31/);
 });
 
 test('Telegram callback can self-heal a legacy stale contribution review message', () => {
@@ -581,7 +581,7 @@ test('database backup includes election governance tables and schema version 29'
   for(const table of ['elections','election_positions','election_candidates','election_voters','election_ballots']){
     assert.match(system,new RegExp(table));
   }
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 30/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 31/);
 });
 
 
@@ -630,7 +630,7 @@ test('election integrity migration advances schema to 30', () => {
   assert.ok(candidateCols.has("withdrawal_reason"));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 30/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 31/);
 });
 
 
@@ -639,4 +639,41 @@ test('election voting rechecks lifecycle before accepting ballots and reminders 
   assert.match(elections,/post\("\/:id\/vote", async c=>\{\n  await processElectionLifecycle\(c\.env\)/);
   assert.match(elections,/remind-nonvoters", requireSuperAdmin/);
   assert.match(elections,/candidates\/:candidateId\/withdraw", requireSuperAdmin/);
+});
+
+
+test('candidate application stage is migration controlled and separated from voting', () => {
+  const db=dbWithSchema();
+  const electionCols=new Set(db.prepare("PRAGMA table_info(elections)").all().map(r=>r.name));
+  const appCols=new Set(db.prepare("PRAGMA table_info(election_applications)").all().map(r=>r.name));
+  assert.ok(electionCols.has("applications_open_at"));
+  assert.ok(electionCols.has("applications_close_at"));
+  for(const col of ["election_id","position_id","member_id","statement","status","review_reason"]) assert.ok(appCols.has(col));
+  db.close();
+
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/applicationPhase/);
+  assert.match(route,/Candidate applications are not open/);
+  assert.match(route,/Review all pending candidate applications before opening voting/);
+  assert.match(route,/election_application_\$\{decision\}/);
+  assert.match(route,/INSERT OR IGNORE INTO election_candidates/);
+});
+
+test('member can self-apply for election positions and admin can review applications', () => {
+  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(member,/APPLY FOR AN AVAILABLE POSITION/);
+  assert.match(member,/Submit candidate application/);
+  assert.match(member,/withdrawApplication/);
+  assert.match(admin,/APPLICATIONS/);
+  assert.match(admin,/reviewApplication/);
+  assert.match(api,/reviewApplication/);
+});
+
+test('ordinary members only receive their own election application records', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/detail\.applications\.filter/);
+  assert.match(route,/Number\(a\.member_id\)===Number\(member\.id\)/);
+  assert.match(route,/visibleApplications/);
 });

@@ -18,6 +18,13 @@ function localNow(timeZone="Indian/Maldives"){
   return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`;
 }
 
+function applicationPhase(election:any, now:string){
+  if(!election?.applications_open_at || !election?.applications_close_at) return "disabled";
+  if(now < election.applications_open_at) return "upcoming";
+  if(now <= election.applications_close_at) return "open";
+  return "closed";
+}
+
 async function notifyEligible(env:any,election:any,message:string, onlyNonVoters=false){
   const rows=await env.DB.prepare(`SELECT m.telegram_id FROM election_voters v
     JOIN members m ON m.id=v.member_id
@@ -34,7 +41,8 @@ export async function processElectionLifecycle(env:any){
   for(const election of drafts.results as any[]){
     const pc=await env.DB.prepare("SELECT COUNT(*) n FROM election_positions WHERE election_id=?").bind(election.id).first<any>();
     const cc=await env.DB.prepare("SELECT COUNT(*) n FROM election_candidates WHERE election_id=? AND status='active'").bind(election.id).first<any>();
-    if(!Number(pc?.n)||!Number(cc?.n))continue;
+    const pending=await env.DB.prepare("SELECT COUNT(*) n FROM election_applications WHERE election_id=? AND status='pending'").bind(election.id).first<any>();
+    if(!Number(pc?.n)||!Number(cc?.n)||Number(pending?.n)>0)continue;
     const result=await env.DB.prepare("UPDATE elections SET status='open',opened_at=datetime('now') WHERE id=? AND status='draft'").bind(election.id).run();
     if(result.meta.changes){
       await auditEntity(env,null,"election_auto_opened","election",election.id,election,{...election,status:"open"});
@@ -59,7 +67,7 @@ async function memberForUser(c:any){
 async function electionDetail(env:any,id:number){
   const election=await env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return null;
-  const [positions,candidates,voters,audit,certifier]=await Promise.all([
+  const [positions,candidates,voters,audit,certifier,applications]=await Promise.all([
     env.DB.prepare("SELECT * FROM election_positions WHERE election_id=? ORDER BY sort_order,id").bind(id).all<any>(),
     env.DB.prepare(`SELECT ec.*,m.member_code FROM election_candidates ec LEFT JOIN members m ON m.id=ec.member_id
       WHERE ec.election_id=? ORDER BY ec.position_id,ec.display_name`).bind(id).all<any>(),
@@ -69,12 +77,16 @@ async function electionDetail(env:any,id:number){
       WHERE a.action LIKE 'election_%' AND
         (a.detail LIKE ? OR a.detail LIKE ?)
       ORDER BY a.id DESC LIMIT 30`).bind(`%\"entity\":\"election\",\"entity_id\":${id}%`,`%\"election_id\":${id}%`).all<any>(),
-    election.certified_by?env.DB.prepare("SELECT name FROM admins WHERE id=?").bind(election.certified_by).first<any>():Promise.resolve(null)
+    election.certified_by?env.DB.prepare("SELECT name FROM admins WHERE id=?").bind(election.certified_by).first<any>():Promise.resolve(null),
+    env.DB.prepare(`SELECT ea.*,m.name member_name,m.member_code,ep.title position_title
+      FROM election_applications ea JOIN members m ON m.id=ea.member_id JOIN election_positions ep ON ep.id=ea.position_id
+      WHERE ea.election_id=? ORDER BY ea.submitted_at DESC`).bind(id).all<any>()
   ]);
   const eligible=Number(voters?.eligible||0),voted=Number(voters?.voted||0);
   return {...election,positions:positions.results.map((p:any)=>({...p,candidates:candidates.results.filter((x:any)=>Number(x.position_id)===Number(p.id))})),
     turnout:{eligible,voted,percent:eligible>0?Math.round((voted/eligible)*1000)/10:0},
-    audit_history:audit.results,certified_by_name:certifier?.name||null};
+    audit_history:audit.results,certified_by_name:certifier?.name||null,applications:applications.results,
+    application_phase:applicationPhase(election,localNow(env.FUND_TIMEZONE || "Indian/Maldives"))};
 }
 
 electionsRoute.get("/", async c=>{
@@ -137,16 +149,22 @@ electionsRoute.get("/:id", async c=>{
       }
     }
   }
-  return c.json({...detail,eligible,my_vote,results,results_visible:!!admin||!!detail.certified_at});
+  const visibleApplications=admin?detail.applications:(member?detail.applications.filter((a:any)=>Number(a.member_id)===Number(member.id)).map((a:any)=>({
+    id:a.id,election_id:a.election_id,position_id:a.position_id,status:a.status,statement:a.statement,submitted_at:a.submitted_at,review_reason:a.review_reason,withdrawn_at:a.withdrawn_at
+  })):[]);
+  return c.json({...detail,applications:visibleApplications,eligible,my_vote,results,results_visible:!!admin||!!detail.certified_at});
 });
 
 electionsRoute.post("/", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const body=await c.req.json<any>();
   const title=text(body.title); if(!title)return c.json({error:"Election title is required"},400);
   const opensAt=iso(body.opens_at)||null,closesAt=iso(body.closes_at)||null;
+  const applicationsOpenAt=iso(body.applications_open_at)||null,applicationsCloseAt=iso(body.applications_close_at)||null;
   if(opensAt&&closesAt&&closesAt<=opensAt)return c.json({error:"Voting close time must be after the opening time"},400);
-  const r=await c.env.DB.prepare(`INSERT INTO elections(title,term,opens_at,closes_at,status,created_by)
-    VALUES(?,?,?,?, 'draft',?)`).bind(title,text(body.term,80)||null,opensAt,closesAt,admin.id).run();
+  if(applicationsOpenAt&&applicationsCloseAt&&applicationsCloseAt<=applicationsOpenAt)return c.json({error:"Application close time must be after application opening time"},400);
+  if(applicationsCloseAt&&opensAt&&applicationsCloseAt>opensAt)return c.json({error:"Candidate applications must close before voting opens"},400);
+  const r=await c.env.DB.prepare(`INSERT INTO elections(title,term,opens_at,closes_at,applications_open_at,applications_close_at,status,created_by)
+    VALUES(?,?,?,?,?,?, 'draft',?)`).bind(title,text(body.term,80)||null,opensAt,closesAt,applicationsOpenAt,applicationsCloseAt,admin.id).run();
   const id=Number(r.meta.last_row_id);
   await auditEntity(c.env,admin.id,"election_created","election",id,null,{title,term:body.term||null});
   return c.json(await electionDetail(c.env,id),201);
@@ -157,9 +175,12 @@ electionsRoute.patch("/:id", requireSuperAdmin, async c=>{
   if(!before)return c.json({error:"Election not found"},404); if(before.status!=="draft")return c.json({error:"Only draft elections can be edited"},409);
   const body=await c.req.json<any>(); const title=text(body.title||before.title);
   const opensAt=iso(body.opens_at??before.opens_at)||null,closesAt=iso(body.closes_at??before.closes_at)||null;
+  const applicationsOpenAt=iso(body.applications_open_at??before.applications_open_at)||null,applicationsCloseAt=iso(body.applications_close_at??before.applications_close_at)||null;
   if(opensAt&&closesAt&&closesAt<=opensAt)return c.json({error:"Voting close time must be after the opening time"},400);
-  await c.env.DB.prepare("UPDATE elections SET title=?,term=?,opens_at=?,closes_at=? WHERE id=?")
-    .bind(title,text(body.term??before.term,80)||null,opensAt,closesAt,id).run();
+  if(applicationsOpenAt&&applicationsCloseAt&&applicationsCloseAt<=applicationsOpenAt)return c.json({error:"Application close time must be after application opening time"},400);
+  if(applicationsCloseAt&&opensAt&&applicationsCloseAt>opensAt)return c.json({error:"Candidate applications must close before voting opens"},400);
+  await c.env.DB.prepare("UPDATE elections SET title=?,term=?,opens_at=?,closes_at=?,applications_open_at=?,applications_close_at=? WHERE id=?")
+    .bind(title,text(body.term??before.term,80)||null,opensAt,closesAt,applicationsOpenAt,applicationsCloseAt,id).run();
   const after=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   await auditEntity(c.env,admin.id,"election_updated","election",id,before,after);
   return c.json(await electionDetail(c.env,id));
@@ -197,7 +218,11 @@ electionsRoute.post("/:id/open", requireSuperAdmin, async c=>{
   if(!election)return c.json({error:"Election not found"},404); if(election.status!=="draft")return c.json({error:"Election is not draft"},409);
   const pc=await c.env.DB.prepare("SELECT COUNT(*) n FROM election_positions WHERE election_id=?").bind(id).first<any>();
   const cc=await c.env.DB.prepare("SELECT COUNT(*) n FROM election_candidates WHERE election_id=? AND status='active'").bind(id).first<any>();
-  if(!Number(pc?.n)||!Number(cc?.n))return c.json({error:"Add at least one position and candidate before opening"},400);
+  const pending=await c.env.DB.prepare("SELECT COUNT(*) n FROM election_applications WHERE election_id=? AND status='pending'").bind(id).first<any>();
+  const phase=applicationPhase(election,localNow(c.env.FUND_TIMEZONE || "Indian/Maldives"));
+  if(phase==="open")return c.json({error:"Candidate applications are still open"},409);
+  if(Number(pending?.n)>0)return c.json({error:"Review all pending candidate applications before opening voting"},409);
+  if(!Number(pc?.n)||!Number(cc?.n))return c.json({error:"Add or approve at least one candidate before opening"},400);
   await c.env.DB.batch([
     c.env.DB.prepare("INSERT OR IGNORE INTO election_voters(election_id,member_id) SELECT ?,id FROM members WHERE active=1").bind(id),
     c.env.DB.prepare("UPDATE elections SET status='open',opened_at=datetime('now') WHERE id=? AND status='draft'").bind(id)
@@ -224,6 +249,57 @@ electionsRoute.post("/:id/cancel", requireSuperAdmin, async c=>{
   if(!election)return c.json({error:"Election not found"},404); if(election.status==="closed")return c.json({error:"Closed election cannot be cancelled"},409);
   await c.env.DB.prepare("UPDATE elections SET status='cancelled',closed_at=datetime('now') WHERE id=?").bind(id).run();
   await auditEntity(c.env,admin.id,"election_cancelled","election",id,election,{...election,status:"cancelled"});
+  return c.json(await electionDetail(c.env,id));
+});
+
+electionsRoute.post("/:id/applications", async c=>{
+  await ensureOperationalSchema(c.env);
+  const id=Number(c.req.param("id")); const member=await memberForUser(c);
+  if(!member)return c.json({error:"Approved member account required"},403);
+  const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+  if(election.status!=="draft" || applicationPhase(election,localNow(c.env.FUND_TIMEZONE || "Indian/Maldives"))!=="open")
+    return c.json({error:"Candidate applications are not open"},409);
+  const body=await c.req.json<any>().catch(()=>({})); const positionId=Number(body.position_id);
+  const position=await c.env.DB.prepare("SELECT id,title FROM election_positions WHERE id=? AND election_id=?").bind(positionId,id).first<any>();
+  if(!position)return c.json({error:"Choose a valid available position"},400);
+  try{
+    const r=await c.env.DB.prepare(`INSERT INTO election_applications(election_id,position_id,member_id,statement)
+      VALUES(?,?,?,?)`).bind(id,positionId,member.id,text(body.statement,600)||null).run();
+    return c.json({ok:true,id:Number(r.meta.last_row_id),status:"pending"},201);
+  }catch{return c.json({error:"You have already applied for this position"},409)}
+});
+
+electionsRoute.post("/:id/applications/:applicationId/withdraw", async c=>{
+  const id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId")); const member=await memberForUser(c);
+  if(!member)return c.json({error:"Approved member account required"},403);
+  const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+  if(applicationPhase(election,localNow(c.env.FUND_TIMEZONE || "Indian/Maldives"))!=="open")return c.json({error:"Application withdrawal period has ended"},409);
+  const r=await c.env.DB.prepare(`UPDATE election_applications SET status='withdrawn',withdrawn_at=datetime('now')
+    WHERE id=? AND election_id=? AND member_id=? AND status='pending'`).bind(applicationId,id,member.id).run();
+  if(!r.meta.changes)return c.json({error:"Application cannot be withdrawn"},409);
+  return c.json({ok:true});
+});
+
+electionsRoute.post("/:id/applications/:applicationId/review", requireSuperAdmin, async c=>{
+  const admin=c.get("admin")!,id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId"));
+  const body=await c.req.json<any>().catch(()=>({})); const decision=String(body.decision||"");
+  if(!["approved","rejected"].includes(decision))return c.json({error:"Decision must be approved or rejected"},400);
+  const application=await c.env.DB.prepare(`SELECT ea.*,m.name member_name FROM election_applications ea
+    JOIN members m ON m.id=ea.member_id WHERE ea.id=? AND ea.election_id=?`).bind(applicationId,id).first<any>();
+  if(!application)return c.json({error:"Application not found"},404); if(application.status!=="pending")return c.json({error:"Application is already decided"},409);
+  const reason=text(body.reason,300)||null;
+  if(decision==="approved"){
+    await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE election_applications SET status='approved',reviewed_at=datetime('now'),reviewed_by=?,review_reason=? WHERE id=? AND status='pending'`).bind(admin.id,reason,applicationId),
+      c.env.DB.prepare(`INSERT OR IGNORE INTO election_candidates(election_id,position_id,member_id,display_name) VALUES(?,?,?,?)`).bind(id,application.position_id,application.member_id,application.member_name)
+    ]);
+  }else{
+    await c.env.DB.prepare(`UPDATE election_applications SET status='rejected',reviewed_at=datetime('now'),reviewed_by=?,review_reason=? WHERE id=? AND status='pending'`)
+      .bind(admin.id,reason,applicationId).run();
+  }
+  await auditEntity(c.env,admin.id,`election_application_${decision}`,"election_application",applicationId,{...application,election_id:id},{...application,election_id:id,status:decision,review_reason:reason});
   return c.json(await electionDetail(c.env,id));
 });
 
