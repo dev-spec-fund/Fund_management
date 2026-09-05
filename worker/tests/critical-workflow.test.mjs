@@ -458,7 +458,7 @@ test('contribution review Telegram messages are persisted and synchronized from 
   assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"rejected"/);
   assert.match(callbacks,/recordContributionReviewMessage/);
   assert.match(callbacks,/syncContributionReviewMessages/);
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 33/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 34/);
 });
 
 test('Telegram callback can self-heal a legacy stale contribution review message', () => {
@@ -581,7 +581,7 @@ test('database backup includes election governance tables and schema version 29'
   for(const table of ['elections','election_positions','election_candidates','election_voters','election_ballots']){
     assert.match(system,new RegExp(table));
   }
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 33/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 34/);
 });
 
 
@@ -630,7 +630,7 @@ test('election integrity migration advances schema to 30', () => {
   assert.ok(candidateCols.has("withdrawal_reason"));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 33/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 34/);
 });
 
 
@@ -723,7 +723,7 @@ test('v50 runoff tables and EXCO role history are migration controlled', () => {
   for(const col of ['member_id','election_id','position_id','role_title','term','started_at','ended_at']) assert.ok(roleCols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 33/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 34/);
 });
 
 test('tie results require anonymous runoff and block certification until resolved', () => {
@@ -1060,4 +1060,66 @@ test('v59 election application notification safely escapes member supplied text'
   assert.match(route,/esc\(election\.title\)/);
   assert.match(route,/esc\(statement\)/);
   assert.match(route,/miniAppUrl/);
+});
+
+
+test('v60 election notification delivery log is migration controlled', () => {
+  const db=dbWithSchema();
+  const cols=new Set(db.prepare("PRAGMA table_info(election_notification_log)").all().map(r=>r.name));
+  for(const col of ['election_id','event_key','audience','sent','failed','detail','created_by','created_at']) assert.ok(cols.has(col));
+  db.close();
+  const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 34/);
+});
+
+test('v60 logs voting, reminder, runoff, certification and application notification delivery', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  for(const event of [
+    'applications_closing_24h',
+    'voting_opened',
+    'voting_closing_24h',
+    'runoff_opened:',
+    'runoff_closing_24h:',
+    'results_certified',
+    'elected_roles_assigned',
+    'new_application_admin:',
+    'application_submitted_member:'
+  ]) assert.match(route,new RegExp(event.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(route,/recordElectionNotification/);
+  assert.match(route,/processElectionClosingReminders/);
+});
+
+test('v60 Admin can review notification delivery status with sent and failed counts', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(route,/\/:id\/notifications/);
+  assert.match(route,/ORDER BY n\.id DESC LIMIT 50/);
+  assert.match(api,/notifications: \(id\)/);
+  assert.match(admin,/NOTIFICATION STATUS/);
+  assert.match(admin,/sent ·/);
+  assert.match(admin,/failed/);
+});
+
+test('v60 Member App exposes clear election lifecycle stages and next actions', () => {
+  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+  for(const label of [
+    'Applications Open',
+    'Pending Review',
+    'Approved Candidate',
+    'Voting Opens Soon',
+    'Voting Open',
+    'You Have Voted',
+    'Runoff Open',
+    'Results Certified'
+  ]) assert.match(member,new RegExp(label));
+  assert.match(member,/MemberElectionStageBanner/);
+  assert.match(member,/my_application_status/);
+});
+
+test('v60 election list includes own application status and open-runoff state', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/my_application_status/);
+  assert.match(route,/open_runoffs/);
+  assert.match(route,/application_phase:applicationPhase/);
 });

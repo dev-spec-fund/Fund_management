@@ -72,13 +72,15 @@ export function MemberElections(){
         <strong>{Number(e.turnout?.percent||0).toFixed(1)}%<small>turnout</small></strong>
       </button>)}
     </section>}
-    {!rows.length?<EmptyState>No elections available.</EmptyState>:rows.map(e=><button key={e.id} type="button" onClick={()=>open(e)} className="member-election-card">
-      <div><b className="sans">{e.title}</b><span className="sans">{e.term||""}</span></div>
-      <div className="sans"><strong>{e.status==="draft"?"View applications ›":e.status==="open"?(e.my_vote?"Vote submitted ✓":"Vote now ›"):e.status==="closed"?"View results ›":String(e.status)}</strong><span>{e.turnout?.voted||0}/{e.turnout?.eligible||0} voted · {Number(e.turnout?.percent||0).toFixed(1)}%</span></div>
-    </button>)}
+    {!rows.length?<EmptyState>No elections available.</EmptyState>:rows.map(e=>{const stage=memberElectionStage(e);return <button key={e.id} type="button" onClick={()=>open(e)} className={`member-election-card stage-${stage.tone}`}>
+      <div><b className="sans">{e.title}</b><span className="sans">{e.term||""}</span><small className="sans member-election-stage-pill">{stage.label}</small></div>
+      <div className="sans"><strong>{stage.action}</strong><span>{stage.note||`${e.turnout?.voted||0}/${e.turnout?.eligible||0} voted · ${Number(e.turnout?.percent||0).toFixed(1)}%`}</span></div>
+    </button>})}
     {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setSummary(null)}}>
       {!detail?<LoadingState>Loading ballot…</LoadingState>:<>
-        <div className="sans election-secret-note">🔒 Secret ballot. The system records that you voted, but ballot selections are stored without your member ID.</div>        {detail.status==="draft"&&<>
+        <MemberElectionStageBanner detail={detail}/>
+        <div className="sans election-secret-note">🔒 Secret ballot. The system records that you voted, but ballot selections are stored without your member ID.</div>
+        {detail.status==="draft"&&<>
           <div className={`sans election-application-status ${detail.application_phase}`}>{detail.application_phase==="open"?"Candidate applications are open":detail.application_phase==="upcoming"?"Candidate applications have not opened yet":"Candidate applications are closed"}</div>
           {!!detail.applications?.length&&<div className="election-my-applications">{detail.applications.map(a=><div key={a.id} className={`sans election-my-application status-${a.status}`}>
             <div>
@@ -134,6 +136,50 @@ export function MemberElections(){
     {confirmationDialog}
   </>;
 }
+function memberElectionStage(e){
+  if(e.certified_at)return {label:"Results Certified",action:"View official results ›",tone:"certified"};
+  if(Number(e.open_runoffs||0)>0)return {label:"Runoff Open",action:"Vote in runoff ›",tone:"active"};
+  if(e.status==="open")return e.my_vote
+    ? {label:"You Have Voted",action:"Vote submitted ✓",tone:"done"}
+    : {label:"Voting Open",action:"Vote now ›",tone:"active"};
+  if(e.status==="closed")return {label:"Voting Closed",action:"View election status ›",tone:"waiting"};
+  if(e.status==="cancelled")return {label:"Cancelled",action:"View details ›",tone:"muted"};
+  if(e.my_application_status==="pending")return {label:"Pending Review",action:"View application ›",tone:"waiting"};
+  if(e.my_application_status==="approved")return {label:"Approved Candidate",action:"View candidacy ›",tone:"done"};
+  if(e.my_application_status==="rejected")return {label:"Application Rejected",action:"View details ›",tone:"muted"};
+  if(e.my_application_status==="withdrawn")return {label:"Application Withdrawn",action:"View details ›",tone:"muted"};
+  if(e.application_phase==="open")return {label:"Applications Open",action:"Apply for position ›",tone:"active"};
+  if(e.application_phase==="upcoming")return {label:"Applications Open Soon",action:"View schedule ›",tone:"waiting"};
+  if(e.application_phase==="closed")return {label:"Voting Opens Soon",action:"View candidates ›",tone:"waiting"};
+  return {label:"Election Draft",action:"View details ›",tone:"muted"};
+}
+
+function MemberElectionStageBanner({detail}){
+  const openRunoff=detail.runoffs?.find(r=>r.status==="open");
+  let label="",note="",tone="waiting";
+  if(detail.certified_at){label="Results Certified";note="Official results and EXCO assignments are available.";tone="certified"}
+  else if(openRunoff){
+    const mine=detail.my_runoff_votes?.[String(openRunoff.id)];
+    label=mine?.voted?"Runoff Vote Submitted":"Runoff Open";
+    note=mine?.voted?`Your runoff ballot for ${openRunoff.position_title} has been submitted.`:`Vote in the ${openRunoff.position_title} runoff before it closes.`;
+    tone=mine?.voted?"done":"active";
+  }else if(detail.status==="open"){
+    label=detail.my_vote?"You Have Voted":"Voting Open";
+    note=detail.my_vote?"Your secret ballot has been submitted.":"Submit your secret ballot before voting closes.";
+    tone=detail.my_vote?"done":"active";
+  }else if(detail.status==="closed"){
+    label="Voting Closed";note="Results are awaiting certification.";tone="waiting";
+  }else if(detail.status==="draft"){
+    const latest=detail.applications?.[0];
+    if(latest?.status==="pending"){label="Application Under Review";note="Your application is waiting for Admin review.";tone="waiting"}
+    else if(latest?.status==="approved"){label="Approved Candidate";note="Your application is approved. Wait for voting to open.";tone="done"}
+    else if(detail.application_phase==="open"){label="Applications Open";note=`Applications close ${formatApplicationDate(detail.applications_close_at)}.`;tone="active"}
+    else if(detail.application_phase==="upcoming"){label="Applications Open Soon";note=`Applications open ${formatApplicationDate(detail.applications_open_at)}.`;tone="waiting"}
+    else {label="Voting Opens Soon";note=detail.opens_at?`Voting opens ${formatApplicationDate(detail.opens_at)}.`:"Candidate applications are closed.";tone="waiting"}
+  }else{label=String(detail.status||"Election");note="";tone="muted"}
+  return <div className={`sans member-election-stage-banner ${tone}`}><b>{label}</b>{note&&<span>{note}</span>}</div>
+}
+
 function memberApplicationStatus(a){
   if(a.status==="pending")return "Pending Review";
   if(a.status==="approved")return "Approved Candidate";

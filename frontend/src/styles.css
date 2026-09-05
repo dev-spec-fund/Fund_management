@@ -2963,3 +2963,51 @@ button:not(:disabled):active {
   border:1px solid var(--warning-border);border-radius:8px;background:var(--warning-bg);
   color:var(--warning);font-size:8px;line-height:1.4;padding:8px 9px;margin-top:8px
 }
+
+
+/* v60 election notification delivery + member stage polish */
+.election-notification-status{
+  border:1px solid var(--border);border-radius:11px;background:var(--card);
+  padding:10px 11px;margin:8px 0 12px
+}
+.election-notification-heading{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px
+}
+.election-notification-heading b{font-size:9px;color:var(--primary-text)}
+.election-notification-heading span{font-size:8px;color:var(--soft)}
+.election-notification-row{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  border-top:1px solid var(--divider);padding:7px 0
+}
+.election-notification-row span{min-width:0;flex:1}
+.election-notification-row b,.election-notification-row small{display:block}
+.election-notification-row b{font-size:9px;color:var(--primary-text)}
+.election-notification-row small{font-size:7px;color:var(--soft);margin-top:2px}
+.election-notification-row strong{font-size:8px;color:var(--success);text-align:right;white-space:nowrap}
+.election-notification-row strong.has-fail{color:var(--warning)}
+
+.member-election-stage-pill{
+  display:inline-flex!important;width:max-content;margin-top:5px;padding:3px 6px;border-radius:999px;
+  border:1px solid var(--border);background:var(--button-soft);font-size:7px!important;
+  font-weight:800!important;color:var(--primary-text)!important
+}
+.member-election-card.stage-active .member-election-stage-pill{background:var(--success-bg);border-color:var(--success-border);color:var(--success)!important}
+.member-election-card.stage-certified .member-election-stage-pill,
+.member-election-card.stage-done .member-election-stage-pill{background:var(--success-bg);border-color:var(--success-border);color:var(--success)!important}
+.member-election-card.stage-waiting .member-election-stage-pill{background:var(--warning-bg);border-color:var(--warning-border);color:var(--warning)!important}
+.member-election-card.stage-muted .member-election-stage-pill{opacity:.8}
+
+.member-election-stage-banner{
+  border:1px solid var(--border);border-radius:11px;padding:10px 11px;margin-bottom:9px;background:var(--card)
+}
+.member-election-stage-banner b,.member-election-stage-banner span{display:block}
+.member-election-stage-banner b{font-size:10px;color:var(--primary-text)}
+.member-election-stage-banner span{font-size:8px;color:var(--muted);line-height:1.45;margin-top:3px}
+.member-election-stage-banner.active{background:var(--success-bg);border-color:var(--success-border)}
+.member-election-stage-banner.active b,
+.member-election-stage-banner.done b,
+.member-election-stage-banner.certified b{color:var(--success)}
+.member-election-stage-banner.done,
+.member-election-stage-banner.certified{background:var(--success-bg);border-color:var(--success-border)}
+.member-election-stage-banner.waiting{background:var(--warning-bg);border-color:var(--warning-border)}
+.member-election-stage-banner.waiting b{color:var(--warning)}

@@ -423,6 +423,7 @@ export const api = {
     readiness: (id) => request(`/api/elections/${id}/readiness`),
     repairApplicationSync: (id) => request(`/api/elections/${id}/repair-application-sync`, { method:"POST" }),
     summary: (id) => request(`/api/elections/${id}/summary`),
+    notifications: (id) => request(`/api/elections/${id}/notifications`),
     archive: () => request("/api/elections/archive"),
     create: (data) => request("/api/elections", { method:"POST", body:JSON.stringify(data) }),
     update: (id,data) => request(`/api/elections/${id}`, { method:"PATCH", body:JSON.stringify(data) }),

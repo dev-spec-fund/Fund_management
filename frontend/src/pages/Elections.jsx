@@ -10,6 +10,7 @@ export default function Elections(){
   const [detail,setDetail]=useState(null);
   const [readiness,setReadiness]=useState(null);
   const [summary,setSummary]=useState(null);
+  const [notificationStatus,setNotificationStatus]=useState(null);
   const [showCreate,setShowCreate]=useState(false);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
@@ -42,6 +43,14 @@ export default function Elections(){
     api.elections.summary(detail.id).then(r=>{if(active)setSummary(r)}).catch(e=>{if(active){setSummary(null);setMessage(e.message)}});
     return ()=>{active=false};
   },[detail?.id,detail?.certified_at]);
+  const refreshNotificationStatus=async(id=detail?.id)=>{
+    if(!id)return;
+    try{setNotificationStatus(await api.refreshCached(`/api/elections/${id}/notifications`))}catch(e){setNotificationStatus(null)}
+  };
+  useEffect(()=>{
+    if(!detail?.id){setNotificationStatus(null);return;}
+    refreshNotificationStatus(detail.id);
+  },[detail?.id,detail?.status,detail?.certified_at]);
 
   const repairApplicationSync=async()=>{
     if(!detail)return;
@@ -108,14 +117,14 @@ export default function Elections(){
     }catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const remindNonVoters=async()=>{
-    setBusy(true);try{const r=await api.elections.remindNonVoters(detail.id);setMessage(`Voting reminder sent: ${r.sent||0}${r.failed?` · ${r.failed} failed`:""}`)}catch(e){setMessage(e.message)}finally{setBusy(false)}
+    setBusy(true);try{const r=await api.elections.remindNonVoters(detail.id);setMessage(`Voting reminder sent: ${r.sent||0}${r.failed?` · ${r.failed} failed`:""}`);await refreshNotificationStatus()}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const startRunoff=async(tie)=>{
     const closesAt=window.prompt("Runoff closing date/time (YYYY-MM-DDTHH:MM), or leave blank to close manually:","") ?? null;
     if(closesAt===null)return;
     setBusy(true);try{
       await api.elections.startRunoff(detail.id,{position_id:tie.position_id,closes_at:closesAt||null});
-      setDetail(await api.elections.get(detail.id));setMessage(`Runoff opened for ${tie.position_title}.`);
+      setDetail(await api.elections.get(detail.id));await refreshNotificationStatus();setMessage(`Runoff opened for ${tie.position_title}.`);
     }catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const closeRunoff=async(runoff)=>{
@@ -125,10 +134,10 @@ export default function Elections(){
 
   const certify=async()=>{
     if(!await confirm({title:"Certify election results?",message:"Certification makes the results final and publishes them to members. Ballots remain secret.",confirmLabel:"Certify results",tone:"primary"}))return;
-    setBusy(true);try{await api.elections.certify(detail.id);setDetail(await api.elections.get(detail.id));await load();setMessage("Election certified · EXCO roles assigned and published.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
+    setBusy(true);try{await api.elections.certify(detail.id);setDetail(await api.elections.get(detail.id));await load();await refreshNotificationStatus();setMessage("Election certified · EXCO roles assigned and published.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
 
-  const changeStatus=async(action)=>{if(!detail)return;if(!await confirm({title:`${action[0].toUpperCase()+action.slice(1)} election?`,message:action==="open"?"Eligible voters will be snapshotted, Telegram-linked members will be notified, and all election setup will become read-only.":`Are you sure you want to ${action} this election?`,confirmLabel:action[0].toUpperCase()+action.slice(1),tone:action==="cancel"?"danger":"primary"}))return;setBusy(true);try{const d=await api.elections[action](detail.id);setDetail(d);await load();setMessage(action==="open"?"Election opened. Eligible voters were snapshotted.":action==="close"?"Election closed. Results are now available.":"Election cancelled.")}catch(e){setMessage(e.message)}finally{setBusy(false)}};
+  const changeStatus=async(action)=>{if(!detail)return;if(!await confirm({title:`${action[0].toUpperCase()+action.slice(1)} election?`,message:action==="open"?"Eligible voters will be snapshotted, Telegram-linked members will be notified, and all election setup will become read-only.":`Are you sure you want to ${action} this election?`,confirmLabel:action[0].toUpperCase()+action.slice(1),tone:action==="cancel"?"danger":"primary"}))return;setBusy(true);try{const d=await api.elections[action](detail.id);setDetail(d);await load();await refreshNotificationStatus(detail.id);setMessage(action==="open"?"Election opened. Eligible voters were snapshotted.":action==="close"?"Election closed. Results are now available.":"Election cancelled.")}catch(e){setMessage(e.message)}finally{setBusy(false)}};
 
   if(rows===null)return <LoadingState>Loading elections…</LoadingState>;
   return <>
@@ -162,9 +171,16 @@ export default function Elections(){
       <button type="button" disabled={busy} onClick={create} style={{...approveBtn,width:"100%"}}>{busy?"Creating…":"Create draft"}</button>
     </Modal>}
 
-    {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setReadiness(null);setSummary(null)}}>
+    {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setReadiness(null);setSummary(null);setNotificationStatus(null)}}>
       {!detail?<LoadingState>Loading election…</LoadingState>:<>
         <div className="election-admin-summary sans"><span>Status <b>{detail.status==="draft"&&detail.application_phase==="open"?"Applications Open":detail.status}</b></span><span>Turnout <b>{detail.turnout?.voted||0}/{detail.turnout?.eligible||0}</b></span></div>
+        {notificationStatus&&<section className="election-notification-status">
+          <div className="sans election-notification-heading"><b>NOTIFICATION STATUS</b><span>{notificationStatus.totals?.sent||0} sent · {notificationStatus.totals?.failed||0} failed</span></div>
+          {!notificationStatus.items?.length?<div className="sans election-field-help">No election notifications recorded yet.</div>:notificationStatus.items.slice(0,6).map(n=><div key={n.id} className="sans election-notification-row">
+            <span><b>{notificationEventLabel(n.event_key)}</b><small>{n.audience} · {formatElectionDate(n.created_at)}</small></span>
+            <strong className={Number(n.failed||0)>0?"has-fail":""}>{n.sent} sent{Number(n.failed||0)>0?` · ${n.failed} failed`:""}</strong>
+          </div>)}
+        </section>}
         {detail.status==="draft"&&detail.applications_open_at&&<>
           <div className="sans election-secret-note">Candidate applications: <b>{detail.application_phase}</b> · {String(detail.applications_open_at).replace("T"," ")} → {String(detail.applications_close_at||"").replace("T"," ")}</div>
           <button type="button" disabled={busy} onClick={extendApplications} className="sans election-extend-deadline">Extend application deadline</button>
@@ -263,6 +279,22 @@ export default function Elections(){
     </Modal>}
     {confirmationDialog}
   </>;
+}
+
+function notificationEventLabel(key){
+  const k=String(key||"");
+  if(k==="voting_opened")return "Voting opened";
+  if(k==="voting_closing_24h")return "Voting closing reminder";
+  if(k.startsWith("manual_voting_reminder"))return "Manual voting reminder";
+  if(k.startsWith("runoff_opened"))return "Runoff opened";
+  if(k.startsWith("runoff_closing_24h"))return "Runoff closing reminder";
+  if(k==="results_certified")return "Results certified";
+  if(k==="elected_roles_assigned")return "Elected-role notice";
+  if(k.startsWith("new_application_admin"))return "New application → Admin";
+  if(k.startsWith("application_submitted_member"))return "Application confirmation";
+  if(k.startsWith("application_approved"))return "Application approved";
+  if(k.startsWith("application_rejected"))return "Application rejected";
+  return k.replaceAll("_"," ");
 }
 
 function applicationStatusLabel(a){

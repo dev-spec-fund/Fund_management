@@ -36,6 +36,58 @@ async function notifyEligible(env:any,election:any,message:string, onlyNonVoters
   return {sent:results.filter(r=>r.status==="fulfilled").length,failed:results.filter(r=>r.status==="rejected").length};
 }
 
+async function recordElectionNotification(env:any,electionId:number,eventKey:string,audience:string,result:any,detail:any=null,createdBy:number|null=null){
+  const sent=Number(result?.sent||0),failed=Number(result?.failed||0);
+  await env.DB.prepare(`INSERT INTO election_notification_log(election_id,event_key,audience,sent,failed,detail,created_by)
+    VALUES(?,?,?,?,?,?,?)`).bind(electionId,eventKey,audience,sent,failed,detail==null?null:JSON.stringify(detail),createdBy).run();
+  return {sent,failed};
+}
+
+async function notificationAlreadySent(env:any,electionId:number,eventKey:string){
+  const row=await env.DB.prepare("SELECT id FROM election_notification_log WHERE election_id=? AND event_key=? LIMIT 1")
+    .bind(electionId,eventKey).first<any>();
+  return !!row;
+}
+
+async function notifyRunoffNonVoters(env:any,runoff:any,message:string){
+  const rows=await env.DB.prepare(`SELECT m.telegram_id FROM election_runoff_voters v
+    JOIN members m ON m.id=v.member_id
+    WHERE v.runoff_id=? AND v.voted_at IS NULL AND m.telegram_id IS NOT NULL`).bind(runoff.id).all<any>();
+  const results=await Promise.allSettled((rows.results as any[]).map((m:any)=>sendMessage(env,m.telegram_id,message)));
+  return {sent:results.filter((r:any)=>r.status==="fulfilled").length,failed:results.filter((r:any)=>r.status==="rejected").length};
+}
+
+async function processElectionClosingReminders(env:any){
+  const now=localNow(env.FUND_TIMEZONE || "Indian/Maldives");
+  const nowMs=Date.parse(`${now}Z`);
+  const brand=await getBranding(env);
+
+  const elections=await env.DB.prepare(`SELECT * FROM elections WHERE status='open'
+    AND closes_at IS NOT NULL AND closes_at<>'' AND closes_at>?`).bind(now).all<any>();
+  for(const election of elections.results as any[]){
+    const closeMs=Date.parse(`${election.closes_at}Z`);
+    if(!Number.isFinite(closeMs)||!Number.isFinite(nowMs)||closeMs-nowMs>24*60*60*1000)continue;
+    const eventKey="voting_closing_24h";
+    if(await notificationAlreadySent(env,election.id,eventKey))continue;
+    const result=await notifyEligible(env,election,
+      `⏳ <b>${brand.fund_name} · ${election.title}</b>\n\nVoting closes within 24 hours and you have not voted yet. Open the Mini App to submit your secret ballot.`,true);
+    await recordElectionNotification(env,election.id,eventKey,"non_voters",result,{closes_at:election.closes_at});
+  }
+
+  const runoffs=await env.DB.prepare(`SELECT r.*,e.title election_title,ep.title position_title
+    FROM election_runoffs r JOIN elections e ON e.id=r.election_id JOIN election_positions ep ON ep.id=r.position_id
+    WHERE r.status='open' AND r.closes_at IS NOT NULL AND r.closes_at<>'' AND r.closes_at>?`).bind(now).all<any>();
+  for(const runoff of runoffs.results as any[]){
+    const closeMs=Date.parse(`${runoff.closes_at}Z`);
+    if(!Number.isFinite(closeMs)||!Number.isFinite(nowMs)||closeMs-nowMs>24*60*60*1000)continue;
+    const eventKey=`runoff_closing_24h:${runoff.id}`;
+    if(await notificationAlreadySent(env,runoff.election_id,eventKey))continue;
+    const result=await notifyRunoffNonVoters(env,runoff,
+      `⏳ <b>${brand.fund_name} · Runoff Vote</b>\n\nThe runoff for <b>${runoff.position_title}</b> in ${runoff.election_title} closes within 24 hours. Open the Mini App to vote.`);
+    await recordElectionNotification(env,runoff.election_id,eventKey,"runoff_non_voters",result,{runoff_id:runoff.id,closes_at:runoff.closes_at});
+  }
+}
+
 async function processApplicationReminders(env:any){
   const now=localNow(env.FUND_TIMEZONE || "Indian/Maldives");
   const currentMs=Date.parse(`${now}Z`);
@@ -47,13 +99,14 @@ async function processApplicationReminders(env:any){
     if(!Number.isFinite(currentMs)||!Number.isFinite(closeMs)||closeMs-currentMs>24*60*60*1000)continue;
     const members=await env.DB.prepare(`SELECT m.* FROM members m WHERE m.active=1 AND m.telegram_id IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM election_applications ea WHERE ea.election_id=? AND ea.member_id=m.id AND ea.status IN ('pending','approved'))`).bind(election.id).all<any>();
-    const brand=await getBranding(env); let sent=0;
-    for(const member of members.results as any[]){
-      await sendMessage(env,member.telegram_id,`⏳ <b>${brand.fund_name} · ${election.title}</b>\n\nCandidate applications close within 24 hours. All registered active members can apply for an available EXCO position in the Mini App.`).catch(()=>null);
-      sent++;
-    }
+    const brand=await getBranding(env);
+    const deliveries=await Promise.allSettled((members.results as any[]).map((member:any)=>sendMessage(env,member.telegram_id,
+      `⏳ <b>${brand.fund_name} · ${election.title}</b>\n\nCandidate applications close within 24 hours. All registered active members can apply for an available EXCO position in the Mini App.`
+    )));
+    const result={sent:deliveries.filter((r:any)=>r.status==="fulfilled").length,failed:deliveries.filter((r:any)=>r.status==="rejected").length};
     await env.DB.prepare("UPDATE elections SET application_reminder_sent_at=datetime('now') WHERE id=? AND application_reminder_sent_at IS NULL").bind(election.id).run();
-    await auditEntity(env,null,"election_application_reminder_sent","election",election.id,null,{election_id:election.id,sent});
+    await recordElectionNotification(env,election.id,"applications_closing_24h","eligible_non_applicants",result,{closes_at:election.applications_close_at});
+    await auditEntity(env,null,"election_application_reminder_sent","election",election.id,null,{election_id:election.id,sent:result.sent,failed:result.failed});
   }
 }
 
@@ -204,6 +257,7 @@ async function evaluateElectionReadiness(env:any,election:any){
 
 export async function processElectionLifecycle(env:any){
   await processApplicationReminders(env);
+  await processElectionClosingReminders(env);
   const now=localNow(env.FUND_TIMEZONE || "Indian/Maldives");
   const drafts=await env.DB.prepare(`SELECT * FROM elections
     WHERE status='draft' AND opens_at IS NOT NULL AND opens_at<>'' AND opens_at<=?`).bind(now).all<any>();
@@ -216,7 +270,8 @@ export async function processElectionLifecycle(env:any){
       await auditEntity(env,null,"election_auto_opened","election",election.id,election,{...election,status:"open"});
       await env.DB.prepare("INSERT OR IGNORE INTO election_voters(election_id,member_id) SELECT ?,id FROM members WHERE active=1").bind(election.id).run();
       const brand=await getBranding(env);
-      await notifyEligible(env,election,`🗳 <b>${brand.fund_name} · ${election.title}</b>\n\nVoting is now open. Open the Mini App to cast your secret ballot.`).catch(()=>{});
+      const delivery=await notifyEligible(env,election,`🗳 <b>${brand.fund_name} · ${election.title}</b>\n\nVoting is now open. Open the Mini App to cast your secret ballot.`).catch(()=>({sent:0,failed:0}));
+      await recordElectionNotification(env,election.id,"voting_opened","eligible_voters",delivery,{automatic:true});
     }
   }
   const open=await env.DB.prepare(`SELECT * FROM elections
@@ -437,7 +492,8 @@ electionsRoute.get("/", async c=>{
   const admin=c.get("admin");
   const rows=await c.env.DB.prepare(`SELECT e.*,
     (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id) eligible,
-    (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id AND v.voted_at IS NOT NULL) voted
+    (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id AND v.voted_at IS NOT NULL) voted,
+    (SELECT COUNT(*) FROM election_runoffs r WHERE r.election_id=e.id AND r.status='open') open_runoffs
     FROM elections e
     WHERE ? IS NOT NULL
        OR e.status<>'draft'
@@ -451,13 +507,19 @@ electionsRoute.get("/", async c=>{
     .bind(admin?.id||null).all<any>();
   const result=[];
   for(const e of rows.results as any[]){
-    let my_vote=false,eligible=false;
+    let my_vote=false,eligible=false,my_application_status:string|null=null;
     if(member){
-      const v=await c.env.DB.prepare("SELECT voted_at FROM election_voters WHERE election_id=? AND member_id=?").bind(e.id,member.id).first<any>();
-      eligible=!!v; my_vote=!!v?.voted_at;
+      const [v,app]=await Promise.all([
+        c.env.DB.prepare("SELECT voted_at FROM election_voters WHERE election_id=? AND member_id=?").bind(e.id,member.id).first<any>(),
+        c.env.DB.prepare(`SELECT status FROM election_applications WHERE election_id=? AND member_id=?
+          ORDER BY submitted_at DESC,id DESC LIMIT 1`).bind(e.id,member.id).first<any>()
+      ]);
+      eligible=!!v; my_vote=!!v?.voted_at; my_application_status=app?.status||null;
     }
     const eligibleCount=Number(e.eligible||0),votedCount=Number(e.voted||0);
-    result.push({...e,eligible,my_vote,turnout:{eligible:eligibleCount,voted:votedCount,percent:eligibleCount>0?Math.round((votedCount/eligibleCount)*1000)/10:0}});
+    result.push({...e,eligible,my_vote,my_application_status,
+      application_phase:applicationPhase(e,localNow(c.env.FUND_TIMEZONE || "Indian/Maldives")),
+      turnout:{eligible:eligibleCount,voted:votedCount,percent:eligibleCount>0?Math.round((votedCount/eligibleCount)*1000)/10:0}});
   }
   return c.json(result);
 });
@@ -488,6 +550,22 @@ electionsRoute.get("/archive", async c=>{
       year:String(e.certified_at||e.closed_at||"").slice(0,4)||null};
   });
   return c.json({archive});
+});
+
+electionsRoute.get("/:id/notifications", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  const id=Number(c.req.param("id"));
+  const election=await c.env.DB.prepare("SELECT id FROM elections WHERE id=?").bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+  const rows=await c.env.DB.prepare(`SELECT n.*,a.name created_by_name FROM election_notification_log n
+    LEFT JOIN admins a ON a.id=n.created_by WHERE n.election_id=?
+    ORDER BY n.id DESC LIMIT 50`).bind(id).all<any>();
+  const items=(rows.results as any[]).map((n:any)=>({
+    ...n,
+    detail:(()=>{try{return n.detail?JSON.parse(n.detail):null}catch{return null}})()
+  }));
+  const totals=items.reduce((acc:any,n:any)=>({sent:acc.sent+Number(n.sent||0),failed:acc.failed+Number(n.failed||0)}),{sent:0,failed:0});
+  return c.json({items,totals});
 });
 
 electionsRoute.get("/:id/summary", async c=>{
@@ -676,8 +754,10 @@ electionsRoute.post("/:id/open", requireSuperAdmin, async c=>{
   const branding=await getBranding(c.env);
   const members=await c.env.DB.prepare(`SELECT m.telegram_id FROM election_voters v JOIN members m ON m.id=v.member_id
     WHERE v.election_id=? AND m.telegram_id IS NOT NULL`).bind(id).all<any>();
-  c.executionCtx.waitUntil(Promise.allSettled(members.results.map((m:any)=>sendMessage(c.env,m.telegram_id,
-    `🗳 <b>${branding.fund_name} · ${election.title}</b>\n\nVoting is now open. Open the Mini App to cast your secret ballot.`))));
+  const deliveryResults=await Promise.allSettled(members.results.map((m:any)=>sendMessage(c.env,m.telegram_id,
+    `🗳 <b>${branding.fund_name} · ${election.title}</b>\n\nVoting is now open. Open the Mini App to cast your secret ballot.`)));
+  const delivery={sent:deliveryResults.filter((r:any)=>r.status==="fulfilled").length,failed:deliveryResults.filter((r:any)=>r.status==="rejected").length};
+  await recordElectionNotification(c.env,id,"voting_opened","eligible_voters",delivery,{automatic:false},admin.id);
   return c.json(await electionDetail(c.env,id));
 });
 
@@ -716,9 +796,14 @@ electionsRoute.post("/:id/applications", async c=>{
     const applicationId=Number(r.meta.last_row_id);
 
     if(member.telegram_id){
-      c.executionCtx.waitUntil(sendMessage(c.env,member.telegram_id,
-        `📝 <b>${esc(election.title)}</b>\n\nYour application for <b>${esc(position.title)}</b> was submitted and is awaiting review.`
-      ).catch(()=>null));
+      c.executionCtx.waitUntil((async()=>{
+        const r=await Promise.allSettled([sendMessage(c.env,member.telegram_id,
+          `📝 <b>${esc(election.title)}</b>\n\nYour application for <b>${esc(position.title)}</b> was submitted and is awaiting review.`
+        )]);
+        await recordElectionNotification(c.env,id,`application_submitted_member:${applicationId}`,"applicant",
+          {sent:r.filter((x:any)=>x.status==="fulfilled").length,failed:r.filter((x:any)=>x.status==="rejected").length},
+          {application_id:applicationId,position_id:positionId});
+      })());
     }
 
     const appUrl=await miniAppUrl(c.env);
@@ -734,11 +819,13 @@ electionsRoute.post("/:id/applications", async c=>{
       `Open the Fund App to review this application.`
     ].filter(Boolean).join("\n");
 
-    c.executionCtx.waitUntil(
-      notifyAdmins(c.env,adminText,{
+    c.executionCtx.waitUntil((async()=>{
+      const delivery=await notifyAdmins(c.env,adminText,{
         reply_markup:{inline_keyboard:[[{text:"Review Application",web_app:{url:appUrl}}]]}
-      }).catch(()=>null)
-    );
+      }).catch(()=>({sent:0,failed:0,recipients:0}));
+      await recordElectionNotification(c.env,id,`new_application_admin:${applicationId}`,"admins",delivery,
+        {application_id:applicationId,member_id:member.id,position_id:positionId});
+    })());
     await auditEntity(c.env,null,"election_application_admin_notified","election_application",applicationId,null,{
       election_id:id,position_id:positionId,member_id:member.id,status:"pending"
     });
@@ -793,7 +880,12 @@ electionsRoute.post("/:id/applications/:applicationId/review", requireSuperAdmin
   if(applicant?.telegram_id){
     const note=decision==="approved"?`✅ <b>${election?.title||"Election"}</b>\n\nYour candidate application has been <b>approved</b>.`:
       `❌ <b>${election?.title||"Election"}</b>\n\nYour candidate application was <b>not approved</b>.${reason?`\nReason: ${reason}`:""}`;
-    c.executionCtx.waitUntil(sendMessage(c.env,applicant.telegram_id,note).catch(()=>null));
+    c.executionCtx.waitUntil((async()=>{
+      const sent=await Promise.allSettled([sendMessage(c.env,applicant.telegram_id,note)]);
+      await recordElectionNotification(c.env,id,`application_${decision}:${applicationId}`,"applicant",
+        {sent:sent.filter((x:any)=>x.status==="fulfilled").length,failed:sent.filter((x:any)=>x.status==="rejected").length},
+        {application_id:applicationId,decision},admin.id);
+    })());
   }
   return c.json(await electionDetail(c.env,id));
 });
@@ -903,6 +995,8 @@ electionsRoute.post("/:id/remind-nonvoters", requireSuperAdmin, async c=>{
   if(!election)return c.json({error:"Election not found"},404); if(election.status!=="open")return c.json({error:"Election is not open"},409);
   const brand=await getBranding(c.env);
   const result=await notifyEligible(c.env,election,`🗳 <b>${brand.fund_name} · Voting reminder</b>\n\nYou are eligible to vote in <b>${election.title}</b> and have not yet submitted your ballot. Open the Mini App to vote.`,true);
+  const admin=c.get("admin")!;
+  await recordElectionNotification(c.env,id,`manual_voting_reminder:${Date.now()}`,"non_voters",result,{manual:true},admin.id);
   return c.json({ok:true,...result});
 });
 
@@ -932,9 +1026,11 @@ electionsRoute.post("/:id/runoffs", requireSuperAdmin, async c=>{
   const position=await c.env.DB.prepare("SELECT title FROM election_positions WHERE id=?").bind(positionId).first<any>();
   const voters=await c.env.DB.prepare(`SELECT m.telegram_id FROM election_runoff_voters v JOIN members m ON m.id=v.member_id
     WHERE v.runoff_id=? AND m.telegram_id IS NOT NULL`).bind(runoffId).all<any>();
-  c.executionCtx.waitUntil(Promise.allSettled((voters.results as any[]).map((m:any)=>sendMessage(c.env,m.telegram_id,
+  const runoffDeliveries=await Promise.allSettled((voters.results as any[]).map((m:any)=>sendMessage(c.env,m.telegram_id,
     `🗳 <b>${brand.fund_name} · Runoff Vote</b>\n\nA runoff is now open for <b>${position?.title||"EXCO position"}</b> in ${election.title}. Open the Mini App to vote.`
-  ))));
+  )));
+  const runoffDelivery={sent:runoffDeliveries.filter((r:any)=>r.status==="fulfilled").length,failed:runoffDeliveries.filter((r:any)=>r.status==="rejected").length};
+  await recordElectionNotification(c.env,id,`runoff_opened:${runoffId}`,"runoff_voters",runoffDelivery,{runoff_id:runoffId,position_id:positionId,round_no:tie.round_no},admin.id);
   return c.json({ok:true,runoff_id:runoffId,...await electionDetail(c.env,id)});
 });
 
@@ -990,12 +1086,15 @@ electionsRoute.post("/:id/certify", requireSuperAdmin, async c=>{
   await auditEntity(c.env,admin.id,"election_results_certified","election",id,before,{...after,assigned_roles:elected.map((x:any)=>({member_id:x.member_id,role_title:x.role_title}))});
 
   const brand=await getBranding(c.env);
-  await notifyEligible(c.env,after,`🏆 <b>${brand.fund_name} · ${after.title}</b>\n\nElection results have been certified. The official EXCO list is now available in the Mini App.`).catch(()=>{});
+  const certificationDelivery=await notifyEligible(c.env,after,`🏆 <b>${brand.fund_name} · ${after.title}</b>\n\nElection results have been certified. The official EXCO list is now available in the Mini App.`).catch(()=>({sent:0,failed:0}));
+  await recordElectionNotification(c.env,id,"results_certified","eligible_voters",certificationDelivery,{certified_at:after.certified_at},admin.id);
   const electedMembers=await c.env.DB.prepare(`SELECT x.role_title,m.telegram_id,m.name FROM exco_role_assignments x
     JOIN members m ON m.id=x.member_id WHERE x.election_id=? AND x.ended_at IS NULL`).bind(id).all<any>();
-  c.executionCtx.waitUntil(Promise.allSettled((electedMembers.results as any[]).filter((m:any)=>m.telegram_id).map((m:any)=>sendMessage(c.env,m.telegram_id,
+  const roleDeliveries=await Promise.allSettled((electedMembers.results as any[]).filter((m:any)=>m.telegram_id).map((m:any)=>sendMessage(c.env,m.telegram_id,
     `🎉 <b>${brand.fund_name} · EXCO</b>\n\nCongratulations ${m.name}. You have been officially assigned as <b>${m.role_title}</b> after certification of ${after.title}.`
-  ))));
+  )));
+  const roleDelivery={sent:roleDeliveries.filter((r:any)=>r.status==="fulfilled").length,failed:roleDeliveries.filter((r:any)=>r.status==="rejected").length};
+  await recordElectionNotification(c.env,id,"elected_roles_assigned","elected_members",roleDelivery,{roles:elected.length},admin.id);
   return c.json({...await electionDetail(c.env,id),results:calculated.results,unresolved_ties:[],assigned_roles:elected});
 });
 
