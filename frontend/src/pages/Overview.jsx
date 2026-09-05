@@ -6,12 +6,13 @@ import { fmt } from "../utils/format";
 import { LoadingState } from "../components/Shared";
 import { ActivityRow } from "../components/ActivityRow";
 
-export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null, member = null, adminMonth = null, electionAttention = null }) {
+export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null, member = null, adminMonth = null }) {
   const [summary, setSummary] = useState(bootstrapSummary);
   const [activity, setActivity] = useState([]);
   const [pendingCount, setPendingCount] = useState(null);
   const [memberStatus, setMemberStatus] = useState(null);
   const [memberStatusLoading, setMemberStatusLoading] = useState(false);
+  const [memberElection, setMemberElection] = useState(null);
 
   useEffect(() => {
     if (!bootstrapSummary) return;
@@ -66,6 +67,21 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
   useEffect(() => onDataChange(() => refreshMemberStatus()), [isAdmin, member?.id]);
 
+  const refreshMemberElection = () => {
+    if (isAdmin || !member?.id) { setMemberElection(null); return; }
+    api.elections.list().then((rows) => {
+      const list = Array.isArray(rows) ? rows : [];
+      const priority = list.find((e) => e.status === "open" && e.eligible && !e.my_vote)
+        || list.find((e) => e.status === "draft" && e.application_phase === "open")
+        || list.find((e) => Number(e.open_runoffs || 0) > 0)
+        || null;
+      setMemberElection(priority);
+    }).catch(() => setMemberElection(null));
+  };
+
+  useEffect(() => { refreshMemberElection(); }, [isAdmin, member?.id]);
+  useEffect(() => onDataChange(({path}) => { if (path?.startsWith("/api/elections")) refreshMemberElection(); }), [isAdmin, member?.id]);
+
   if (!summary) return <OverviewSkeleton memberView={!isAdmin} />;
 
   const contributions = Number(summary.memberIncome || 0);
@@ -100,15 +116,6 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   const memberState = String(memberStatus?.status || "unpaid").toLowerCase();
   const memberStateLabel = memberState === "paid" ? "Paid" : memberState === "partial" ? "Partial" : memberState === "exempt" ? "Exempt" : memberState === "not_applicable" ? "Not due" : "Unpaid";
   const memberStateColor = memberState === "paid" ? "var(--success)" : memberState === "partial" ? "var(--warning)" : memberState === "exempt" || memberState === "not_applicable" ? "var(--muted)" : "var(--danger)";
-  const electionApplication=electionAttention?.my_application||null;
-  const applicationDeadline=(()=>{
-    if(!electionAttention?.applications_close_at)return "";
-    try{
-      const value=String(electionAttention.applications_close_at);
-      const d=new Date(value.length===16?`${value}:00`:value);
-      return new Intl.DateTimeFormat("en-GB",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}).format(d);
-    }catch{return String(electionAttention.applications_close_at).replace("T"," ")}
-  })();
 
   return (
     <>
@@ -136,20 +143,8 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
         </button>
       )}
 
-      {!isAdmin && electionAttention && (
-        <button type="button" onClick={() => setTab?.("elections")} className={`member-election-overview${electionApplication ? " submitted" : ""}`}>
-          <div className="sans member-election-overview-top">
-            <span>EXCO ELECTION</span>
-            <strong>{electionApplication ? "Application Submitted ✓" : "Applications Open"}</strong>
-          </div>
-          <div className="sans member-election-overview-title">{electionAttention.title}</div>
-          <div className="sans member-election-overview-bottom">
-            <span>{electionApplication
-              ? `${String(electionApplication.status||"pending").replace("_"," ")} · ${applicationDeadline ? `Applications close ${applicationDeadline}` : "View application"}`
-              : `${applicationDeadline ? `Apply before ${applicationDeadline}` : "Candidate applications are open"}`}</span>
-            <strong>{electionApplication ? "View ›" : "Apply Now ›"}</strong>
-          </div>
-        </button>
+      {!isAdmin && memberElection && (
+        <MemberElectionOverviewCard election={memberElection} onOpen={() => setTab?.("elections")} />
       )}
 
       <div className={`theme-brand-surface${!isAdmin ? " member-fund-card" : ""}`} style={{ background: "var(--primary)", borderRadius: 16, padding: !isAdmin ? "17px 19px" : "23px 22px", color: "var(--on-primary)", marginTop: !isAdmin ? 10 : 0 }}>
@@ -211,6 +206,43 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       {activity.length === 0 && <div className="sans" style={{ fontSize: 12, color: "var(--soft)" }}>No activity yet.</div>}
     </>
   );
+}
+
+function MemberElectionOverviewCard({ election, onOpen }) {
+  const deadline = election.status === "draft" ? election.applications_close_at : election.closes_at;
+  const deadlineLabel = (() => {
+    if (!deadline) return "Open Elections for details";
+    try {
+      const d = new Date(String(deadline).includes("T") ? deadline : String(deadline).replace(" ", "T"));
+      return new Intl.DateTimeFormat("en", { day:"numeric", month:"short", hour:"numeric", minute:"2-digit" }).format(d);
+    } catch { return String(deadline).replace("T", " ").slice(0,16); }
+  })();
+
+  let label = "EXCO ELECTION", title = "Applications Open", action = "Apply now";
+  let note = `Applications close ${deadlineLabel}`;
+  if (Number(election.open_runoffs || 0) > 0) {
+    title = "Runoff Open"; action = "Vote now"; note = `Runoff voting is open · ${deadlineLabel}`;
+  } else if (election.status === "open") {
+    title = election.my_vote ? "Vote Submitted" : "Voting Open";
+    action = election.my_vote ? "View election" : "Vote now";
+    note = election.my_vote ? "Your secret ballot has been submitted" : `Voting closes ${deadlineLabel}`;
+  } else if (election.my_application_status === "pending") {
+    title = "Application Pending"; action = "View application"; note = `Admin review pending · closes ${deadlineLabel}`;
+  } else if (election.my_application_status === "approved") {
+    title = "Candidate Approved"; action = "View election"; note = "Your candidate application has been approved";
+  }
+
+  return <button type="button" className="member-overview-election" onClick={onOpen} aria-label={`${title}: ${election.title}`}>
+    <div className="member-overview-election-main">
+      <span className="sans member-overview-election-label">{label}</span>
+      <div className="member-overview-election-title">{title}</div>
+      <div className="sans member-overview-election-name">{election.title}</div>
+      <div className="sans member-overview-election-note">{note}</div>
+    </div>
+    <div className="sans member-overview-election-action">
+      <span>{action}</span><strong>›</strong>
+    </div>
+  </button>;
 }
 
 function normalizeRecentActivity(rows) {

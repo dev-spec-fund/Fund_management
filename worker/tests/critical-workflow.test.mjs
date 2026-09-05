@@ -1428,3 +1428,26 @@ test('v66 member election prefetch includes governance archive', () => {
   const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
   assert.match(api,/tab === "elections"[\s\S]*?\/api\/me\/governance-archive/);
 });
+
+test('v67 member overview election card uses compact collision-safe layout', () => {
+  const overview=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Overview.jsx'),'utf8');
+  const css=fs.readFileSync(path.resolve(root,'../frontend/src/styles.css'),'utf8');
+  assert.match(overview,/MemberElectionOverviewCard/);
+  assert.match(overview,/Applications Open/);
+  assert.match(overview,/Application Pending/);
+  assert.match(overview,/Candidate Approved/);
+  assert.match(overview,/Voting Open/);
+  assert.match(overview,/Runoff Open/);
+  assert.match(overview,/setTab\?\.\("elections"\)/);
+  assert.match(css,/\.member-overview-election\{/);
+  assert.match(css,/overflow:hidden/);
+  assert.match(css,/text-overflow:ellipsis/);
+  assert.match(css,/overflow-wrap:anywhere/);
+});
+
+test('v67 overview election card prioritizes immediate member election action', () => {
+  const overview=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Overview.jsx'),'utf8');
+  assert.match(overview,/e\.status === "open" && e\.eligible && !e\.my_vote/);
+  assert.match(overview,/e\.status === "draft" && e\.application_phase === "open"/);
+  assert.match(overview,/Number\(e\.open_runoffs \|\| 0\) > 0/);
+});

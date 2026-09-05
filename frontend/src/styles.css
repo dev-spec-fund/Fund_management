@@ -3303,3 +3303,39 @@ button:not(:disabled):active {
 .member-governance-work b{font-size:9px;color:var(--primary-text)}
 .member-governance-work small{font-size:7px;color:var(--soft);margin-top:2px}
 .member-governance-work strong{color:var(--success)}
+
+/* v67 member overview election card */
+.member-overview-election{
+  width:100%;display:flex;align-items:stretch;justify-content:space-between;gap:12px;
+  border:1px solid var(--success-border);border-radius:14px;
+  background:linear-gradient(135deg,var(--success-bg),var(--card));
+  color:var(--text);padding:13px 14px;margin-top:10px;text-align:left;cursor:pointer;
+  min-height:112px;overflow:hidden
+}
+.member-overview-election-main{min-width:0;flex:1}
+.member-overview-election-label{
+  display:inline-flex;align-items:center;width:max-content;max-width:100%;
+  border-radius:999px;background:var(--button-soft);border:1px solid var(--success-border);
+  color:var(--success);padding:3px 7px;font-size:7px;font-weight:850;letter-spacing:.7px
+}
+.member-overview-election-title{
+  font-size:21px;line-height:1.08;font-weight:650;color:var(--primary-text);margin-top:7px
+}
+.member-overview-election-name{
+  font-size:10px;font-weight:700;color:var(--muted);margin-top:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.member-overview-election-note{
+  font-size:9px;color:var(--soft);margin-top:7px;line-height:1.35;
+  white-space:normal;overflow-wrap:anywhere
+}
+.member-overview-election-action{
+  flex:0 0 92px;align-self:center;display:flex;align-items:center;justify-content:flex-end;gap:5px;
+  color:var(--success);font-size:9px;font-weight:850;text-align:right;white-space:nowrap
+}
+.member-overview-election-action strong{font-size:18px;line-height:1;font-weight:500}
+@media(max-width:380px){
+  .member-overview-election{gap:8px;padding:12px}
+  .member-overview-election-title{font-size:19px}
+  .member-overview-election-action{flex-basis:76px;font-size:8px}
+}
