@@ -30,8 +30,10 @@ export function MyHistory({ member }) {
   const filteredRows=rows.filter((row)=>transactionFilter==="all" || normalizedStatus(row)===transactionFilter);
   const transactionCounts=rows.reduce((acc,row)=>{const status=normalizedStatus(row);acc.all+=1;if(status in acc)acc[status]+=1;return acc;},{all:0,approved:0,pending:0,rejected:0});
   const statuses=statement.monthly_status||[];
-  const outstanding=statuses.filter(x=>!x.advance).reduce((sum,x)=>sum+Number(x.due||0),0);
-  const advance=statuses.filter(x=>x.advance).reduce((sum,x)=>sum+Number(x.paid||0),0);
+  const reconciliation=statement.reconciliation||null;
+  const outstanding=Number(reconciliation?.current_due_total ?? statuses.filter(x=>!x.advance).reduce((sum,x)=>sum+Number(x.due||0),0));
+  const advance=Number(reconciliation?.advance_allocated_total ?? statuses.filter(x=>x.advance).reduce((sum,x)=>sum+Number(x.paid||0),0));
+  const reconciliationErrors=(reconciliation?.issues||[]).filter(x=>x.severity==="error");
   const recentStatuses=statuses.slice(-12).reverse();
   const monthLabel=(m)=>{if(!m)return"—";const [y,mo]=String(m).split("-");return new Date(Number(y),Number(mo)-1,1).toLocaleDateString("en-GB",{month:"short",year:"numeric"});};
   const statusColor=(x)=>x==="paid"?"var(--success)":x==="partial"?"var(--warning)":x==="exempt"||x==="not_applicable"?"var(--muted)":"var(--danger)";
@@ -47,6 +49,10 @@ export function MyHistory({ member }) {
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"var(--soft)"}}>APPROVED PAYMENTS</div><b className="sans">{approved.length}</b></div>
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:13}}><div className="sans" style={{fontSize:10,color:"var(--soft)"}}>ADVANCE</div><b className="sans" style={{color:advance>0?"var(--success)":"inherit"}}>MVR {fmt(advance)}</b></div>
     </div>
+    {reconciliationErrors.length>0&&<div className="sans member-history-reconciliation-alert">
+      <b>Contribution allocation needs review</b>
+      <span>Your approved contribution total does not fully match the monthly allocation records. The fund administrator should review this account.</span>
+    </div>}
     <div className="sans member-section-head"><b>MONTHLY STATUS</b><div style={{display:"flex",gap:6}}><button type="button" onClick={async()=>{const {exportStatementPdf}=await import("../../utils/exports");return exportStatementPdf(member)}} style={compactBtn}>PDF</button><button type="button" onClick={async()=>{const {exportStatementCsv}=await import("../../utils/exports");return exportStatementCsv(member)}} style={compactBtn}>CSV</button></div></div>
     <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"4px 14px",marginBottom:16}}>
       {recentStatuses.map(x=><div key={x.month} className={`sans member-history-status-row${x.advance?" advance":""}`}><span>{monthLabel(x.month)}{x.advance&&<small className="member-history-advance-label">Advance</small>}</span><span style={{textAlign:"right"}}><b className="member-status-badge" style={{color:statusColor(x.status),borderColor:statusColor(x.status)}}>{x.status==="not_applicable"?"Not due":x.advance?`Advance ${x.status}`:x.status}</b><div style={{fontSize:10,color:"var(--soft)"}}>{x.advance?"Allocated":"Paid"} MVR {fmt(x.paid)}{Number(x.due)>0?` · ${x.advance?"Remaining":"Due"} MVR ${fmt(x.due)}`:""}</div></span></div>)}

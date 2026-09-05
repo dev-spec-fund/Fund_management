@@ -3651,3 +3651,34 @@ textarea:focus {
   border-radius:999px;padding:2px 5px;font-size:7px;font-weight:800;
   color:var(--success);vertical-align:middle
 }
+
+
+/* v74 contribution allocation reconciliation */
+.member-history-reconciliation-alert{
+  margin:0 0 12px;border:1px solid var(--warning-border);border-radius:11px;
+  background:var(--warning-bg);padding:10px 11px;color:var(--warning)
+}
+.member-history-reconciliation-alert b,.member-history-reconciliation-alert span{display:block}
+.member-history-reconciliation-alert b{font-size:10px}
+.member-history-reconciliation-alert span{font-size:8px;line-height:1.45;margin-top:3px;color:var(--muted)}
+.member-reconciliation-card{
+  border:1px solid var(--border);border-radius:10px;padding:10px;margin:0 0 14px;background:var(--bg)
+}
+.member-reconciliation-card.ok{border-color:var(--success-border)}
+.member-reconciliation-card.error{border-color:var(--danger-border)}
+.member-reconciliation-head{display:flex;justify-content:space-between;align-items:flex-start;gap:9px}
+.member-reconciliation-head span{min-width:0;flex:1}
+.member-reconciliation-head b,.member-reconciliation-head small{display:block}
+.member-reconciliation-head b{font-size:9px;color:var(--primary-text)}
+.member-reconciliation-head small{font-size:7px;color:var(--soft);margin-top:2px}
+.member-reconciliation-head strong{font-size:11px;color:var(--success)}
+.member-reconciliation-card.error .member-reconciliation-head strong{color:var(--danger)}
+.member-reconciliation-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.member-reconciliation-grid span{font-size:7px;color:var(--soft);border:1px solid var(--border);border-radius:8px;padding:6px 7px}
+.member-reconciliation-grid b{display:block;font-size:9px;color:var(--primary-text);margin-top:2px}
+.member-reconciliation-legacy{font-size:7px;line-height:1.4;color:var(--warning);margin-top:7px}
+.member-reconciliation-issues{margin-top:7px}
+.member-reconciliation-issues>div{display:flex;gap:6px;align-items:flex-start;border-top:1px solid var(--divider);padding:6px 0;font-size:7px;line-height:1.4}
+.member-reconciliation-issues>div b{min-width:30px;color:var(--warning)}
+.member-reconciliation-issues>div.error b{color:var(--danger)}
+.member-reconciliation-issues>div span{color:var(--muted)}

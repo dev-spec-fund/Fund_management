@@ -249,6 +249,20 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
             <span>Outstanding <b style={{color:currentDue>0?"var(--danger)":"var(--success)"}}>MVR {fmt(currentDue)}</b></span>
           </div>
 
+          {detail?.reconciliation&&<div className={`sans member-reconciliation-card ${detail.reconciliation.ok?"ok":"error"}`}>
+            <div className="member-reconciliation-head"><span><b>ALLOCATION RECONCILIATION</b><small>{detail.reconciliation.ok?"Approved cash and monthly ledger reconcile":"Allocation mismatch needs review"}</small></span><strong>{detail.reconciliation.ok?"✓ OK":"!"}</strong></div>
+            <div className="member-reconciliation-grid">
+              <span>Approved<b>MVR {fmt(detail.reconciliation.approved_total)}</b></span>
+              <span>Effective allocated<b>MVR {fmt(detail.reconciliation.effective_allocated_total)}</b></span>
+              <span>Advance<b>MVR {fmt(detail.reconciliation.advance_allocated_total)}</b></span>
+              <span>Current due<b>MVR {fmt(detail.reconciliation.current_due_total)}</b></span>
+            </div>
+            {!!detail.reconciliation.legacy_fallback_total&&<div className="member-reconciliation-legacy">Legacy fallback: MVR {fmt(detail.reconciliation.legacy_fallback_total)} from approved transactions without explicit allocation rows.</div>}
+            {!!detail.reconciliation.issues?.length&&<div className="member-reconciliation-issues">
+              {detail.reconciliation.issues.map((issue,i)=><div key={`${issue.code}-${issue.allocation_id||issue.contribution_id||i}`} className={issue.severity}><b>{issue.severity==="error"?"Issue":"Check"}</b><span>{issue.message}</span></div>)}
+            </div>}
+          </div>}
+
           <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:11,color:"var(--muted)",marginBottom:7,fontWeight:700,letterSpacing:.45}}><span>CONTRIBUTION HISTORY</span><span style={{fontSize:9,fontWeight:600,color:"var(--soft)"}}>Tap to expand</span></div>
           {approved.map(contributionCard)}
           {approved.length===0 && <div className="sans" style={{fontSize:12,color:"var(--soft)",padding:"8px 0"}}>No approved contributions yet.</div>}

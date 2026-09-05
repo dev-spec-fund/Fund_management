@@ -1708,3 +1708,48 @@ test('v73 future monthly status is visibly labelled as advance allocation', () =
   assert.match(css,/member-history-status-row\.advance/);
   assert.match(css,/member-history-advance-label/);
 });
+
+
+test('v74 statement reconciles approved contribution cash with allocation ledger', () => {
+  const members=fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
+  assert.match(members,/const approvedTotal=/);
+  assert.match(members,/const actualAllocatedTotal=/);
+  assert.match(members,/const effectiveAllocatedTotal=/);
+  assert.match(members,/const statusPaidTotal=/);
+  assert.match(members,/unallocated_total:unallocatedTotal/);
+  assert.match(members,/overallocated_total:overallocatedTotal/);
+  assert.match(members,/reconciliation\}/);
+});
+
+test('v74 reconciliation flags underallocation overallocation and non-approved allocations', () => {
+  const members=fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
+  assert.match(members,/contribution_underallocated/);
+  assert.match(members,/contribution_overallocated/);
+  assert.match(members,/allocation_on_nonapproved_contribution/);
+  assert.match(members,/allocation_before_membership/);
+  assert.match(members,/monthly_status_mismatch/);
+});
+
+test('v74 legacy approved contributions remain mathematically represented but are explicitly reported', () => {
+  const members=fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
+  assert.match(members,/legacyFallback=rows\.length===0/);
+  assert.match(members,/effectiveAllocated=legacyFallback\?amount:allocated/);
+  assert.match(members,/legacy_missing_allocation_rows/);
+  assert.match(members,/legacy_fallback_total/);
+});
+
+test('v74 Member History uses authoritative reconciliation totals and only warns members on errors', () => {
+  const history=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MyHistory.jsx'),'utf8');
+  assert.match(history,/reconciliation\?\.current_due_total/);
+  assert.match(history,/reconciliation\?\.advance_allocated_total/);
+  assert.match(history,/reconciliationErrors/);
+  assert.match(history,/Contribution allocation needs review/);
+});
+
+test('v74 Admin member profile exposes detailed allocation reconciliation diagnostics', () => {
+  const popup=fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/MemberPopup.jsx'),'utf8');
+  assert.match(popup,/ALLOCATION RECONCILIATION/);
+  assert.match(popup,/Approved cash and monthly ledger reconcile/);
+  assert.match(popup,/legacy_fallback_total/);
+  assert.match(popup,/reconciliation\.issues/);
+});

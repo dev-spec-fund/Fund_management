@@ -80,9 +80,14 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
   if (!member) return c.json({error:"Not found"},404);
   const contributions = await c.env.DB.prepare(`SELECT id,txn_id,amount,month,${viewer?"NULL":"ref_number"} ref_number,status,submitted_at,approved_at,${viewer?"0":"CASE WHEN slip_file_id IS NOT NULL AND trim(slip_file_id)<>'' THEN 1 ELSE 0 END"} has_slip FROM contributions WHERE member_id=? ORDER BY submitted_at`).bind(id).all<any>();
   const allocations = await c.env.DB.prepare(`
-    SELECT ca.contribution_id,ca.month,ca.amount
+    SELECT ca.id,ca.contribution_id,ca.month,ca.amount
     FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id
-    WHERE ca.member_id=? AND c.status='approved' ORDER BY ca.month
+    WHERE ca.member_id=? AND c.status='approved' ORDER BY ca.month,ca.id
+  `).bind(id).all<any>();
+  const integrityAllocations = await c.env.DB.prepare(`
+    SELECT ca.id,ca.contribution_id,ca.member_id,ca.month,ca.amount,c.status contribution_status,c.amount contribution_amount,c.month contribution_month
+    FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id
+    WHERE ca.member_id=? ORDER BY ca.contribution_id,ca.month,ca.id
   `).bind(id).all<any>();
   const exemptions = await c.env.DB.prepare("SELECT month,reason,created_at FROM exemptions WHERE member_id=? ORDER BY month").bind(id).all<any>();
   const rates = await c.env.DB.prepare("SELECT amount,effective_from,effective_to,created_at FROM member_contribution_rates WHERE member_id=? ORDER BY effective_from").bind(id).all<any>();
@@ -121,8 +126,88 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
     const status=ex?'exempt':rate<=0.004?'not_applicable':paid<=0?'unpaid':paid+0.005<rate?'partial':'paid';
     return {month,status,paid,due:ex?0:Math.max(0,rate-paid),monthly_amount:rate,reason:ex?.reason||null,advance:isAdvance};
   });
+
+  // Reconcile approved cash against allocation rows and the effective monthly
+  // status ledger. Legacy approved rows without allocation records continue to
+  // use their original contribution month, but are explicitly reported so they
+  // can be identified without making the member statement mathematically wrong.
+  const money2=(value:any)=>Math.round(Number(value||0)*100)/100;
+  const approvedTotal=money2(approved.reduce((sum:any,x:any)=>sum+Number(x.amount||0),0));
+  const actualAllocatedTotal=money2((allocations.results as any[]).reduce((sum:any,x:any)=>sum+Number(x.amount||0),0));
+  const perContribution=(approved as any[]).map((contribution:any)=>{
+    const rows=(allocations.results as any[]).filter((a:any)=>Number(a.contribution_id)===Number(contribution.id));
+    const allocated=money2(rows.reduce((sum:any,a:any)=>sum+Number(a.amount||0),0));
+    const amount=money2(contribution.amount);
+    const legacyFallback=rows.length===0;
+    const effectiveAllocated=legacyFallback?amount:allocated;
+    const difference=money2(amount-effectiveAllocated);
+    return {
+      contribution_id:contribution.id,
+      txn_id:contribution.txn_id,
+      amount,
+      allocated,
+      effective_allocated:effectiveAllocated,
+      difference,
+      allocation_rows:rows.length,
+      legacy_fallback:legacyFallback,
+      ok:Math.abs(difference)<0.005
+    };
+  });
+  const legacyFallbackTotal=money2(perContribution.filter((x:any)=>x.legacy_fallback).reduce((sum:any,x:any)=>sum+x.amount,0));
+  const effectiveAllocatedTotal=money2(perContribution.reduce((sum:any,x:any)=>sum+x.effective_allocated,0));
+  const statusPaidTotal=money2(statuses.reduce((sum:any,x:any)=>sum+Number(x.paid||0),0));
+  const unallocatedTotal=money2(Math.max(0,approvedTotal-effectiveAllocatedTotal));
+  const overallocatedTotal=money2(Math.max(0,effectiveAllocatedTotal-approvedTotal));
+  const issues:any[]=[];
+
+  for(const item of perContribution){
+    if(item.legacy_fallback)issues.push({
+      severity:'warning',code:'legacy_missing_allocation_rows',contribution_id:item.contribution_id,txn_id:item.txn_id,
+      message:`${item.txn_id||'Approved contribution'} has no allocation rows; its original month is being used as a legacy fallback.`
+    });
+    else if(item.difference>0.004)issues.push({
+      severity:'error',code:'contribution_underallocated',contribution_id:item.contribution_id,txn_id:item.txn_id,
+      amount:item.difference,message:`${item.txn_id||'Approved contribution'} has MVR ${item.difference.toFixed(2)} not allocated to a month.`
+    });
+    else if(item.difference<-0.004)issues.push({
+      severity:'error',code:'contribution_overallocated',contribution_id:item.contribution_id,txn_id:item.txn_id,
+      amount:Math.abs(item.difference),message:`${item.txn_id||'Approved contribution'} is allocated above its approved amount by MVR ${Math.abs(item.difference).toFixed(2)}.`
+    });
+  }
+
+  for(const row of integrityAllocations.results as any[]){
+    if(String(row.contribution_status)!=='approved')issues.push({
+      severity:'error',code:'allocation_on_nonapproved_contribution',contribution_id:row.contribution_id,allocation_id:row.id,
+      message:`Allocation ${row.id} is attached to a ${row.contribution_status||'non-approved'} contribution.`
+    });
+    if(String(row.month)<firstMonth)issues.push({
+      severity:'error',code:'allocation_before_membership',contribution_id:row.contribution_id,allocation_id:row.id,
+      message:`Allocation ${row.id} is dated before the member joined.`
+    });
+  }
+
+  if(Math.abs(statusPaidTotal-effectiveAllocatedTotal)>0.004)issues.push({
+    severity:'error',code:'monthly_status_mismatch',
+    message:`Monthly status totals differ from effective contribution allocations by MVR ${Math.abs(statusPaidTotal-effectiveAllocatedTotal).toFixed(2)}.`
+  });
+
+  const reconciliation={
+    ok:!issues.some((x:any)=>x.severity==='error'),
+    approved_total:approvedTotal,
+    actual_allocated_total:actualAllocatedTotal,
+    legacy_fallback_total:legacyFallbackTotal,
+    effective_allocated_total:effectiveAllocatedTotal,
+    monthly_status_paid_total:statusPaidTotal,
+    unallocated_total:unallocatedTotal,
+    overallocated_total:overallocatedTotal,
+    current_due_total:money2(statuses.filter((x:any)=>!x.advance).reduce((sum:any,x:any)=>sum+Number(x.due||0),0)),
+    advance_allocated_total:money2(statuses.filter((x:any)=>x.advance).reduce((sum:any,x:any)=>sum+Number(x.paid||0),0)),
+    issues,
+    contributions:perContribution
+  };
+
   const organization=await getBranding(c.env);
-  return c.json({organization,member,contributions:contributions.results,allocations:allocations.results,donations:donations.results,monthly_status:statuses,balance_history:balanceHistory,contribution_rates:rates.results});
+  return c.json({organization,member,contributions:contributions.results,allocations:allocations.results,donations:donations.results,monthly_status:statuses,balance_history:balanceHistory,contribution_rates:rates.results,reconciliation});
 });
 
 membersRoute.get("/:id/contributions/:contributionId/slip/file", requireFinance, async (c) => {
