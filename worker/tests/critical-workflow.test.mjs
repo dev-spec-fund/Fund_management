@@ -1561,3 +1561,58 @@ test('stability audit: meeting action notification failures are persisted to err
   assert.match(route,/telegram\.meeting_action_notification/);
   assert.match(route,/if\(!delivery\?\.ok\)/);
 });
+
+
+test('v71 only Super Admin can permanently delete an unused draft election', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/electionsRoute\.delete\("\/:id", requireSuperAdmin/);
+  assert.match(route,/electionDeleteEligibility/);
+  assert.match(route,/Only draft elections can be permanently deleted/);
+  assert.match(route,/Certified elections cannot be deleted/);
+});
+
+test('v71 permanent election deletion is blocked after any real election activity', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  for(const table of [
+    'election_applications',
+    'election_voters',
+    'election_ballots',
+    'election_runoffs',
+    'exco_role_assignments',
+    'exco_terms',
+    'election_notification_log'
+  ]) assert.match(route,new RegExp(`SELECT COUNT\\(\\*\\) n FROM ${table}`));
+  assert.match(route,/Member applications exist/);
+  assert.match(route,/A voter snapshot exists/);
+  assert.match(route,/Ballots exist/);
+  assert.match(route,/Runoff records exist/);
+  assert.match(route,/EXCO assignments exist/);
+  assert.match(route,/Member\/Admin election notifications were recorded/);
+});
+
+test('v71 unused draft deletion is audited and removes the election only after eligibility check', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const block=route.match(/electionsRoute\.delete\("\/:id"[\s\S]*?return c\.json\(\{ok:true,id,title:election\.title\}\);\n\}\);/)?.[0]||'';
+  assert.match(block,/election_deleted_unused_draft/);
+  assert.match(block,/DELETE FROM elections WHERE id=\? AND status='draft'/);
+  assert.match(block,/if\(!eligibility\.allowed\)/);
+  assert.match(block,/This election cannot be permanently deleted/);
+});
+
+test('v71 Admin UI only shows permanent delete action when backend marks draft eligible', () => {
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/deleteUnusedDraft/);
+  assert.match(admin,/detail\.deletion\?\.allowed/);
+  assert.match(admin,/Delete election permanently/);
+  assert.match(admin,/Permanently delete this draft election/);
+  assert.match(admin,/This cannot be undone/);
+  assert.match(admin,/Permanent deletion is protected once election activity has been recorded/);
+});
+
+test('v71 election detail exposes authoritative delete eligibility and protection reasons', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/const deletion=await electionDeleteEligibility\(env,election\)/);
+  assert.match(route,/setup_locked:setupLocked,deletion/);
+  assert.match(route,/reasons\.length===0/);
+});

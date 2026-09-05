@@ -71,6 +71,26 @@ export default function Elections(){
     return ()=>{active=false};
   },[detail?.id,detail?.status,detail?.certified_at]);
 
+  const deleteUnusedElection=async()=>{
+    if(!detail?.id||!detail?.deletion?.allowed)return;
+    if(!await confirm({
+      title:"Permanently delete this draft election?",
+      message:`"${detail.title}" has no member election activity. This permanently removes the draft and its setup data. This cannot be undone.`,
+      confirmLabel:"Delete permanently",
+      tone:"danger"
+    }))return;
+    setBusy(true);setMessage("");
+    try{
+      await api.elections.deleteUnusedDraft(detail.id);
+      setSelected(null);setDetail(null);setReadiness(null);setSummary(null);setNotificationStatus(null);setTimeline(null);
+      await load();
+      setMessage("Unused draft election deleted permanently.");
+    }catch(e){
+      const reasons=Array.isArray(e?.reasons)?e.reasons.join(" · "):"";
+      setMessage(reasons||e.message||"Election could not be deleted.");
+      try{setDetail(await api.elections.get(detail.id))}catch{}
+    }finally{setBusy(false)}
+  };
   const createResponsibility=async()=>{
     if(!responsibilityForm.title.trim())return setMessage("Responsibility title is required.");
     setBusy(true);try{
@@ -373,6 +393,16 @@ export default function Elections(){
           <button type="button" style={{...approveBtn,width:"100%",marginTop:10,opacity:readiness?.ready?1:.5}} disabled={busy||!readiness?.ready} onClick={()=>changeStatus("open")}>
             {readiness?.ready?"Open Voting & Lock Setup":readiness?`Open Voting · ${readiness.passed}/${readiness.total} checks`:"Checking…"}
           </button>
+          <section className="election-delete-zone">
+            <div className="sans election-delete-zone-copy">
+              <b>DELETE DRAFT ELECTION</b>
+              <span>{detail.deletion?.allowed
+                ?"Super Admin can permanently remove this unused draft because no member election activity has been recorded."
+                :"Permanent deletion is protected once election activity has been recorded."}</span>
+              {!detail.deletion?.allowed&&detail.deletion?.reasons?.length>0&&<small>{detail.deletion.reasons.join(" · ")}</small>}
+            </div>
+            {detail.deletion?.allowed&&<button type="button" className="sans election-delete-unused-btn" disabled={busy} onClick={deleteUnusedElection}>Delete election permanently</button>}
+          </section>
         </>}
         {detail.status==="open"&&<>
           <div className="sans election-voting-lock-banner">

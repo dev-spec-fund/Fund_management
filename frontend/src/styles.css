@@ -3593,3 +3593,19 @@ textarea:focus {
     transition: none !important;
   }
 }
+
+
+/* v71 Super Admin deletion for completely unused draft elections */
+.election-delete-zone{
+  margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)
+}
+.election-delete-zone-copy b,.election-delete-zone-copy span,.election-delete-zone-copy small{display:block}
+.election-delete-zone-copy b{font-size:8px;letter-spacing:.55px;color:var(--danger)}
+.election-delete-zone-copy span{font-size:8px;line-height:1.45;color:var(--soft);margin-top:3px}
+.election-delete-zone-copy small{font-size:7px;line-height:1.4;color:var(--warning);margin-top:4px}
+.election-delete-unused-btn{
+  width:100%;margin-top:8px;border:1px solid var(--danger-border);border-radius:9px;
+  background:var(--danger-bg);color:var(--danger);padding:9px 10px;
+  font-size:9px;font-weight:800;cursor:pointer
+}
+.election-delete-unused-btn:disabled{opacity:.5}

@@ -530,6 +530,39 @@ async function memberForUser(c:any){
   return c.env.DB.prepare("SELECT id,member_code,name,telegram_id,joined_at,monthly_amount,active FROM members WHERE telegram_id=? AND active=1 LIMIT 1")
     .bind(String(user?.id||"")).first<any>();
 }
+async function electionDeleteEligibility(env:any,election:any){
+  if(!election)return {allowed:false,reasons:["Election not found"]};
+  const [applications,voters,ballots,runoffs,assignments,terms,notifications]=await Promise.all([
+    env.DB.prepare("SELECT COUNT(*) n FROM election_applications WHERE election_id=?").bind(election.id).first<any>(),
+    env.DB.prepare("SELECT COUNT(*) n FROM election_voters WHERE election_id=?").bind(election.id).first<any>(),
+    env.DB.prepare("SELECT COUNT(*) n FROM election_ballots WHERE election_id=?").bind(election.id).first<any>(),
+    env.DB.prepare("SELECT COUNT(*) n FROM election_runoffs WHERE election_id=?").bind(election.id).first<any>(),
+    env.DB.prepare("SELECT COUNT(*) n FROM exco_role_assignments WHERE election_id=?").bind(election.id).first<any>(),
+    env.DB.prepare("SELECT COUNT(*) n FROM exco_terms WHERE election_id=?").bind(election.id).first<any>(),
+    env.DB.prepare("SELECT COUNT(*) n FROM election_notification_log WHERE election_id=?").bind(election.id).first<any>()
+  ]);
+  const counts={
+    applications:Number(applications?.n||0),
+    voters:Number(voters?.n||0),
+    ballots:Number(ballots?.n||0),
+    runoffs:Number(runoffs?.n||0),
+    exco_assignments:Number(assignments?.n||0),
+    exco_terms:Number(terms?.n||0),
+    notifications:Number(notifications?.n||0)
+  };
+  const reasons:string[]=[];
+  if(election.status!=="draft")reasons.push("Only draft elections can be permanently deleted");
+  if(election.certified_at)reasons.push("Certified elections cannot be deleted");
+  if(counts.applications)reasons.push("Member applications exist");
+  if(counts.voters)reasons.push("A voter snapshot exists");
+  if(counts.ballots)reasons.push("Ballots exist");
+  if(counts.runoffs)reasons.push("Runoff records exist");
+  if(counts.exco_assignments)reasons.push("EXCO assignments exist");
+  if(counts.exco_terms)reasons.push("An EXCO term is linked");
+  if(counts.notifications)reasons.push("Member/Admin election notifications were recorded");
+  return {allowed:reasons.length===0,reasons,counts};
+}
+
 async function electionDetail(env:any,id:number){
   const election=await env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return null;
@@ -550,7 +583,8 @@ async function electionDetail(env:any,id:number){
   ]);
   const eligible=Number(voters?.eligible||0),voted=Number(voters?.voted||0);
   const setupLocked=election.status!=="draft"||eligible>0;
-  return {...election,setup_locked:setupLocked,positions:positions.results.map((p:any)=>({...p,candidates:candidates.results.filter((x:any)=>Number(x.position_id)===Number(p.id))})),
+  const deletion=await electionDeleteEligibility(env,election);
+  return {...election,setup_locked:setupLocked,deletion,positions:positions.results.map((p:any)=>({...p,candidates:candidates.results.filter((x:any)=>Number(x.position_id)===Number(p.id))})),
     turnout:{eligible,voted,percent:eligible>0?Math.round((voted/eligible)*1000)/10:0},
     audit_history:audit.results,certified_by_name:certifier?.name||null,applications:applications.results,
     application_phase:applicationPhase(election,localNow(env.FUND_TIMEZONE || "Indian/Maldives"))};
@@ -1168,6 +1202,33 @@ electionsRoute.post("/:id/close", requireSuperAdmin, async c=>{
   await c.env.DB.prepare("UPDATE elections SET status='closed',closed_at=datetime('now') WHERE id=?").bind(id).run();
   await auditEntity(c.env,admin.id,"election_closed","election",id,election,{...election,status:"closed"});
   return c.json(await electionDetail(c.env,id));
+});
+
+electionsRoute.delete("/:id", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  const admin=c.get("admin")!,id=Number(c.req.param("id"));
+  const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+
+  const eligibility=await electionDeleteEligibility(c.env,election);
+  if(!eligibility.allowed){
+    return c.json({
+      error:"This election cannot be permanently deleted",
+      reasons:eligibility.reasons,
+      counts:eligibility.counts
+    },409);
+  }
+
+  // Preserve a minimal audit record before deleting the draft. Member-facing
+  // election data is removed by D1 foreign-key cascades, while this audit entry
+  // records who removed the unused draft and when.
+  await auditEntity(c.env,admin.id,"election_deleted_unused_draft","election",id,election,{
+    deleted:true,title:election.title,term:election.term||null
+  });
+
+  const result=await c.env.DB.prepare("DELETE FROM elections WHERE id=? AND status='draft'").bind(id).run();
+  if(!result.meta.changes)return c.json({error:"Election could not be deleted"},409);
+  return c.json({ok:true,id,title:election.title});
 });
 
 electionsRoute.post("/:id/cancel", requireSuperAdmin, async c=>{

@@ -559,6 +559,7 @@ export const api = {
     open: (id) => request(`/api/elections/${id}/open`, { method:"POST" }),
     close: (id) => request(`/api/elections/${id}/close`, { method:"POST" }),
     cancel: (id) => request(`/api/elections/${id}/cancel`, { method:"POST" }),
+    deleteUnusedDraft: (id) => request(`/api/elections/${id}`, { method:"DELETE" }),
     vote: (id,selections) => request(`/api/elections/${id}/vote`, { method:"POST", body:JSON.stringify({selections}) }),
   },
 
