@@ -2728,3 +2728,9 @@ button:not(:disabled):active {
 .election-deadline b{color:var(--primary-text)}
 .election-ineligible{padding:8px 9px;border-radius:8px;background:var(--danger-bg);color:var(--danger);margin-bottom:6px}
 .election-ineligible b,.election-ineligible span{display:block}.election-ineligible b{font-size:9px}.election-ineligible span{font-size:8px;margin-top:2px;line-height:1.4}
+
+/* v49: simple candidate policy — every registered active member may apply. */
+.election-application-open-note{
+  padding:8px 9px;border-radius:8px;background:var(--button-soft);color:var(--muted);
+  margin-bottom:8px;font-size:8px;line-height:1.4
+}

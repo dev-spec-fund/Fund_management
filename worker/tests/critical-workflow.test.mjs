@@ -679,40 +679,35 @@ test('ordinary members only receive their own election application records', () 
 });
 
 
-test('election applications enforce configurable eligibility on server', () => {
-  const db=dbWithSchema();
-  const electionCols=new Set(db.prepare("PRAGMA table_info(elections)").all().map(r=>r.name));
-  const positionCols=new Set(db.prepare("PRAGMA table_info(election_positions)").all().map(r=>r.name));
-  assert.ok(electionCols.has("min_membership_days"));
-  assert.ok(electionCols.has("require_good_standing"));
-  assert.ok(electionCols.has("application_reminder_sent_at"));
-  assert.ok(positionCols.has("min_membership_days"));
-  assert.ok(positionCols.has("require_good_standing"));
-  db.close();
+
+
+
+
+test('all registered active members can apply for any election position', () => {
   const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(route,/candidateEligibility/);
-  assert.match(route,/Minimum membership is/);
-  assert.match(route,/current-month contribution is not fully paid or exempt/);
-  assert.match(route,/if\(!eligibility\.eligible\)return c\.json/);
+  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+
+  assert.doesNotMatch(route,/candidateEligibility/);
+  assert.doesNotMatch(route,/Minimum membership is/);
+  assert.doesNotMatch(route,/current-month contribution is not fully paid or exempt/);
+  assert.match(route,/Approved member account required/);
+  assert.match(route,/Choose a valid available position/);
+  assert.match(route,/All registered active members can apply/);
+  assert.doesNotMatch(member,/application_eligibility/);
+  assert.doesNotMatch(member,/Not eligible/);
+  assert.match(member,/All registered active members can apply for any available position/);
+  assert.doesNotMatch(admin,/Minimum membership days to apply/);
+  assert.doesNotMatch(admin,/Require current contribution to be fully paid or exempt/);
+  assert.match(admin,/All registered active members can apply for any available EXCO position/);
 });
 
-test('candidate application events send Telegram status messages and closing reminder', () => {
+test('candidate application Telegram events remain active after eligibility simplification', () => {
   const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(route,/was submitted and is awaiting review/);
+  assert.match(route,/submitted and is awaiting review/);
   assert.match(route,/application has been <b>approved<\/b>/);
   assert.match(route,/application was <b>not approved<\/b>/);
   assert.match(route,/application was withdrawn/);
   assert.match(route,/applications close within 24 hours/);
   assert.match(route,/application_reminder_sent_at/);
-});
-
-test('election application UI explains eligibility and provides admin status filters', () => {
-  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
-  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
-  assert.match(member,/Not eligible/);
-  assert.match(member,/Applications close:/);
-  assert.match(member,/application_eligibility/);
-  assert.match(admin,/Minimum membership days to apply/);
-  assert.match(admin,/Require current contribution to be fully paid or exempt/);
-  assert.match(admin,/applicationFilter/);
 });

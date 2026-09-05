@@ -11,7 +11,7 @@ export default function Elections(){
   const [showCreate,setShowCreate]=useState(false);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
-  const [form,setForm]=useState({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:"",min_membership_days:"0",require_good_standing:false});
+  const [form,setForm]=useState({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});
   const [applicationFilter,setApplicationFilter]=useState("all");
   const [position,setPosition]=useState({title:"",seats:"1",min_selections:"1"});
   const [candidate,setCandidate]=useState({position_id:"",member_id:""});
@@ -22,7 +22,7 @@ export default function Elections(){
   useEffect(()=>{load()},[]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
 
-  const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:"",min_membership_days:"0",require_good_standing:false});await load();await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
+  const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});await load();await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addPosition=async()=>{if(!detail||!position.title.trim())return;setBusy(true);try{const seats=Number(position.seats)||1;const d=await api.elections.addPosition(detail.id,{title:position.title,seats,max_selections:seats,min_selections:Math.max(0,Math.min(seats,Number(position.min_selections)||0))});setDetail(d);setPosition({title:"",seats:"1",min_selections:"1"})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addCandidate=async()=>{if(!detail||!candidate.position_id||!candidate.member_id)return;setBusy(true);try{const d=await api.elections.addCandidate(detail.id,candidate);setDetail(d);setCandidate({position_id:"",member_id:""})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const reviewApplication=async(a,decision)=>{
@@ -62,8 +62,7 @@ export default function Elections(){
       <Field label="Candidate applications close" type="datetime-local" value={form.applications_close_at} onChange={v=>setForm({...form,applications_close_at:v})}/>
       <Field label="Voting opens" type="datetime-local" value={form.opens_at} onChange={v=>setForm({...form,opens_at:v})}/>
       <Field label="Voting closes (optional)" type="datetime-local" value={form.closes_at} onChange={v=>setForm({...form,closes_at:v})}/>
-      <Field label="Minimum membership days to apply" type="number" value={form.min_membership_days} onChange={v=>setForm({...form,min_membership_days:v})}/>
-      <label className="sans election-check"><input type="checkbox" checked={form.require_good_standing} onChange={e=>setForm({...form,require_good_standing:e.target.checked})}/> Require current contribution to be fully paid or exempt</label>
+      <div className="sans election-secret-note">All registered active members can apply for any available EXCO position during the application period.</div>
       <button type="button" disabled={busy} onClick={create} style={{...approveBtn,width:"100%"}}>{busy?"Creating…":"Create draft"}</button>
     </Modal>}
 

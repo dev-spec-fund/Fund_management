@@ -25,31 +25,6 @@ function applicationPhase(election:any, now:string){
   return "closed";
 }
 
-function monthKey(now:string){ return now.slice(0,7); }
-function daysBetween(a:string,b:string){
-  const start=Date.parse(`${String(a).slice(0,10)}T00:00:00Z`),end=Date.parse(`${String(b).slice(0,10)}T00:00:00Z`);
-  return Number.isFinite(start)&&Number.isFinite(end)?Math.max(0,Math.floor((end-start)/86400000)):0;
-}
-async function goodStanding(env:any,member:any,now:string){
-  const month=monthKey(now);
-  const exempt=await env.DB.prepare("SELECT 1 ok FROM exemptions WHERE member_id=? AND month=? LIMIT 1").bind(member.id,month).first<any>();
-  if(exempt)return true;
-  const paid=await env.DB.prepare(`SELECT COALESCE(SUM(ca.amount),0) paid FROM contribution_allocations ca
-    JOIN contributions c ON c.id=ca.contribution_id
-    WHERE ca.member_id=? AND ca.month=? AND c.status='approved'`).bind(member.id,month).first<any>();
-  return Number(paid?.paid||0)+0.0001>=Number(member.monthly_amount||0);
-}
-async function candidateEligibility(env:any,election:any,position:any,member:any){
-  if(!member || Number(member.active)!==1)return {eligible:false,reasons:["Only active members can apply."]};
-  const now=localNow(env.FUND_TIMEZONE || "Indian/Maldives");
-  const reasons:string[]=[];
-  const minDays=position?.min_membership_days==null?Number(election.min_membership_days||0):Number(position.min_membership_days||0);
-  const membershipDays=daysBetween(member.joined_at,now);
-  if(minDays>0&&membershipDays<minDays)reasons.push(`Minimum membership is ${minDays} days. You currently have ${membershipDays} days.`);
-  const standing=position?.require_good_standing==null?Number(election.require_good_standing||0):Number(position.require_good_standing||0);
-  if(standing&&!(await goodStanding(env,member,now)))reasons.push("Your current-month contribution is not fully paid or exempt.");
-  return {eligible:reasons.length===0,reasons,membership_days:membershipDays,min_membership_days:minDays,require_good_standing:!!standing};
-}
 
 async function notifyEligible(env:any,election:any,message:string, onlyNonVoters=false){
   const rows=await env.DB.prepare(`SELECT m.telegram_id FROM election_voters v
@@ -71,15 +46,10 @@ async function processApplicationReminders(env:any){
     if(!Number.isFinite(currentMs)||!Number.isFinite(closeMs)||closeMs-currentMs>24*60*60*1000)continue;
     const members=await env.DB.prepare(`SELECT m.* FROM members m WHERE m.active=1 AND m.telegram_id IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM election_applications ea WHERE ea.election_id=? AND ea.member_id=m.id AND ea.status IN ('pending','approved'))`).bind(election.id).all<any>();
-    const positions=await env.DB.prepare("SELECT * FROM election_positions WHERE election_id=? ORDER BY sort_order,id").bind(election.id).all<any>();
     const brand=await getBranding(env); let sent=0;
     for(const member of members.results as any[]){
-      let canApply=false;
-      for(const position of positions.results as any[]){ if((await candidateEligibility(env,election,position,member)).eligible){canApply=true;break;} }
-      if(canApply){
-        await sendMessage(env,member.telegram_id,`⏳ <b>${brand.fund_name} · ${election.title}</b>\n\nCandidate applications close within 24 hours. You are eligible to apply for an available EXCO position in the Mini App.`).catch(()=>null);
-        sent++;
-      }
+      await sendMessage(env,member.telegram_id,`⏳ <b>${brand.fund_name} · ${election.title}</b>\n\nCandidate applications close within 24 hours. All registered active members can apply for an available EXCO position in the Mini App.`).catch(()=>null);
+      sent++;
     }
     await env.DB.prepare("UPDATE elections SET application_reminder_sent_at=datetime('now') WHERE id=? AND application_reminder_sent_at IS NULL").bind(election.id).run();
     await auditEntity(env,null,"election_application_reminder_sent","election",election.id,null,{election_id:election.id,sent});
@@ -205,11 +175,7 @@ electionsRoute.get("/:id", async c=>{
   const visibleApplications=admin?detail.applications:(member?detail.applications.filter((a:any)=>Number(a.member_id)===Number(member.id)).map((a:any)=>({
     id:a.id,election_id:a.election_id,position_id:a.position_id,status:a.status,statement:a.statement,submitted_at:a.submitted_at,review_reason:a.review_reason,withdrawn_at:a.withdrawn_at
   })):[]);
-  let application_eligibility:any={};
-  if(member&&!admin){
-    for(const position of detail.positions)application_eligibility[String(position.id)]=await candidateEligibility(c.env,detail,position,member);
-  }
-  return c.json({...detail,applications:visibleApplications,application_eligibility,eligible,my_vote,results,results_visible:!!admin||!!detail.certified_at});
+  return c.json({...detail,applications:visibleApplications,eligible,my_vote,results,results_visible:!!admin||!!detail.certified_at});
 });
 
 electionsRoute.post("/", requireSuperAdmin, async c=>{
@@ -217,12 +183,11 @@ electionsRoute.post("/", requireSuperAdmin, async c=>{
   const title=text(body.title); if(!title)return c.json({error:"Election title is required"},400);
   const opensAt=iso(body.opens_at)||null,closesAt=iso(body.closes_at)||null;
   const applicationsOpenAt=iso(body.applications_open_at)||null,applicationsCloseAt=iso(body.applications_close_at)||null;
-  const minMembershipDays=Math.max(0,Math.min(3650,Number(body.min_membership_days)||0)),requireGoodStanding=body.require_good_standing?1:0;
   if(opensAt&&closesAt&&closesAt<=opensAt)return c.json({error:"Voting close time must be after the opening time"},400);
   if(applicationsOpenAt&&applicationsCloseAt&&applicationsCloseAt<=applicationsOpenAt)return c.json({error:"Application close time must be after application opening time"},400);
   if(applicationsCloseAt&&opensAt&&applicationsCloseAt>opensAt)return c.json({error:"Candidate applications must close before voting opens"},400);
-  const r=await c.env.DB.prepare(`INSERT INTO elections(title,term,opens_at,closes_at,applications_open_at,applications_close_at,min_membership_days,require_good_standing,status,created_by)
-    VALUES(?,?,?,?,?,?,?,?, 'draft',?)`).bind(title,text(body.term,80)||null,opensAt,closesAt,applicationsOpenAt,applicationsCloseAt,minMembershipDays,requireGoodStanding,admin.id).run();
+  const r=await c.env.DB.prepare(`INSERT INTO elections(title,term,opens_at,closes_at,applications_open_at,applications_close_at,status,created_by)
+    VALUES(?,?,?,?,?,?, 'draft',?)`).bind(title,text(body.term,80)||null,opensAt,closesAt,applicationsOpenAt,applicationsCloseAt,admin.id).run();
   const id=Number(r.meta.last_row_id);
   await auditEntity(c.env,admin.id,"election_created","election",id,null,{title,term:body.term||null});
   return c.json(await electionDetail(c.env,id),201);
@@ -321,8 +286,6 @@ electionsRoute.post("/:id/applications", async c=>{
   const body=await c.req.json<any>().catch(()=>({})); const positionId=Number(body.position_id);
   const position=await c.env.DB.prepare("SELECT * FROM election_positions WHERE id=? AND election_id=?").bind(positionId,id).first<any>();
   if(!position)return c.json({error:"Choose a valid available position"},400);
-  const eligibility=await candidateEligibility(c.env,election,position,member);
-  if(!eligibility.eligible)return c.json({error:eligibility.reasons.join(" ")},403);
   try{
     const r=await c.env.DB.prepare(`INSERT INTO election_applications(election_id,position_id,member_id,statement)
       VALUES(?,?,?,?)`).bind(id,positionId,member.id,text(body.statement,600)||null).run();
