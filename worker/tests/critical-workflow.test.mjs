@@ -1803,3 +1803,14 @@ test('v77 frontend admin controls match backend permission boundaries', () => {
   assert.match(meetings,/\{canFinance&&showCreate&&<Modal/);
   assert.match(meetings,/\{canFinance&&!\["cancelled","completed"\]\.includes\(details\.status\)/);
 });
+
+test('v78 meeting lifecycle blocks invalid draft and completed transitions', () => {
+  const src = fs.readFileSync(path.join(root,'src/routes/admin/meetings.ts'),'utf8');
+  assert.match(src, /Send meeting invitations before recording attendance/);
+  assert.match(src, /Send meeting invitations before completing the meeting/);
+  assert.match(src, /Completed meetings cannot be cancelled/);
+
+  const completedGuards=(src.match(/Completed meetings are read-only/g)||[]).length;
+  assert.ok(completedGuards >= 3, 'edit, update-notification and reminder paths should all reject completed meetings');
+});
+

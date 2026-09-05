@@ -264,6 +264,7 @@ route.post('/meetings/:id/notify-update', requireFinance, async c => {
   const m=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   if(!m) return c.json({error:'Meeting not found'},404);
   if(m.status==='cancelled') return c.json({error:'Meeting is cancelled'},409);
+  if(m.status==='completed') return c.json({error:'Completed meetings are read-only'},409);
   if(!m.sent_at) return c.json({error:'Send meeting invitations before notifying members of updates'},409);
 
   const rescheduled=Boolean(body.rescheduled);
@@ -303,6 +304,7 @@ route.post('/meetings/:id/remind-pending', requireFinance, async c => {
   const m=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   if(!m) return c.json({error:'Meeting not found'},404);
   if(m.status==='cancelled') return c.json({error:'Meeting is cancelled'},409);
+  if(m.status==='completed') return c.json({error:'Completed meetings are read-only'},409);
   if(!m.sent_at) return c.json({error:'Send meeting invitations before sending RSVP reminders'},409);
 
   await ensureMeetingInvitees(c.env,m);
@@ -339,6 +341,7 @@ route.post('/meetings/:id/cancel', requireFinance, async c => {
   const before=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   if(!before) return c.json({error:'Meeting not found'},404);
   if(before.status==='cancelled') return c.json({error:'Meeting already cancelled'},409);
+  if(before.status==='completed') return c.json({error:'Completed meetings cannot be cancelled'},409);
 
   await c.env.DB.prepare(`
     UPDATE meetings
@@ -395,6 +398,7 @@ route.put('/meetings/:id/attendance', requireFinance, async c=>{
   if(!meeting)return c.json({error:'Meeting not found'},404);
   if(meeting.status==='cancelled')return c.json({error:'Cancelled meeting attendance cannot be changed'},409);
   if(meeting.status==='completed')return c.json({error:'Completed meeting attendance is read-only'},409);
+  if(!meeting.sent_at)return c.json({error:'Send meeting invitations before recording attendance'},409);
   const invitees=await ensureMeetingInvitees(c.env,meeting);
   const allowed=new Set((invitees.results as any[]).map((x:any)=>Number(x.id)));
   const body=await c.req.json().catch(()=>({})) as any;
@@ -419,6 +423,7 @@ route.post('/meetings/:id/complete', requireFinance, async c=>{
   if(!before)return c.json({error:'Meeting not found'},404);
   if(before.status==='cancelled')return c.json({error:'Cancelled meeting cannot be completed'},409);
   if(before.status==='completed')return c.json({error:'Meeting is already completed'},409);
+  if(!before.sent_at)return c.json({error:'Send meeting invitations before completing the meeting'},409);
   const invitees=await ensureMeetingInvitees(c.env,before);
   const recorded=await c.env.DB.prepare("SELECT COUNT(*) n FROM meeting_attendance WHERE meeting_id=?").bind(id).first<any>();
   if(Number(recorded?.n||0)!==invitees.results.length)
