@@ -55,6 +55,7 @@ export function MyProfile({ member, setTab }) {
         <div className="sans member-profile-kicker">MY MEMBERSHIP</div>
         <div className="member-profile-name">{m.name || "Member"}</div>
         <div className="sans member-profile-code">{m.member_code || "—"}</div>
+        {dashboard.current_exco?.role_title && <div className="sans member-profile-exco-badge">{dashboard.current_exco.role_title}</div>}
       </div>
       <div className="sans member-profile-status" style={{color:statusColor}}>
         {status==="paid"?"✓ ":""}{statusLabel}
@@ -71,6 +72,20 @@ export function MyProfile({ member, setTab }) {
     {pendingCount>0 && <div className="sans member-profile-pending">
       {pendingCount} payment submission{pendingCount===1?" is":"s are"} awaiting approval.
     </div>}
+
+    {dashboard.current_exco && <section className="member-profile-card">
+      <div className="sans member-profile-section-title">EXCO ROLE</div>
+      <ProfileRow label="Current position" value={dashboard.current_exco.role_title}/>
+      <ProfileRow label="Term" value={dashboard.current_exco.term||"—"}/>
+      <ProfileRow label="Effective from" value={formatJoinedDate(dashboard.current_exco.started_at)}/>
+      <ProfileRow label="Assigned by election" value={dashboard.current_exco.election_title||"—"} last/>
+      {dashboard.exco_history?.some(x=>x.ended_at) && <>
+        <div className="sans member-profile-section-title" style={{marginTop:14}}>PREVIOUS EXCO ROLES</div>
+        {dashboard.exco_history.filter(x=>x.ended_at).map((x,i)=><div key={`${x.role_title}-${x.started_at}-${i}`} className="sans member-profile-exco-history">
+          <b>{x.role_title}</b><span>{x.term||x.election_title||"Previous term"} · {formatJoinedDate(x.started_at)} → {formatJoinedDate(x.ended_at)}</span>
+        </div>)}
+      </>}
+    </section>}
 
     <section className="member-profile-card">
       <div className="sans member-profile-section-title">MEMBERSHIP DETAILS</div>

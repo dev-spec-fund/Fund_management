@@ -15,8 +15,12 @@ membersRoute.get("/", requireAdmin, async (c) => {
   const admin=c.get("admin")!;
   const viewer=admin.role==='viewer';
   const rows = await c.env.DB.prepare(viewer
-    ? "SELECT id,member_code,name,NULL phone,monthly_amount,active,joined_at,created_at,NULL telegram_id FROM members ORDER BY name"
-    : "SELECT id,member_code,name,phone,monthly_amount,active,joined_at,created_at,telegram_id FROM members ORDER BY name").all();
+    ? `SELECT m.id,m.member_code,m.name,NULL phone,m.monthly_amount,m.active,m.joined_at,m.created_at,NULL telegram_id,
+        (SELECT x.role_title FROM exco_role_assignments x WHERE x.member_id=m.id AND x.ended_at IS NULL ORDER BY x.id DESC LIMIT 1) exco_role
+       FROM members m ORDER BY m.name`
+    : `SELECT m.id,m.member_code,m.name,m.phone,m.monthly_amount,m.active,m.joined_at,m.created_at,m.telegram_id,
+        (SELECT x.role_title FROM exco_role_assignments x WHERE x.member_id=m.id AND x.ended_at IS NULL ORDER BY x.id DESC LIMIT 1) exco_role
+       FROM members m ORDER BY m.name`).all();
   return c.json(rows.results);
 });
 
@@ -26,14 +30,20 @@ membersRoute.get("/:id", requireAdmin, async (c) => {
   const admin=c.get("admin")!;
   const viewer=admin.role==='viewer';
   const member = await c.env.DB.prepare(viewer
-    ? "SELECT id,member_code,name,NULL phone,monthly_amount,active,joined_at,created_at,NULL telegram_id FROM members WHERE id=?"
-    : "SELECT id,member_code,name,phone,monthly_amount,active,joined_at,created_at,telegram_id FROM members WHERE id=?").bind(id).first();
+    ? `SELECT m.id,m.member_code,m.name,NULL phone,m.monthly_amount,m.active,m.joined_at,m.created_at,NULL telegram_id,
+        (SELECT x.role_title FROM exco_role_assignments x WHERE x.member_id=m.id AND x.ended_at IS NULL ORDER BY x.id DESC LIMIT 1) exco_role
+       FROM members m WHERE m.id=?`
+    : `SELECT m.id,m.member_code,m.name,m.phone,m.monthly_amount,m.active,m.joined_at,m.created_at,m.telegram_id,
+        (SELECT x.role_title FROM exco_role_assignments x WHERE x.member_id=m.id AND x.ended_at IS NULL ORDER BY x.id DESC LIMIT 1) exco_role
+       FROM members m WHERE m.id=?`).bind(id).first();
   if (!member) return c.json({ error: "Not found" }, 404);
   const contributions = await c.env.DB.prepare(
     `SELECT id,txn_id,member_id,amount,month,${viewer?"NULL":"ref_number"} ref_number,status,approved_by,submitted_at,approved_at,${viewer?"NULL":"bank_date"} bank_date,corrected_by,corrected_at,voided_by,voided_at,void_reason
      FROM contributions WHERE member_id = ? ORDER BY month DESC, submitted_at DESC`
   ).bind(id).all();
-  return c.json({ ...member, contributions: contributions.results });
+  const excoHistory=await c.env.DB.prepare(`SELECT x.role_title,x.term,x.started_at,x.ended_at,e.title election_title
+    FROM exco_role_assignments x JOIN elections e ON e.id=x.election_id WHERE x.member_id=? ORDER BY x.started_at DESC,x.id DESC`).bind(id).all<any>();
+  return c.json({ ...member, contributions: contributions.results, exco_history:excoHistory.results });
 });
 
 membersRoute.get("/:id/monthly-status", requireAdmin, async (c) => {

@@ -11,13 +11,18 @@ export default function Elections(){
   const [showCreate,setShowCreate]=useState(false);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
+  const [currentExco,setCurrentExco]=useState(()=>api.peekCached("/api/elections/exco/current")?.roles||[]);
   const [form,setForm]=useState({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});
   const [applicationFilter,setApplicationFilter]=useState("all");
   const [position,setPosition]=useState({title:"",seats:"1",min_selections:"1"});
   const [candidate,setCandidate]=useState({position_id:"",member_id:""});
   const {confirm,confirmationDialog}=useConfirmDialog();
 
-  const load=()=>Promise.all([api.elections.list().then(setRows),api.members.list().then(setMembers)]).catch(e=>setMessage(e.message));
+  const load=()=>Promise.all([
+    api.elections.list().then(setRows),
+    api.members.list().then(setMembers),
+    api.elections.currentExco().then(r=>setCurrentExco(r.roles||[]))
+  ]).catch(e=>setMessage(e.message));
   const open=async(row)=>{setSelected(row);setMessage("");try{setDetail(await api.elections.get(row.id))}catch(e){setMessage(e.message)}};
   useEffect(()=>{load()},[]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
@@ -38,9 +43,22 @@ export default function Elections(){
   const remindNonVoters=async()=>{
     setBusy(true);try{const r=await api.elections.remindNonVoters(detail.id);setMessage(`Voting reminder sent: ${r.sent||0}${r.failed?` · ${r.failed} failed`:""}`)}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
+  const startRunoff=async(tie)=>{
+    const closesAt=window.prompt("Runoff closing date/time (YYYY-MM-DDTHH:MM), or leave blank to close manually:","") ?? null;
+    if(closesAt===null)return;
+    setBusy(true);try{
+      await api.elections.startRunoff(detail.id,{position_id:tie.position_id,closes_at:closesAt||null});
+      setDetail(await api.elections.get(detail.id));setMessage(`Runoff opened for ${tie.position_title}.`);
+    }catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
+  const closeRunoff=async(runoff)=>{
+    if(!await confirm({title:"Close runoff?",message:`Close runoff voting for ${runoff.position_title}?`,confirmLabel:"Close runoff",tone:"primary"}))return;
+    setBusy(true);try{await api.elections.closeRunoff(detail.id,runoff.id);setDetail(await api.elections.get(detail.id));setMessage("Runoff closed and tie status recalculated.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
+
   const certify=async()=>{
     if(!await confirm({title:"Certify election results?",message:"Certification makes the results final and publishes them to members. Ballots remain secret.",confirmLabel:"Certify results",tone:"primary"}))return;
-    setBusy(true);try{setDetail(await api.elections.certify(detail.id));await load();setMessage("Election results certified and published.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
+    setBusy(true);try{await api.elections.certify(detail.id);setDetail(await api.elections.get(detail.id));await load();setMessage("Election certified · EXCO roles assigned and published.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
 
   const changeStatus=async(action)=>{if(!detail)return;if(!await confirm({title:`${action[0].toUpperCase()+action.slice(1)} election?`,message:action==="open"?"Eligible voters will be snapshotted and Telegram-linked members will be notified.":`Are you sure you want to ${action} this election?`,confirmLabel:action[0].toUpperCase()+action.slice(1),tone:action==="cancel"?"danger":"primary"}))return;setBusy(true);try{const d=await api.elections[action](detail.id);setDetail(d);await load();setMessage(action==="open"?"Election opened. Eligible voters were snapshotted.":action==="close"?"Election closed. Results are now available.":"Election cancelled.")}catch(e){setMessage(e.message)}finally{setBusy(false)}};
@@ -50,6 +68,10 @@ export default function Elections(){
     <div className="member-page-heading"><div className="sans">EXCO Elections</div><span className="sans">Secret-ballot executive committee elections</span></div>
     <MessageBanner>{message}</MessageBanner>
     <button type="button" style={{...approveBtn,width:"100%",marginBottom:12}} onClick={()=>setShowCreate(true)}>+ Create election</button>
+    {!!currentExco.length&&<section className="official-exco-card">
+      <div className="sans member-section-title">CURRENT OFFICIAL EXCO</div>
+      {currentExco.map(x=><div key={x.id} className="sans official-exco-row"><span><b>{x.role_title}</b><small>{x.term||x.election_title||""}</small></span><strong>{x.name}</strong></div>)}
+    </section>}
     {!rows.length?<EmptyState>No elections yet.</EmptyState>:rows.map(e=><button key={e.id} type="button" onClick={()=>open(e)} className="expense-row" style={{alignItems:"center"}}>
       <div style={{minWidth:0,flex:1,textAlign:"left"}}><div className="sans" style={{fontSize:13,fontWeight:750}}>{e.title}</div><div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:3}}>{e.term||"No term"} · {String(e.status).toUpperCase()}</div></div>
       <div className="sans" style={{textAlign:"right"}}><b>{e.turnout?.voted||0}/{e.turnout?.eligible||0}</b><div style={{fontSize:9,color:"var(--soft)"}}>{Number(e.turnout?.percent||0).toFixed(1)}% turnout</div></div>
@@ -103,10 +125,17 @@ export default function Elections(){
           <button type="button" style={{...rejectBtn,width:"100%",marginTop:8}} disabled={busy} onClick={()=>changeStatus("cancel")}>Cancel election</button>
         </>}
         {detail.status==="closed"&&<>
-          {!detail.certified_at&&<div className="sans election-certification pending">Results calculated · Uncertified</div>}
-          {detail.certified_at&&<div className="sans election-certification">✓ Certified by {detail.certified_by_name||"Super Admin"}</div>}
+          {!detail.certified_at&&<div className="sans election-certification pending">{detail.unresolved_ties?.length?`Runoff required · ${detail.unresolved_ties.length} unresolved position${detail.unresolved_ties.length===1?"":"s"}`:"Results calculated · Ready for certification"}</div>}
+          {detail.certified_at&&<div className="sans election-certification">✓ Certified by {detail.certified_by_name||"Super Admin"} · Results locked</div>}
           <ElectionResults detail={detail}/>
-          {!detail.certified_at&&<button type="button" disabled={busy} onClick={certify} style={{...approveBtn,width:"100%",marginTop:10}}>Certify & publish results</button>}
+          {!detail.certified_at&&detail.unresolved_ties?.map(tie=>{
+            const activeRunoff=detail.runoffs?.find(r=>Number(r.position_id)===Number(tie.position_id)&&r.status==="open");
+            return <div key={`${tie.position_id}-${tie.round_no}`} className="election-runoff-admin">
+              <div className="sans"><b>{tie.position_title} · Runoff required</b><span>{tie.candidate_ids.length} tied candidates · {tie.seats_to_fill} seat{Number(tie.seats_to_fill)===1?"":"s"} to fill</span></div>
+              {activeRunoff?<><div className="sans election-runoff-turnout">{activeRunoff.turnout?.voted||0}/{activeRunoff.turnout?.eligible||0} voted · Round {activeRunoff.round_no}</div><button type="button" disabled={busy} onClick={()=>closeRunoff(activeRunoff)}>Close runoff</button></>:<button type="button" disabled={busy} onClick={()=>startRunoff(tie)}>Start runoff round {tie.round_no}</button>}
+            </div>
+          })}
+          {!detail.certified_at&&<button type="button" disabled={busy||!!detail.unresolved_ties?.length} onClick={certify} style={{...approveBtn,width:"100%",marginTop:10,opacity:detail.unresolved_ties?.length?.55:1}}>{detail.unresolved_ties?.length?"Resolve runoffs before certification":"Certify results & assign EXCO roles"}</button>}
           {!!detail.audit_history?.length&&<><div className="sans member-section-title" style={{marginTop:16}}>ELECTION AUDIT</div>{detail.audit_history.map(a=><div key={a.id} className="sans election-audit-row"><b>{String(a.action||"").replaceAll("_"," ")}</b><span>{a.admin_name||"system"} · {String(a.created_at||"").replace("T"," ").slice(0,16)}</span></div>)}</>}
         </>}
         {detail.status==="cancelled"&&<div className="sans election-secret-note">This election was cancelled.</div>}

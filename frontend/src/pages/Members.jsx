@@ -118,7 +118,10 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
           <div key={m.id} onClick={() => setSelected(m)} style={{ background: m.active ? "var(--card)" : "var(--button-soft)", opacity: m.active ? 1 : 0.65, border: "1px solid var(--border)", borderRadius: 12, padding: "11px 12px", marginBottom: 7, cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="sans" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-strong)" }}>{m.name} <span style={{ fontSize: 11, color: "var(--soft-4)", fontWeight: 500 }}>{m.member_code}</span></div>
+                <div className="sans" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-strong)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" }}>
+                  <span>{m.name} <span style={{ fontSize: 11, color: "var(--soft-4)", fontWeight: 500 }}>{m.member_code}</span></span>
+                  {m.exco_role && <span className="member-exco-badge">{m.exco_role}</span>}
+                </div>
                 <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 2 }}>{m.phone ? m.phone : "Phone not added"} · MVR {fmt(m.monthly_amount)}/mo</div>
               </div>
               <StatusBadge status={status} />

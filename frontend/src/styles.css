@@ -2734,3 +2734,57 @@ button:not(:disabled):active {
   padding:8px 9px;border-radius:8px;background:var(--button-soft);color:var(--muted);
   margin-bottom:8px;font-size:8px;line-height:1.4
 }
+
+
+/* v50 election finalization, runoffs and EXCO roles */
+.member-exco-badge,
+.member-profile-exco-badge{
+  display:inline-flex;align-items:center;width:max-content;border-radius:999px;
+  background:var(--button-soft);color:var(--primary-text);border:1px solid var(--border-strong);
+  font-size:8px;font-weight:800;letter-spacing:.25px;padding:3px 7px;
+}
+.member-profile-exco-badge{margin-top:5px}
+.member-popup-exco{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--button-soft);border:1px solid var(--border);border-radius:10px;
+  padding:9px 10px;margin-top:10px
+}
+.member-popup-exco span{font-size:8px;color:var(--soft);font-weight:750;letter-spacing:.45px}
+.member-popup-exco b{font-size:11px;color:var(--primary-text)}
+.member-profile-exco-history{padding:8px 0;border-bottom:1px solid var(--divider)}
+.member-profile-exco-history b,.member-profile-exco-history span{display:block}
+.member-profile-exco-history b{font-size:10px;color:var(--primary-text)}
+.member-profile-exco-history span{font-size:8px;color:var(--soft);margin-top:3px}
+.official-exco-card{
+  border:1px solid var(--border);border-radius:13px;background:var(--card);
+  padding:11px 12px;margin-bottom:12px
+}
+.official-exco-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:8px 0;border-top:1px solid var(--divider)
+}
+.official-exco-row:first-of-type{border-top:0}
+.official-exco-row span{min-width:0}
+.official-exco-row b,.official-exco-row small{display:block}
+.official-exco-row b{font-size:9px;color:var(--soft);text-transform:uppercase}
+.official-exco-row small{font-size:8px;color:var(--soft);margin-top:2px}
+.official-exco-row strong{font-size:11px;color:var(--primary-text);text-align:right}
+.election-runoff-admin{
+  border:1px solid var(--warning-border);border-radius:11px;background:var(--warning-bg);
+  padding:10px 11px;margin:8px 0
+}
+.election-runoff-admin>div:first-child b,.election-runoff-admin>div:first-child span{display:block}
+.election-runoff-admin>div:first-child b{font-size:10px;color:var(--warning)}
+.election-runoff-admin>div:first-child span{font-size:8px;color:var(--muted);margin-top:3px}
+.election-runoff-admin button{
+  width:100%;border:0;border-radius:8px;background:var(--card);color:var(--primary-text);
+  padding:8px;font:inherit;font-size:9px;font-weight:750;margin-top:7px
+}
+.election-runoff-turnout{font-size:8px;color:var(--muted);margin-top:6px}
+.election-runoff-ballot{
+  border:1px solid var(--warning-border);background:var(--warning-bg);border-radius:12px;
+  padding:10px;margin:10px 0
+}
+.election-runoff-title{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
+.election-runoff-title b{font-size:10px;color:var(--warning)}
+.election-runoff-title span{font-size:8px;color:var(--muted)}

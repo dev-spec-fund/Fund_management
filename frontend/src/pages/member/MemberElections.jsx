@@ -12,8 +12,13 @@ export function MemberElections(){
   const [applyStatement,setApplyStatement]=useState("");
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
+  const [currentExco,setCurrentExco]=useState(()=>api.peekCached("/api/elections/exco/current")?.roles||[]);
+  const [runoffChoices,setRunoffChoices]=useState({});
   const {confirm,confirmationDialog}=useConfirmDialog();
-  const load=()=>api.elections.list().then(setRows).catch(e=>setMessage(e.message));
+  const load=()=>Promise.all([
+    api.elections.list().then(setRows),
+    api.elections.currentExco().then(r=>setCurrentExco(r.roles||[]))
+  ]).catch(e=>setMessage(e.message));
   useEffect(()=>{load()},[]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
   const open=async(e)=>{setSelected(e);setChoices({});setMessage("");try{setDetail(await api.elections.get(e.id))}catch(err){setMessage(err.message)}};
@@ -31,6 +36,19 @@ export function MemberElections(){
     if(!await confirm({title:"Withdraw application?",message:"You can apply again only if the application period is still open.",confirmLabel:"Withdraw",tone:"danger"}))return;
     setBusy(true);try{await api.elections.withdrawApplication(detail.id,a.id);setDetail(await api.elections.get(detail.id));setMessage("Application withdrawn.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
+  const toggleRunoff=(runoff,candidateId)=>{
+    const key=String(runoff.id),current=runoffChoices[key]||[],need=Number(runoff.seats_to_fill||1);
+    if(current.includes(candidateId))return setRunoffChoices({...runoffChoices,[key]:current.filter(x=>x!==candidateId)});
+    if(current.length>=need)return;
+    setRunoffChoices({...runoffChoices,[key]:[...current,candidateId]});
+  };
+  const submitRunoff=async(runoff)=>{
+    const selected=runoffChoices[String(runoff.id)]||[],need=Number(runoff.seats_to_fill||1);
+    if(selected.length!==need)return setMessage(`Select exactly ${need} candidate${need===1?"":"s"} for this runoff.`);
+    if(!await confirm({title:"Submit runoff ballot?",message:"Your runoff vote is secret and cannot be changed after submission.",confirmLabel:"Submit runoff vote",tone:"primary"}))return;
+    setBusy(true);try{await api.elections.voteRunoff(detail.id,runoff.id,selected);setMessage("Runoff vote submitted successfully.");setDetail(await api.elections.get(detail.id));await load()}catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
+
   const submit=async()=>{
     if(!detail||detail.my_vote)return;
     if(!await confirm({title:"Submit secret ballot?",message:"Your vote cannot be changed after submission. Your selections are stored separately from your member identity.",confirmLabel:"Submit vote",tone:"primary"}))return;
@@ -40,6 +58,10 @@ export function MemberElections(){
   return <>
     <div className="member-page-heading"><div className="sans">Elections</div><span className="sans">EXCO nominations, voting and results</span></div>
     <MessageBanner>{message}</MessageBanner>
+    {!!currentExco.length&&<section className="official-exco-card">
+      <div className="sans member-section-title">CURRENT OFFICIAL EXCO</div>
+      {currentExco.map(x=><div key={x.id} className="sans official-exco-row"><span><b>{x.role_title}</b><small>{x.term||""}</small></span><strong>{x.name}</strong></div>)}
+    </section>}
     {!rows.length?<EmptyState>No elections available.</EmptyState>:rows.map(e=><button key={e.id} type="button" onClick={()=>open(e)} className="member-election-card">
       <div><b className="sans">{e.title}</b><span className="sans">{e.term||""}</span></div>
       <div className="sans"><strong>{e.status==="draft"?"View applications ›":e.status==="open"?(e.my_vote?"Vote submitted ✓":"Vote now ›"):e.status==="closed"?"View results ›":String(e.status)}</strong><span>{e.turnout?.voted||0}/{e.turnout?.eligible||0} voted · {Number(e.turnout?.percent||0).toFixed(1)}%</span></div>
@@ -72,8 +94,21 @@ export function MemberElections(){
           </div>)}
           <button type="button" disabled={busy} onClick={submit} style={{...approveBtn,width:"100%",marginTop:12}}>{busy?"Submitting…":"Review & submit vote"}</button>
         </>}
-        {detail.status==="closed"&&!detail.certified_at&&<div className="sans election-voted">Voting has closed. Results are awaiting certification.</div>}
-        {detail.status==="closed"&&detail.certified_at&&<><div className="sans election-certification">✓ Official results certified</div><MemberResults detail={detail}/></>}
+        {detail.status==="closed"&&!detail.certified_at&&<>
+          <div className="sans election-voted">{detail.unresolved_ties?.length?"Main voting has closed. A runoff is required before certification.":"Voting has closed. Results are awaiting certification."}</div>
+          {detail.runoffs?.filter(r=>r.status==="open").map(runoff=>{
+            const mine=detail.my_runoff_votes?.[String(runoff.id)];
+            const selected=runoffChoices[String(runoff.id)]||[];
+            return <div key={runoff.id} className="election-runoff-ballot">
+              <div className="sans election-runoff-title"><b>{runoff.position_title} · Runoff Round {runoff.round_no}</b><span>Select exactly {runoff.seats_to_fill}</span></div>
+              {mine?.voted?<div className="sans election-voted">✓ Your runoff vote has been submitted.</div>:mine?.eligible?<>
+                {runoff.candidates.map(c=><button key={c.id} type="button" onClick={()=>toggleRunoff(runoff,c.id)} className={`sans election-candidate${selected.includes(c.id)?" selected":""}`}><span>{c.display_name}</span><b>{selected.includes(c.id)?"✓":""}</b></button>)}
+                <button type="button" disabled={busy||selected.length!==Number(runoff.seats_to_fill)} onClick={()=>submitRunoff(runoff)} style={{...approveBtn,width:"100%",marginTop:8}}>Submit runoff vote</button>
+              </>:<div className="sans election-secret-note">You are not eligible for this runoff.</div>}
+            </div>
+          })}
+        </>}
+        {detail.status==="closed"&&detail.certified_at&&<><div className="sans election-certification">✓ Official results certified · EXCO roles assigned</div><MemberResults detail={detail}/></>}
         {detail.status==="cancelled"&&<div className="sans election-voted">This election was cancelled.</div>}
       </>}
     </Modal>}

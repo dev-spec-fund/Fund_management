@@ -458,7 +458,7 @@ test('contribution review Telegram messages are persisted and synchronized from 
   assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"rejected"/);
   assert.match(callbacks,/recordContributionReviewMessage/);
   assert.match(callbacks,/syncContributionReviewMessages/);
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 32/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 33/);
 });
 
 test('Telegram callback can self-heal a legacy stale contribution review message', () => {
@@ -581,7 +581,7 @@ test('database backup includes election governance tables and schema version 29'
   for(const table of ['elections','election_positions','election_candidates','election_voters','election_ballots']){
     assert.match(system,new RegExp(table));
   }
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 32/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 33/);
 });
 
 
@@ -597,7 +597,7 @@ test('election integrity adds automatic lifecycle, withdrawal, reminders, certif
   assert.match(elections,/candidate_withdrawn/);
   assert.match(elections,/results_certified/);
   assert.match(elections,/turnout:\{eligible,voted,percent/);
-  assert.match(elections,/tieAtCutoff\?"tie":"elected"/);
+  assert.match(elections,/tieAtCutoff/);
   assert.match(elections,/min_selections/);
   assert.match(scheduled,/processElectionLifecycle/);
   assert.match(api,/withdrawCandidate/);
@@ -614,8 +614,8 @@ test('uncertified election results stay hidden from members and ties are not aut
   assert.match(elections,/results_visible/);
   assert.match(member,/awaiting certification/);
   assert.match(member,/outcome==="tie"/);
-  assert.match(admin,/Uncertified/);
-  assert.match(admin,/Certify & publish results/);
+  assert.match(admin,/Runoff required|Ready for certification/);
+  assert.match(admin,/Certify results & assign EXCO roles/);
   assert.match(admin,/Tie at the seat boundary/);
 });
 
@@ -630,7 +630,7 @@ test('election integrity migration advances schema to 30', () => {
   assert.ok(candidateCols.has("withdrawal_reason"));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 32/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 33/);
 });
 
 
@@ -710,4 +710,71 @@ test('candidate application Telegram events remain active after eligibility simp
   assert.match(route,/application was withdrawn/);
   assert.match(route,/applications close within 24 hours/);
   assert.match(route,/application_reminder_sent_at/);
+});
+
+
+test('v50 runoff tables and EXCO role history are migration controlled', () => {
+  const db=dbWithSchema();
+  for(const table of ['election_runoffs','election_runoff_candidates','election_runoff_voters','election_runoff_ballots','exco_role_assignments']){
+    const rows=db.prepare(`PRAGMA table_info(${table})`).all();
+    assert.ok(rows.length>0,`${table} must exist`);
+  }
+  const roleCols=new Set(db.prepare("PRAGMA table_info(exco_role_assignments)").all().map(r=>r.name));
+  for(const col of ['member_id','election_id','position_id','role_title','term','started_at','ended_at']) assert.ok(roleCols.has(col));
+  db.close();
+  const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 33/);
+});
+
+test('tie results require anonymous runoff and block certification until resolved', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/calculateElectionResults/);
+  assert.match(route,/unresolved/);
+  assert.match(route,/Resolve all tied seats with runoff voting before certification/);
+  assert.match(route,/election_runoff_ballots/);
+  assert.match(route,/ballot_token/);
+  assert.match(route,/runoff ballot has already been submitted/);
+  assert.match(route,/election_runoff_opened/);
+  assert.match(route,/election_runoff_closed/);
+  // Privacy: runoff ballot storage must not include member identity.
+  const schema=fs.readFileSync(path.join(root,'schema.sql'),'utf8');
+  const runoffBallot=schema.match(/CREATE TABLE IF NOT EXISTS election_runoff_ballots \(([\s\S]*?)\);/)?.[1]||'';
+  assert.doesNotMatch(runoffBallot,/member_id/);
+});
+
+test('certification automatically archives old EXCO and assigns elected roles without admin permissions', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/assignCertifiedExcoRoles/);
+  assert.match(route,/UPDATE exco_role_assignments SET ended_at/);
+  assert.match(route,/INSERT OR IGNORE INTO exco_role_assignments/);
+  assert.match(route,/officially assigned as/);
+  assert.doesNotMatch(route,/INSERT INTO admins/);
+  assert.match(route,/Results are already certified and locked/);
+});
+
+test('member and admin UIs surface current EXCO role and runoff workflow', () => {
+  const members=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Members.jsx'),'utf8');
+  const profile=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MyProfile.jsx'),'utf8');
+  const elections=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const memberElection=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(members,/member-exco-badge/);
+  assert.match(profile,/EXCO ROLE/);
+  assert.match(profile,/PREVIOUS EXCO ROLES/);
+  assert.match(elections,/CURRENT OFFICIAL EXCO/);
+  assert.match(elections,/Start runoff round/);
+  assert.match(elections,/Resolve runoffs before certification/);
+  assert.match(memberElection,/Submit runoff vote/);
+  assert.match(memberElection,/CURRENT OFFICIAL EXCO/);
+  assert.match(api,/currentExco/);
+  assert.match(api,/voteRunoff/);
+});
+
+test('member APIs expose current and historical EXCO positions', () => {
+  const members=fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
+  const index=fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
+  assert.match(members,/exco_role/);
+  assert.match(members,/exco_history/);
+  assert.match(index,/current_exco/);
+  assert.match(index,/exco_history/);
 });

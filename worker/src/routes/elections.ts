@@ -80,6 +80,98 @@ export async function processElectionLifecycle(env:any){
     const result=await env.DB.prepare("UPDATE elections SET status='closed',closed_at=datetime('now') WHERE id=? AND status='open'").bind(election.id).run();
     if(result.meta.changes) await auditEntity(env,null,"election_auto_closed","election",election.id,election,{...election,status:"closed"});
   }
+  const runoffs=await env.DB.prepare(`SELECT * FROM election_runoffs
+    WHERE status='open' AND closes_at IS NOT NULL AND closes_at<>'' AND closes_at<=?`).bind(now).all<any>();
+  for(const runoff of runoffs.results as any[]){
+    const r=await env.DB.prepare("UPDATE election_runoffs SET status='closed',closed_at=datetime('now') WHERE id=? AND status='open'").bind(runoff.id).run();
+    if(r.meta.changes)await auditEntity(env,null,"election_runoff_auto_closed","election_runoff",runoff.id,runoff,{...runoff,status:"closed",election_id:runoff.election_id});
+  }
+}
+
+
+async function latestClosedRunoff(env:any,electionId:number,positionId:number){
+  return env.DB.prepare(`SELECT * FROM election_runoffs
+    WHERE election_id=? AND position_id=? AND status='closed'
+    ORDER BY round_no DESC,id DESC LIMIT 1`).bind(electionId,positionId).first<any>();
+}
+
+async function calculateElectionResults(env:any,electionId:number){
+  const positions=await env.DB.prepare("SELECT * FROM election_positions WHERE election_id=? ORDER BY sort_order,id").bind(electionId).all<any>();
+  const candidates=await env.DB.prepare("SELECT * FROM election_candidates WHERE election_id=? ORDER BY position_id,id").bind(electionId).all<any>();
+  const base=await env.DB.prepare(`SELECT position_id,candidate_id,COUNT(*) votes FROM election_ballots
+    WHERE election_id=? GROUP BY position_id,candidate_id`).bind(electionId).all<any>();
+  const baseMap=new Map(base.results.map((r:any)=>[Number(r.candidate_id),Number(r.votes||0)]));
+  const results:any[]=[]; const unresolved:any[]=[];
+
+  for(const position of positions.results as any[]){
+    const active=(candidates.results as any[]).filter((c:any)=>Number(c.position_id)===Number(position.id)&&c.status==="active")
+      .map((c:any)=>({...c,votes:baseMap.get(Number(c.id))||0}))
+      .sort((a:any,b:any)=>b.votes-a.votes||String(a.display_name).localeCompare(String(b.display_name)));
+    const seats=Number(position.seats||1);
+    if(!active.length)continue;
+    const cutoff=active.length>=seats?Number(active[seats-1]?.votes||0):null;
+    const above=cutoff===null?active.length:active.filter((c:any)=>c.votes>cutoff).length;
+    const tied=cutoff===null?[]:active.filter((c:any)=>c.votes===cutoff);
+    const seatsAtBoundary=Math.max(0,seats-above);
+    const tieAtCutoff=cutoff!==null&&tied.length>seatsAtBoundary;
+
+    let runoff:any=null; let runoffResolvedIds:number[]=[];
+    if(tieAtCutoff){
+      runoff=await latestClosedRunoff(env,electionId,Number(position.id));
+      if(runoff){
+        const rv=await env.DB.prepare(`SELECT candidate_id,COUNT(*) votes FROM election_runoff_ballots WHERE runoff_id=?
+          GROUP BY candidate_id`).bind(runoff.id).all<any>();
+        const rmap=new Map(rv.results.map((r:any)=>[Number(r.candidate_id),Number(r.votes||0)]));
+        const rc=await env.DB.prepare(`SELECT ec.* FROM election_runoff_candidates rc
+          JOIN election_candidates ec ON ec.id=rc.candidate_id WHERE rc.runoff_id=?`).bind(runoff.id).all<any>();
+        const ranked=(rc.results as any[]).map((c:any)=>({...c,runoff_votes:rmap.get(Number(c.id))||0}))
+          .sort((a:any,b:any)=>b.runoff_votes-a.runoff_votes||String(a.display_name).localeCompare(String(b.display_name)));
+        const need=Number(runoff.seats_to_fill||seatsAtBoundary||1);
+        const runoffCut=ranked.length>=need?Number(ranked[need-1]?.runoff_votes||0):null;
+        const boundary=runoffCut===null?[]:ranked.filter((c:any)=>c.runoff_votes===runoffCut);
+        const aboveRunoff=runoffCut===null?ranked:ranked.filter((c:any)=>c.runoff_votes>runoffCut);
+        if(runoffCut!==null && boundary.length>(need-aboveRunoff.length)){
+          unresolved.push({position_id:position.id,position_title:position.title,candidate_ids:boundary.map((c:any)=>c.id),seats_to_fill:need-aboveRunoff.length,reason:"runoff_tie",round_no:Number(runoff.round_no||1)+1});
+        }else{
+          runoffResolvedIds=ranked.slice(0,need).map((c:any)=>Number(c.id));
+        }
+      }else{
+        unresolved.push({position_id:position.id,position_title:position.title,candidate_ids:tied.map((c:any)=>c.id),seats_to_fill:seatsAtBoundary,reason:"base_tie",round_no:1});
+      }
+    }
+
+    for(const candidate of (candidates.results as any[]).filter((c:any)=>Number(c.position_id)===Number(position.id))){
+      if(candidate.status==="withdrawn"){
+        results.push({position_id:position.id,candidate_id:candidate.id,votes:baseMap.get(Number(candidate.id))||0,outcome:"withdrawn"});continue;
+      }
+      const votes=baseMap.get(Number(candidate.id))||0;
+      let outcome="not_elected";
+      if(!tieAtCutoff){
+        const rank=active.findIndex((c:any)=>Number(c.id)===Number(candidate.id));
+        if(rank>=0&&rank<seats)outcome="elected";
+      }else{
+        if(cutoff!==null&&votes>cutoff)outcome="elected";
+        else if(runoffResolvedIds.includes(Number(candidate.id)))outcome="elected";
+        else if(tied.some((c:any)=>Number(c.id)===Number(candidate.id)) && !runoffResolvedIds.length)outcome="tie";
+      }
+      results.push({position_id:position.id,candidate_id:candidate.id,votes,outcome});
+    }
+  }
+  return {results,unresolved};
+}
+
+async function assignCertifiedExcoRoles(env:any,election:any,results:any[],certifiedAt:string){
+  const elected=results.filter((r:any)=>r.outcome==="elected");
+  const candidateRows=await env.DB.prepare(`SELECT ec.id candidate_id,ec.member_id,ep.id position_id,ep.title role_title
+    FROM election_candidates ec JOIN election_positions ep ON ep.id=ec.position_id WHERE ec.election_id=?`).bind(election.id).all<any>();
+  const electedRows=(candidateRows.results as any[]).filter((row:any)=>elected.some((r:any)=>Number(r.candidate_id)===Number(row.candidate_id)));
+  // Archive every currently active EXCO assignment before installing the certified committee.
+  await env.DB.prepare("UPDATE exco_role_assignments SET ended_at=date(?) WHERE ended_at IS NULL").bind(certifiedAt).run();
+  for(const row of electedRows){
+    await env.DB.prepare(`INSERT OR IGNORE INTO exco_role_assignments(member_id,election_id,position_id,role_title,term,started_at)
+      VALUES(?,?,?,?,?,date(?))`).bind(row.member_id,election.id,row.position_id,row.role_title,election.term||null,certifiedAt).run();
+  }
+  return electedRows;
 }
 
 async function memberForUser(c:any){
@@ -137,6 +229,13 @@ electionsRoute.get("/", async c=>{
   return c.json(result);
 });
 
+electionsRoute.get("/exco/current", async c=>{
+  const rows=await c.env.DB.prepare(`SELECT x.*,m.name,m.member_code,e.title election_title
+    FROM exco_role_assignments x JOIN members m ON m.id=x.member_id JOIN elections e ON e.id=x.election_id
+    WHERE x.ended_at IS NULL ORDER BY x.position_id,x.id`).all<any>();
+  return c.json({roles:rows.results});
+});
+
 electionsRoute.get("/:id", async c=>{
   await ensureOperationalSchema(c.env);
   await processElectionLifecycle(c.env);
@@ -149,33 +248,31 @@ electionsRoute.get("/:id", async c=>{
     eligible=!!v;my_vote=!!v?.voted_at;
   }
   if(!admin && detail.status==="draft")return c.json({error:"Election not available"},404);
-  let results:any[]= [];
+  let results:any[]=[]; let unresolved_ties:any[]=[];
   if(detail.status==="closed" && (admin || detail.certified_at)){
-    const rows=await c.env.DB.prepare(`SELECT b.position_id,b.candidate_id,COUNT(*) votes
-      FROM election_ballots b WHERE b.election_id=? GROUP BY b.position_id,b.candidate_id`).bind(id).all<any>();
-    const voteMap=new Map(rows.results.map((r:any)=>[Number(r.candidate_id),Number(r.votes||0)]));
-    for(const position of detail.positions){
-      const active=position.candidates.filter((c:any)=>c.status==="active").map((c:any)=>({...c,votes:voteMap.get(Number(c.id))||0}))
-        .sort((a:any,b:any)=>b.votes-a.votes || String(a.display_name).localeCompare(String(b.display_name)));
-      const seats=Number(position.seats||1);
-      const cutoff=active.length>=seats?Number(active[seats-1]?.votes||0):null;
-      const above=cutoff===null?active.length:active.filter((c:any)=>c.votes>cutoff).length;
-      const tied=cutoff===null?[]:active.filter((c:any)=>c.votes===cutoff);
-      const tieAtCutoff=cutoff!==null && tied.length>(seats-above);
-      for(const candidate of position.candidates){
-        if(candidate.status==="withdrawn"){results.push({position_id:position.id,candidate_id:candidate.id,votes:voteMap.get(Number(candidate.id))||0,outcome:"withdrawn"});continue;}
-        const votes=voteMap.get(Number(candidate.id))||0;
-        let outcome="not_elected";
-        if(cutoff===null || votes>cutoff) outcome="elected";
-        else if(votes===cutoff) outcome=tieAtCutoff?"tie":"elected";
-        results.push({position_id:position.id,candidate_id:candidate.id,votes,outcome});
-      }
-    }
+    const calculated=await calculateElectionResults(c.env,id);
+    results=calculated.results; unresolved_ties=calculated.unresolved;
   }
   const visibleApplications=admin?detail.applications:(member?detail.applications.filter((a:any)=>Number(a.member_id)===Number(member.id)).map((a:any)=>({
     id:a.id,election_id:a.election_id,position_id:a.position_id,status:a.status,statement:a.statement,submitted_at:a.submitted_at,review_reason:a.review_reason,withdrawn_at:a.withdrawn_at
   })):[]);
-  return c.json({...detail,applications:visibleApplications,eligible,my_vote,results,results_visible:!!admin||!!detail.certified_at});
+  const runoffs=await c.env.DB.prepare(`SELECT r.*,ep.title position_title FROM election_runoffs r
+    JOIN election_positions ep ON ep.id=r.position_id WHERE r.election_id=? ORDER BY r.position_id,r.round_no`).bind(id).all<any>();
+  const enrichedRunoffs:any[]=[]; let my_runoff_votes:any={};
+  for(const runoff of runoffs.results as any[]){
+    const [rc,turnout]=await Promise.all([
+      c.env.DB.prepare(`SELECT ec.id,ec.display_name,ec.member_id,
+        (SELECT COUNT(*) FROM election_runoff_ballots rb WHERE rb.runoff_id=? AND rb.candidate_id=ec.id) votes
+        FROM election_runoff_candidates x JOIN election_candidates ec ON ec.id=x.candidate_id WHERE x.runoff_id=? ORDER BY ec.display_name`).bind(runoff.id,runoff.id).all<any>(),
+      c.env.DB.prepare(`SELECT COUNT(*) eligible,SUM(CASE WHEN voted_at IS NOT NULL THEN 1 ELSE 0 END) voted FROM election_runoff_voters WHERE runoff_id=?`).bind(runoff.id).first<any>()
+    ]);
+    enrichedRunoffs.push({...runoff,candidates:rc.results,turnout:{eligible:Number(turnout?.eligible||0),voted:Number(turnout?.voted||0)}});
+    if(member){
+      const v=await c.env.DB.prepare("SELECT voted_at FROM election_runoff_voters WHERE runoff_id=? AND member_id=?").bind(runoff.id,member.id).first<any>();
+      if(v)my_runoff_votes[String(runoff.id)]={eligible:true,voted:!!v.voted_at};
+    }
+  }
+  return c.json({...detail,applications:visibleApplications,eligible,my_vote,results,unresolved_ties,runoffs:enrichedRunoffs,my_runoff_votes,results_visible:!!admin||!!detail.certified_at});
 });
 
 electionsRoute.post("/", requireSuperAdmin, async c=>{
@@ -309,6 +406,9 @@ electionsRoute.post("/:id/applications/:applicationId/withdraw", async c=>{
 
 electionsRoute.post("/:id/applications/:applicationId/review", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!,id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId"));
+  const electionState=await c.env.DB.prepare("SELECT status,certified_at FROM elections WHERE id=?").bind(id).first<any>();
+  if(!electionState)return c.json({error:"Election not found"},404);
+  if(electionState.certified_at)return c.json({error:"Certified election is locked"},409);
   const body=await c.req.json<any>().catch(()=>({})); const decision=String(body.decision||"");
   if(!["approved","rejected"].includes(decision))return c.json({error:"Decision must be approved or rejected"},400);
   const application=await c.env.DB.prepare(`SELECT ea.*,m.name member_name FROM election_applications ea
@@ -360,16 +460,97 @@ electionsRoute.post("/:id/remind-nonvoters", requireSuperAdmin, async c=>{
   return c.json({ok:true,...result});
 });
 
-electionsRoute.post("/:id/certify", requireSuperAdmin, async c=>{
-  const admin=c.get("admin")!; const id=Number(c.req.param("id")); const before=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
-  if(!before)return c.json({error:"Election not found"},404); if(before.status!=="closed")return c.json({error:"Close the election before certification"},409);
-  if(before.certified_at)return c.json({error:"Results are already certified"},409);
-  await c.env.DB.prepare("UPDATE elections SET certified_at=datetime('now'),certified_by=? WHERE id=?").bind(admin.id,id).run();
-  const after=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
-  await auditEntity(c.env,admin.id,"election_results_certified","election",id,before,after);
+electionsRoute.post("/:id/runoffs", requireSuperAdmin, async c=>{
+  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
+  const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+  if(election.status!=="closed"||election.certified_at)return c.json({error:"Runoff can only start for a closed, uncertified election"},409);
+  const body=await c.req.json<any>().catch(()=>({})); const positionId=Number(body.position_id);
+  const calculated=await calculateElectionResults(c.env,id);
+  const tie=calculated.unresolved.find((x:any)=>Number(x.position_id)===positionId);
+  if(!tie)return c.json({error:"This position does not currently require a runoff"},409);
+  const existing=await c.env.DB.prepare("SELECT id FROM election_runoffs WHERE election_id=? AND position_id=? AND status='open' LIMIT 1").bind(id,positionId).first<any>();
+  if(existing)return c.json({error:"A runoff is already open for this position"},409);
+  const closesAt=iso(body.closes_at)||null;
+  if(closesAt && closesAt<=localNow(c.env.FUND_TIMEZONE || "Indian/Maldives"))return c.json({error:"Runoff closing time must be in the future"},400);
+  const r=await c.env.DB.prepare(`INSERT INTO election_runoffs(election_id,position_id,round_no,seats_to_fill,status,closes_at,created_by)
+    VALUES(?,?,?,?, 'open',?,?)`).bind(id,positionId,Number(tie.round_no||1),Number(tie.seats_to_fill||1),closesAt,admin.id).run();
+  const runoffId=Number(r.meta.last_row_id);
+  const statements:any[]=[
+    ...tie.candidate_ids.map((candidateId:number)=>c.env.DB.prepare("INSERT INTO election_runoff_candidates(runoff_id,candidate_id) VALUES(?,?)").bind(runoffId,candidateId)),
+    c.env.DB.prepare("INSERT OR IGNORE INTO election_runoff_voters(runoff_id,member_id) SELECT ?,id FROM members WHERE active=1").bind(runoffId)
+  ];
+  await c.env.DB.batch(statements);
+  await auditEntity(c.env,admin.id,"election_runoff_opened","election_runoff",runoffId,null,{election_id:id,position_id:positionId,round_no:tie.round_no,seats_to_fill:tie.seats_to_fill,candidate_ids:tie.candidate_ids});
   const brand=await getBranding(c.env);
-  await notifyEligible(c.env,after,`🏆 <b>${brand.fund_name} · ${after.title}</b>\n\nElection results have been certified and are now available in the Mini App.`).catch(()=>{});
-  return c.json(await electionDetail(c.env,id));
+  const position=await c.env.DB.prepare("SELECT title FROM election_positions WHERE id=?").bind(positionId).first<any>();
+  const voters=await c.env.DB.prepare(`SELECT m.telegram_id FROM election_runoff_voters v JOIN members m ON m.id=v.member_id
+    WHERE v.runoff_id=? AND m.telegram_id IS NOT NULL`).bind(runoffId).all<any>();
+  c.executionCtx.waitUntil(Promise.allSettled((voters.results as any[]).map((m:any)=>sendMessage(c.env,m.telegram_id,
+    `🗳 <b>${brand.fund_name} · Runoff Vote</b>\n\nA runoff is now open for <b>${position?.title||"EXCO position"}</b> in ${election.title}. Open the Mini App to vote.`
+  ))));
+  return c.json({ok:true,runoff_id:runoffId,...await electionDetail(c.env,id)});
+});
+
+electionsRoute.post("/:id/runoffs/:runoffId/close", requireSuperAdmin, async c=>{
+  const admin=c.get("admin")!,id=Number(c.req.param("id")),runoffId=Number(c.req.param("runoffId"));
+  const before=await c.env.DB.prepare("SELECT * FROM election_runoffs WHERE id=? AND election_id=?").bind(runoffId,id).first<any>();
+  if(!before)return c.json({error:"Runoff not found"},404);
+  if(before.status!=="open")return c.json({error:"Runoff is not open"},409);
+  await c.env.DB.prepare("UPDATE election_runoffs SET status='closed',closed_at=datetime('now') WHERE id=?").bind(runoffId).run();
+  await auditEntity(c.env,admin.id,"election_runoff_closed","election_runoff",runoffId,before,{...before,status:"closed",election_id:id});
+  const calculated=await calculateElectionResults(c.env,id);
+  return c.json({...await electionDetail(c.env,id),results:calculated.results,unresolved_ties:calculated.unresolved});
+});
+
+electionsRoute.post("/:id/runoffs/:runoffId/vote", async c=>{
+  await processElectionLifecycle(c.env);
+  const id=Number(c.req.param("id")),runoffId=Number(c.req.param("runoffId")); const member=await memberForUser(c);
+  if(!member)return c.json({error:"Approved member account required"},403);
+  const runoff=await c.env.DB.prepare("SELECT * FROM election_runoffs WHERE id=? AND election_id=?").bind(runoffId,id).first<any>();
+  if(!runoff)return c.json({error:"Runoff not found"},404); if(runoff.status!=="open")return c.json({error:"Runoff voting is not open"},409);
+  const voter=await c.env.DB.prepare("SELECT voted_at,vote_claim FROM election_runoff_voters WHERE runoff_id=? AND member_id=?").bind(runoffId,member.id).first<any>();
+  if(!voter)return c.json({error:"You are not eligible for this runoff"},403); if(voter.voted_at)return c.json({error:"Your runoff ballot has already been submitted"},409);
+  const body=await c.req.json<any>().catch(()=>({})); const ids=Array.isArray(body.candidate_ids)?[...new Set(body.candidate_ids.map(Number).filter(Number.isInteger))]:[];
+  const need=Number(runoff.seats_to_fill||1);
+  if(ids.length!==need)return c.json({error:`Select exactly ${need} candidate${need===1?"":"s"} in this runoff`},400);
+  for(const candidateId of ids){
+    const valid=await c.env.DB.prepare("SELECT 1 ok FROM election_runoff_candidates WHERE runoff_id=? AND candidate_id=?").bind(runoffId,candidateId).first<any>();
+    if(!valid)return c.json({error:"Invalid runoff candidate"},400);
+  }
+  const claim=crypto.randomUUID();
+  const claimed=await c.env.DB.prepare("UPDATE election_runoff_voters SET vote_claim=? WHERE runoff_id=? AND member_id=? AND voted_at IS NULL AND vote_claim IS NULL").bind(claim,runoffId,member.id).run();
+  if(!claimed.meta.changes)return c.json({error:"Your runoff ballot is already being processed"},409);
+  const token=crypto.randomUUID();
+  const statements:any[]=ids.map((candidateId:number)=>c.env.DB.prepare("INSERT INTO election_runoff_ballots(runoff_id,ballot_token,candidate_id) VALUES(?,?,?)").bind(runoffId,token,candidateId));
+  statements.push(c.env.DB.prepare("UPDATE election_runoff_voters SET voted_at=datetime('now'),vote_claim=NULL WHERE runoff_id=? AND member_id=? AND vote_claim=?").bind(runoffId,member.id,claim));
+  try{await c.env.DB.batch(statements)}catch(e){await c.env.DB.prepare("UPDATE election_runoff_voters SET vote_claim=NULL WHERE runoff_id=? AND member_id=? AND vote_claim=?").bind(runoffId,member.id,claim).run().catch(()=>{});throw e}
+  return c.json({ok:true,submitted:true});
+});
+
+electionsRoute.post("/:id/certify", requireSuperAdmin, async c=>{
+  await processElectionLifecycle(c.env);
+  const admin=c.get("admin")!; const id=Number(c.req.param("id"));
+  const before=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!before)return c.json({error:"Election not found"},404);
+  if(before.status!=="closed")return c.json({error:"Close the election before certification"},409);
+  if(before.certified_at)return c.json({error:"Results are already certified and locked"},409);
+  const calculated=await calculateElectionResults(c.env,id);
+  if(calculated.unresolved.length)return c.json({error:"Resolve all tied seats with runoff voting before certification",unresolved_ties:calculated.unresolved},409);
+
+  await c.env.DB.prepare("UPDATE elections SET certified_at=datetime('now'),certified_by=? WHERE id=? AND certified_at IS NULL").bind(admin.id,id).run();
+  const after=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  const elected=await assignCertifiedExcoRoles(c.env,after,calculated.results,after.certified_at);
+  await auditEntity(c.env,admin.id,"election_results_certified","election",id,before,{...after,assigned_roles:elected.map((x:any)=>({member_id:x.member_id,role_title:x.role_title}))});
+
+  const brand=await getBranding(c.env);
+  await notifyEligible(c.env,after,`🏆 <b>${brand.fund_name} · ${after.title}</b>\n\nElection results have been certified. The official EXCO list is now available in the Mini App.`).catch(()=>{});
+  const electedMembers=await c.env.DB.prepare(`SELECT x.role_title,m.telegram_id,m.name FROM exco_role_assignments x
+    JOIN members m ON m.id=x.member_id WHERE x.election_id=? AND x.ended_at IS NULL`).bind(id).all<any>();
+  c.executionCtx.waitUntil(Promise.allSettled((electedMembers.results as any[]).filter((m:any)=>m.telegram_id).map((m:any)=>sendMessage(c.env,m.telegram_id,
+    `🎉 <b>${brand.fund_name} · EXCO</b>\n\nCongratulations ${m.name}. You have been officially assigned as <b>${m.role_title}</b> after certification of ${after.title}.`
+  ))));
+  return c.json({...await electionDetail(c.env,id),results:calculated.results,unresolved_ties:[],assigned_roles:elected});
 });
 
 electionsRoute.post("/:id/vote", async c=>{

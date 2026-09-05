@@ -220,6 +220,10 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
             </div>
           </div>
 
+          {member.exco_role && <div className="sans member-popup-exco">
+            <span>CURRENT EXCO ROLE</span><b>{member.exco_role}</b>
+          </div>}
+
           <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:11,padding:11,marginTop:11}}>
             <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
               <div>
