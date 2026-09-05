@@ -264,6 +264,7 @@ route.post('/meetings/:id/notify-update', requireFinance, async c => {
   const m=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   if(!m) return c.json({error:'Meeting not found'},404);
   if(m.status==='cancelled') return c.json({error:'Meeting is cancelled'},409);
+  if(!m.sent_at) return c.json({error:'Send meeting invitations before notifying members of updates'},409);
 
   const rescheduled=Boolean(body.rescheduled);
   const previousDate=String(body.previous_date||'');
@@ -302,6 +303,7 @@ route.post('/meetings/:id/remind-pending', requireFinance, async c => {
   const m=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   if(!m) return c.json({error:'Meeting not found'},404);
   if(m.status==='cancelled') return c.json({error:'Meeting is cancelled'},409);
+  if(!m.sent_at) return c.json({error:'Send meeting invitations before sending RSVP reminders'},409);
 
   await ensureMeetingInvitees(c.env,m);
   const members=await c.env.DB.prepare(`
@@ -344,12 +346,15 @@ route.post('/meetings/:id/cancel', requireFinance, async c => {
     WHERE id=?
   `).bind(adminUser.id,reason,id).run();
 
-  const members=await ensureMeetingInvitees(c.env,before);
-  const brandName=await groupName(c.env);
-  const delivery=await sendMeetingBatch(c.env,members.results.map((member:any)=>({...member,meeting_id:id,
-    text:`🚫 <b>${meetingEsc(brandName)} · Meeting cancelled</b>\n\n<b>${meetingEsc(before.title)}</b>\n${meetingEsc(before.meeting_date)} · ${meetingEsc(before.meeting_time)}\n\nReason: ${meetingEsc(reason)}`
-  })),'meeting.cancel_notice');
-  const {sent,unlinked,failed}=delivery;
+  let sent=0,unlinked=0,failed=0;
+  if(before.sent_at){
+    const members=await ensureMeetingInvitees(c.env,before);
+    const brandName=await groupName(c.env);
+    const delivery=await sendMeetingBatch(c.env,members.results.map((member:any)=>({...member,meeting_id:id,
+      text:`🚫 <b>${meetingEsc(brandName)} · Meeting cancelled</b>\n\n<b>${meetingEsc(before.title)}</b>\n${meetingEsc(before.meeting_date)} · ${meetingEsc(before.meeting_time)}\n\nReason: ${meetingEsc(reason)}`
+    })),'meeting.cancel_notice');
+    ({sent,unlinked,failed}=delivery);
+  }
 
   const after=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   await auditEntity(c.env,adminUser.id,'meeting_cancelled','meeting',id,before,{...after,notified:{sent,unlinked,failed}});

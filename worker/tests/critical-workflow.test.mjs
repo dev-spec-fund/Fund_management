@@ -1772,3 +1772,10 @@ test('v75 member meeting views hide unsent drafts and RSVP rejects them', () => 
   assert.doesNotMatch(index,/m\.sent_at IS NULL AND m\.status='draft'/);
   assert.match(index,/NOT EXISTS\(SELECT 1 FROM meeting_invitees ai WHERE ai\.meeting_id=m\.id\)/);
 });
+
+test('v76 unsent meeting drafts cannot send Telegram update or reminder notifications', () => {
+  const src = fs.readFileSync(path.join(root,'src/routes/admin/meetings.ts'),'utf8');
+  assert.match(src, /Send meeting invitations before notifying members of updates/);
+  assert.match(src, /Send meeting invitations before sending RSVP reminders/);
+  assert.match(src, /if\(before\.sent_at\)\{[\s\S]*meeting\.cancel_notice/);
+});
