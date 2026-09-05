@@ -33,7 +33,8 @@ async function notifyEligible(env:any,election:any,message:string, onlyNonVoters
     WHERE v.election_id=? AND m.telegram_id IS NOT NULL
     ${onlyNonVoters?"AND v.voted_at IS NULL":""}`).bind(election.id).all<any>();
   const results=await Promise.allSettled(rows.results.map((m:any)=>sendMessage(env,m.telegram_id,message)));
-  return {sent:results.filter(r=>r.status==="fulfilled").length,failed:results.filter(r=>r.status==="rejected").length};
+  const sent=results.filter((r:any)=>r.status==="fulfilled"&&r.value?.ok===true).length;
+  return {sent,failed:results.length-sent};
 }
 
 async function recordElectionNotification(env:any,electionId:number,eventKey:string,audience:string,result:any,detail:any=null,createdBy:number|null=null){
@@ -54,7 +55,8 @@ async function notifyRunoffNonVoters(env:any,runoff:any,message:string){
     JOIN members m ON m.id=v.member_id
     WHERE v.runoff_id=? AND v.voted_at IS NULL AND m.telegram_id IS NOT NULL`).bind(runoff.id).all<any>();
   const results=await Promise.allSettled((rows.results as any[]).map((m:any)=>sendMessage(env,m.telegram_id,message)));
-  return {sent:results.filter((r:any)=>r.status==="fulfilled").length,failed:results.filter((r:any)=>r.status==="rejected").length};
+  const sent=results.filter((r:any)=>r.status==="fulfilled"&&r.value?.ok===true).length;
+  return {sent,failed:results.length-sent};
 }
 
 async function processElectionClosingReminders(env:any){

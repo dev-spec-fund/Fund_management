@@ -1539,3 +1539,25 @@ test('v69 extends cache life for stable election governance data while keeping p
   assert.match(api,/\/api\/me\/governance-archive.*60_000/);
   assert.match(api,/\/api\/admin\/pending.*8_000/);
 });
+
+
+test('stability audit: D1 backup covers every application table in schema', () => {
+  const schema=fs.readFileSync(path.join(root,'schema.sql'),'utf8');
+  const system=fs.readFileSync(path.join(root,'src/routes/admin/system.ts'),'utf8');
+  const tables=[...schema.matchAll(/CREATE TABLE IF NOT EXISTS\s+([A-Za-z0-9_]+)/gi)].map(m=>m[1]);
+  const missing=tables.filter(table=>!system.includes(`'${table}'`));
+  assert.deepEqual(missing,[],`backup is missing tables: ${missing.join(', ')}`);
+});
+
+test('stability audit: election notification delivery does not count Telegram null failures as sent', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/r\.status==="fulfilled"&&r\.value\?\.ok===true/);
+  assert.match(route,/failed:results\.length-sent/);
+});
+
+test('stability audit: meeting action notification failures are persisted to error log', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/governance.ts'),'utf8');
+  assert.match(route,/safeLogError/);
+  assert.match(route,/telegram\.meeting_action_notification/);
+  assert.match(route,/if\(!delivery\?\.ok\)/);
+});

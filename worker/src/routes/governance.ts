@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance, requireCloseMonth } from "../auth";
-import { auditEntity, ensureOperationalSchema, isMonthClosed, requireOpenMonth } from "../ops";
+import { auditEntity, ensureOperationalSchema, isMonthClosed, requireOpenMonth, safeLogError } from "../ops";
 import { validMonth } from "../validation";
 import { currentMonth, getBranding } from "../db";
 import { sendMessage } from "../telegram";
@@ -359,7 +359,7 @@ governanceRoute.post('/meetings/:id/actions', requireFinance, async c=>{
 
   if(memberId){
     const assigned=await c.env.DB.prepare("SELECT name,telegram_id FROM members WHERE id=?").bind(memberId).first<any>();
-    if(assigned?.telegram_id){try{const brand=await getBranding(c.env);await sendMessage(c.env,assigned.telegram_id,`📌 <b>${brand.fund_name} · Meeting action item</b>\n\n${String(meeting.title||'Meeting')}\n${description}${due?`\nDue: <b>${due}</b>`:''}`)}catch{}}
+    if(assigned?.telegram_id){try{const brand=await getBranding(c.env);const delivery=await sendMessage(c.env,assigned.telegram_id,`📌 <b>${brand.fund_name} · Meeting action item</b>\n\n${String(meeting.title||'Meeting')}\n${description}${due?`\nDue: <b>${due}</b>`:''}`);if(!delivery?.ok)await safeLogError(c.env,'telegram.meeting_action_notification',new Error('Telegram did not confirm meeting action notification'),{meeting_id:id,action_id:actionId,member_id:memberId})}catch(e){await safeLogError(c.env,'telegram.meeting_action_notification',e,{meeting_id:id,action_id:actionId,member_id:memberId})}}
   }
   await auditEntity(c.env,admin.id,'meeting_action_created','meeting_action',actionId,null,{meeting_id:id,description,due_date:due,assigned_member_id:memberId});
   return c.json({ok:true,action:saved});
