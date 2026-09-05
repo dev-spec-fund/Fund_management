@@ -530,7 +530,9 @@ CREATE TABLE IF NOT EXISTS elections (
   created_by INTEGER REFERENCES admins(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   opened_at TEXT,
-  closed_at TEXT
+  closed_at TEXT,
+  certified_at TEXT,
+  certified_by INTEGER REFERENCES admins(id)
 );
 CREATE TABLE IF NOT EXISTS election_positions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -538,6 +540,7 @@ CREATE TABLE IF NOT EXISTS election_positions (
   title TEXT NOT NULL,
   seats INTEGER NOT NULL DEFAULT 1,
   max_selections INTEGER NOT NULL DEFAULT 1,
+  min_selections INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS election_candidates (
@@ -547,6 +550,9 @@ CREATE TABLE IF NOT EXISTS election_candidates (
   member_id INTEGER NOT NULL REFERENCES members(id),
   display_name TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','withdrawn')),
+  withdrawn_at TEXT,
+  withdrawn_by INTEGER REFERENCES admins(id),
+  withdrawal_reason TEXT,
   UNIQUE(election_id,position_id,member_id)
 );
 CREATE TABLE IF NOT EXISTS election_voters (
@@ -570,3 +576,7 @@ CREATE INDEX IF NOT EXISTS idx_election_voters_election ON election_voters(elect
 
 
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(29,'exco_elections');
+
+CREATE INDEX IF NOT EXISTS idx_elections_lifecycle ON elections(status, opens_at, closes_at);
+
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(30,'election_integrity');

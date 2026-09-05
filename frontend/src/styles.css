@@ -2632,3 +2632,46 @@ button:not(:disabled):active {
 .election-result-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--divider);font-size:10px}
 .election-result-row:first-of-type{margin-top:6px}
 .election-result-row strong{font-size:12px}
+
+
+/* v46 election integrity / certification */
+.election-position-create{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 58px 58px auto;
+  gap:6px;
+  margin-top:8px;
+}
+.election-position-create input{
+  min-width:0;width:100%;box-sizing:border-box;border:1px solid var(--border-strong);
+  border-radius:8px;background:var(--bg);color:var(--text);padding:8px;font-size:10px;
+}
+.election-field-help{font-size:8px;color:var(--soft);margin-top:4px}
+.election-candidate-admin-row{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:7px 0;border-bottom:1px solid var(--divider);
+}
+.election-candidate-admin-row span{min-width:0}
+.election-candidate-admin-row b,.election-candidate-admin-row small{display:block}
+.election-candidate-admin-row b{font-size:10px;color:var(--primary-text)}
+.election-candidate-admin-row small{font-size:8px;color:var(--soft);margin-top:2px;text-transform:uppercase}
+.election-candidate-admin-row button{
+  border:1px solid var(--danger-border);border-radius:8px;background:var(--danger-bg);
+  color:var(--danger);padding:5px 7px;font:inherit;font-size:8px;font-weight:700;cursor:pointer;
+}
+.election-certification{
+  padding:10px 11px;border-radius:10px;margin-bottom:10px;background:var(--success-bg);
+  color:var(--success);font-size:10px;font-weight:750;text-align:center;
+}
+.election-certification.pending{background:var(--warning-bg);color:var(--warning)}
+.election-tie-note{
+  margin:7px 0 3px;padding:7px 8px;border-radius:8px;background:var(--warning-bg);
+  color:var(--warning);font-size:9px;line-height:1.4;
+}
+.election-audit-row{padding:8px 0;border-bottom:1px solid var(--divider)}
+.election-audit-row b,.election-audit-row span{display:block}
+.election-audit-row b{font-size:9px;color:var(--primary-text);text-transform:capitalize}
+.election-audit-row span{font-size:8px;color:var(--soft);margin-top:2px}
+@media(max-width:390px){
+  .election-position-create{grid-template-columns:minmax(0,1fr) 52px 52px}
+  .election-position-create button{grid-column:1/-1;width:100%}
+}

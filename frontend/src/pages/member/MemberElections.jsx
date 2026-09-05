@@ -24,7 +24,7 @@ export function MemberElections(){
   const submit=async()=>{
     if(!detail||detail.my_vote)return;
     if(!await confirm({title:"Submit secret ballot?",message:"Your vote cannot be changed after submission. Your selections are stored separately from your member identity.",confirmLabel:"Submit vote",tone:"primary"}))return;
-    setBusy(true);try{await api.elections.vote(detail.id,choices);setMessage("Vote submitted successfully.");setDetail(await api.elections.get(detail.id));await load()}catch(e){setMessage(e.message)}finally{setBusy(false)}
+    setBusy(true);try{await api.elections.vote(detail.id,choices);setMessage("Vote submitted successfully.");setDetail(await api.elections.get(detail.id));await load()}catch(e){setMessage(e.message);if(e?.status===409){try{setDetail(await api.elections.get(detail.id));await load()}catch{}}}finally{setBusy(false)}
   };
   if(rows===null)return <LoadingState>Loading elections…</LoadingState>;
   return <>
@@ -32,7 +32,7 @@ export function MemberElections(){
     <MessageBanner>{message}</MessageBanner>
     {!rows.length?<EmptyState>No elections available.</EmptyState>:rows.map(e=><button key={e.id} type="button" onClick={()=>open(e)} className="member-election-card">
       <div><b className="sans">{e.title}</b><span className="sans">{e.term||""}</span></div>
-      <div className="sans"><strong>{e.status==="open"?(e.my_vote?"Vote submitted ✓":"Vote now ›"):e.status==="closed"?"View results ›":String(e.status)}</strong><span>{e.turnout?.voted||0}/{e.turnout?.eligible||0} voted</span></div>
+      <div className="sans"><strong>{e.status==="open"?(e.my_vote?"Vote submitted ✓":"Vote now ›"):e.status==="closed"?"View results ›":String(e.status)}</strong><span>{e.turnout?.voted||0}/{e.turnout?.eligible||0} voted · {Number(e.turnout?.percent||0).toFixed(1)}%</span></div>
     </button>)}
     {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null)}}>
       {!detail?<LoadingState>Loading ballot…</LoadingState>:<>
@@ -41,7 +41,7 @@ export function MemberElections(){
         {detail.status==="open"&&detail.eligible&&detail.my_vote&&<div className="sans election-voted">✓ Your vote has been submitted.</div>}
         {detail.status==="open"&&detail.eligible&&!detail.my_vote&&<>
           {detail.positions.map(p=><div key={p.id} className="election-ballot-position">
-            <div className="sans"><b>{p.title}</b><span>{Number(p.max_selections)>1?`Select up to ${p.max_selections}`:"Select one"}</span></div>
+            <div className="sans"><b>{p.title}</b><span>{Number(p.min_selections||0)>0?`Select ${p.min_selections}${Number(p.max_selections)>Number(p.min_selections)?`–${p.max_selections}`:""}`:`Select up to ${p.max_selections}`}</span></div>
             {p.candidates.filter(c=>c.status==="active").map(c=>{
               const selected=(choices[String(p.id)]||[]).includes(c.id);
               return <button key={c.id} type="button" onClick={()=>toggle(p,c.id)} className={`sans election-candidate${selected?" selected":""}`}><span>{c.display_name}</span><b>{selected?"✓":""}</b></button>
@@ -49,7 +49,8 @@ export function MemberElections(){
           </div>)}
           <button type="button" disabled={busy} onClick={submit} style={{...approveBtn,width:"100%",marginTop:12}}>{busy?"Submitting…":"Review & submit vote"}</button>
         </>}
-        {detail.status==="closed"&&<MemberResults detail={detail}/>}
+        {detail.status==="closed"&&!detail.certified_at&&<div className="sans election-voted">Voting has closed. Results are awaiting certification.</div>}
+        {detail.status==="closed"&&detail.certified_at&&<><div className="sans election-certification">✓ Official results certified</div><MemberResults detail={detail}/></>}
         {detail.status==="cancelled"&&<div className="sans election-voted">This election was cancelled.</div>}
       </>}
     </Modal>}
@@ -58,7 +59,8 @@ export function MemberElections(){
 }
 function MemberResults({detail}){
   return <div>{detail.positions.map(p=>{
-    const ranked=p.candidates.filter(c=>c.status==="active").map(c=>({...c,votes:Number(detail.results?.find(r=>Number(r.candidate_id)===Number(c.id))?.votes||0)})).sort((a,b)=>b.votes-a.votes);
-    return <div key={p.id} className="election-result-block"><b className="sans">{p.title}</b>{ranked.map((c,i)=><div key={c.id} className="sans election-result-row"><span>{c.display_name}{i<Number(p.seats)?" · ELECTED":""}</span><strong>{c.votes}</strong></div>)}</div>
+    const ranked=p.candidates.map(c=>{const result=detail.results?.find(r=>Number(r.candidate_id)===Number(c.id));return {...c,votes:Number(result?.votes||0),outcome:result?.outcome||"not_elected"}}).sort((a,b)=>b.votes-a.votes);
+    const hasTie=ranked.some(c=>c.outcome==="tie");
+    return <div key={p.id} className="election-result-block"><b className="sans">{p.title}</b>{hasTie&&<div className="sans election-tie-note">Tie at the seat boundary · final winner requires governance resolution.</div>}{ranked.map(c=><div key={c.id} className="sans election-result-row"><span>{c.display_name}{c.outcome==="elected"?" · ELECTED":c.outcome==="tie"?" · TIE":c.outcome==="withdrawn"?" · WITHDRAWN":""}</span><strong>{c.votes}</strong></div>)}</div>
   })}</div>
 }

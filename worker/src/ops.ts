@@ -26,7 +26,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 29;
+const REQUIRED_SCHEMA_VERSION = 30;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -56,9 +56,9 @@ export async function ensureOperationalSchema(env: Env) {
       ["admin_role_permissions", ["role_id","permission"]],
       ["telegram_update_receipts", ["update_id","status","claimed_at","attempts"]],
       ["contribution_review_messages", ["contribution_id","telegram_chat_id","telegram_message_id","message_kind","last_synced_at","last_sync_status"]],
-      ["elections", ["title","term","opens_at","closes_at","status","created_by"]],
-      ["election_positions", ["election_id","title","seats","max_selections","sort_order"]],
-      ["election_candidates", ["election_id","position_id","member_id","display_name","status"]],
+      ["elections", ["title","term","opens_at","closes_at","status","created_by","certified_at","certified_by"]],
+      ["election_positions", ["election_id","title","seats","max_selections","min_selections","sort_order"]],
+      ["election_candidates", ["election_id","position_id","member_id","display_name","status","withdrawn_at","withdrawn_by","withdrawal_reason"]],
       ["election_voters", ["election_id","member_id","voted_at","vote_claim"]],
       ["election_ballots", ["election_id","ballot_token","position_id","candidate_id"]],
     ];

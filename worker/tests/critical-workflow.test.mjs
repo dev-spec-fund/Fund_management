@@ -458,7 +458,7 @@ test('contribution review Telegram messages are persisted and synchronized from 
   assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"rejected"/);
   assert.match(callbacks,/recordContributionReviewMessage/);
   assert.match(callbacks,/syncContributionReviewMessages/);
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 29/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 30/);
 });
 
 test('Telegram callback can self-heal a legacy stale contribution review message', () => {
@@ -567,7 +567,7 @@ test('EXCO election UI supports admin setup, member voting, turnout and closed r
   assert.match(app,/elections/);
   assert.match(admin,/Create election/);
   assert.match(admin,/Open voting/);
-  assert.match(admin,/Close voting & publish results/);
+  assert.match(admin,/Close voting & calculate results/);
   assert.match(admin,/Secret ballot active/);
   assert.match(member,/Submit secret ballot/);
   assert.match(member,/Your vote has been submitted/);
@@ -581,5 +581,62 @@ test('database backup includes election governance tables and schema version 29'
   for(const table of ['elections','election_positions','election_candidates','election_voters','election_ballots']){
     assert.match(system,new RegExp(table));
   }
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 29/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 30/);
+});
+
+
+test('election integrity adds automatic lifecycle, withdrawal, reminders, certification and turnout percent', () => {
+  const elections=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const scheduled=fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+
+  assert.match(elections,/processElectionLifecycle/);
+  assert.match(elections,/election_auto_opened/);
+  assert.match(elections,/election_auto_closed/);
+  assert.match(elections,/remind-nonvoters/);
+  assert.match(elections,/candidate_withdrawn/);
+  assert.match(elections,/results_certified/);
+  assert.match(elections,/turnout:\{eligible,voted,percent/);
+  assert.match(elections,/tieAtCutoff\?"tie":"elected"/);
+  assert.match(elections,/min_selections/);
+  assert.match(scheduled,/processElectionLifecycle/);
+  assert.match(api,/withdrawCandidate/);
+  assert.match(api,/remindNonVoters/);
+  assert.match(api,/certify/);
+});
+
+test('uncertified election results stay hidden from members and ties are not auto elected', () => {
+  const elections=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+
+  assert.match(elections,/detail\.status==="closed" && \(admin \|\| detail\.certified_at\)/);
+  assert.match(elections,/results_visible/);
+  assert.match(member,/awaiting certification/);
+  assert.match(member,/outcome==="tie"/);
+  assert.match(admin,/Uncertified/);
+  assert.match(admin,/Certify & publish results/);
+  assert.match(admin,/Tie at the seat boundary/);
+});
+
+test('election integrity migration advances schema to 30', () => {
+  const db=dbWithSchema();
+  const electionCols=new Set(db.prepare("PRAGMA table_info(elections)").all().map(r=>r.name));
+  const positionCols=new Set(db.prepare("PRAGMA table_info(election_positions)").all().map(r=>r.name));
+  const candidateCols=new Set(db.prepare("PRAGMA table_info(election_candidates)").all().map(r=>r.name));
+  assert.ok(electionCols.has("certified_at"));
+  assert.ok(electionCols.has("certified_by"));
+  assert.ok(positionCols.has("min_selections"));
+  assert.ok(candidateCols.has("withdrawal_reason"));
+  db.close();
+  const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 30/);
+});
+
+
+test('election voting rechecks lifecycle before accepting ballots and reminders require super admin', () => {
+  const elections=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(elections,/post\("\/:id\/vote", async c=>\{\n  await processElectionLifecycle\(c\.env\)/);
+  assert.match(elections,/remind-nonvoters", requireSuperAdmin/);
+  assert.match(elections,/candidates\/:candidateId\/withdraw", requireSuperAdmin/);
 });

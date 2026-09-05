@@ -32,7 +32,7 @@ test("allocation planner prefetches future state", () => {
 
 test("schema version is current", () => {
   const ops=read("src/ops.ts");
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 29/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 30/);
 });
 
 test("demotion preserves member record and removes admin access only", () => {
