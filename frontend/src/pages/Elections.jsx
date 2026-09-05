@@ -128,7 +128,7 @@ export default function Elections(){
     setBusy(true);try{await api.elections.certify(detail.id);setDetail(await api.elections.get(detail.id));await load();setMessage("Election certified · EXCO roles assigned and published.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
 
-  const changeStatus=async(action)=>{if(!detail)return;if(!await confirm({title:`${action[0].toUpperCase()+action.slice(1)} election?`,message:action==="open"?"Eligible voters will be snapshotted and Telegram-linked members will be notified.":`Are you sure you want to ${action} this election?`,confirmLabel:action[0].toUpperCase()+action.slice(1),tone:action==="cancel"?"danger":"primary"}))return;setBusy(true);try{const d=await api.elections[action](detail.id);setDetail(d);await load();setMessage(action==="open"?"Election opened. Eligible voters were snapshotted.":action==="close"?"Election closed. Results are now available.":"Election cancelled.")}catch(e){setMessage(e.message)}finally{setBusy(false)}};
+  const changeStatus=async(action)=>{if(!detail)return;if(!await confirm({title:`${action[0].toUpperCase()+action.slice(1)} election?`,message:action==="open"?"Eligible voters will be snapshotted, Telegram-linked members will be notified, and all election setup will become read-only.":`Are you sure you want to ${action} this election?`,confirmLabel:action[0].toUpperCase()+action.slice(1),tone:action==="cancel"?"danger":"primary"}))return;setBusy(true);try{const d=await api.elections[action](detail.id);setDetail(d);await load();setMessage(action==="open"?"Election opened. Eligible voters were snapshotted.":action==="close"?"Election closed. Results are now available.":"Election cancelled.")}catch(e){setMessage(e.message)}finally{setBusy(false)}};
 
   if(rows===null)return <LoadingState>Loading elections…</LoadingState>;
   return <>
@@ -222,16 +222,20 @@ export default function Elections(){
               </div>)}
             </div>
           </>}
+          {readiness?.ready&&<div className="sans election-lock-warning">Opening voting creates the voter snapshot and permanently locks election setup.</div>}
           <button type="button" style={{...approveBtn,width:"100%",marginTop:10,opacity:readiness?.ready?1:.5}} disabled={busy||!readiness?.ready} onClick={()=>changeStatus("open")}>
-            {readiness?.ready?"Open Voting":readiness?`Open Voting · ${readiness.passed}/${readiness.total} checks`:"Checking…"}
+            {readiness?.ready?"Open Voting & Lock Setup":readiness?`Open Voting · ${readiness.passed}/${readiness.total} checks`:"Checking…"}
           </button>
         </>}
         {detail.status==="open"&&<>
-          <div className="sans election-secret-note">🔒 Secret ballot active. Admins can see turnout, but not individual votes.</div>
-          {detail.positions.map(p=><div key={p.id}><div className="election-admin-position"><b className="sans">{p.title}</b><span className="sans">{p.candidates.filter(c=>c.status==="active").length} active · {p.seats} seat{Number(p.seats)===1?"":"s"}</span></div>{p.candidates.map(c=><div key={c.id} className="election-candidate-admin-row"><span className="sans"><b>{c.display_name}</b><small>{c.status}</small></span>{c.status==="active"&&<button type="button" disabled={busy} onClick={()=>withdrawCandidate(c)}>Withdraw</button>}</div>)}</div>)}
+          <div className="sans election-voting-lock-banner">
+            <b>🔒 Voting setup locked</b>
+            <span>The voter snapshot has been created. Positions, candidates, applications and election dates can no longer be changed.</span>
+          </div>
+          <div className="sans election-secret-note">Secret ballot active. Admins can see turnout, but not individual votes.</div>
+          {detail.positions.map(p=><div key={p.id}><div className="election-admin-position"><b className="sans">{p.title}</b><span className="sans">{p.candidates.filter(c=>c.status==="active").length} active · {p.seats} seat{Number(p.seats)===1?"":"s"}</span></div>{p.candidates.map(c=><div key={c.id} className="election-candidate-admin-row locked"><span className="sans"><b>{c.display_name}</b><small>{c.status}</small></span><span className="sans election-locked-label">LOCKED</span></div>)}</div>)}
           <button type="button" style={{...compactBtn,width:"100%",marginTop:10}} disabled={busy} onClick={remindNonVoters}>Remind members who have not voted</button>
           <button type="button" style={{...approveBtn,width:"100%",marginTop:8}} disabled={busy} onClick={()=>changeStatus("close")}>Close voting & calculate results</button>
-          <button type="button" style={{...rejectBtn,width:"100%",marginTop:8}} disabled={busy} onClick={()=>changeStatus("cancel")}>Cancel election</button>
         </>}
         {detail.status==="closed"&&<>
           {!detail.certified_at&&<div className="sans election-certification pending">{detail.unresolved_ties?.length?`Runoff required · ${detail.unresolved_ties.length} unresolved position${detail.unresolved_ties.length===1?"":"s"}`:"Results calculated · Ready for certification"}</div>}

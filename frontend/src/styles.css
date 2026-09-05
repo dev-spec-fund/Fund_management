@@ -2944,3 +2944,22 @@ button:not(:disabled):active {
   font-size:8px;font-weight:800;cursor:pointer
 }
 .election-auto-repair-btn:disabled{opacity:.55}
+
+
+/* v58 immutable election setup after voter snapshot */
+.election-voting-lock-banner{
+  border:1px solid var(--success-border);border-radius:11px;background:var(--success-bg);
+  padding:10px 11px;margin-bottom:9px
+}
+.election-voting-lock-banner b,.election-voting-lock-banner span{display:block}
+.election-voting-lock-banner b{font-size:10px;color:var(--success)}
+.election-voting-lock-banner span{font-size:8px;color:var(--muted);line-height:1.4;margin-top:3px}
+.election-candidate-admin-row.locked{align-items:center}
+.election-locked-label{
+  flex:0 0 auto;font-size:7px;font-weight:800;letter-spacing:.45px;
+  color:var(--soft);border:1px solid var(--border);border-radius:999px;padding:3px 6px
+}
+.election-lock-warning{
+  border:1px solid var(--warning-border);border-radius:8px;background:var(--warning-bg);
+  color:var(--warning);font-size:8px;line-height:1.4;padding:8px 9px;margin-top:8px
+}

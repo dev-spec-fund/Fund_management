@@ -841,7 +841,7 @@ test('v53 admin can reassign an application before voting while keeping candidat
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
 
   assert.match(route,/applications\/:applicationId\/reassign/);
-  assert.match(route,/Applications can only be reassigned before voting opens/);
+  assert.match(route,/Applications are locked after the voter snapshot is created/);
   assert.match(route,/This member already has an application for the selected position/);
   assert.match(route,/UPDATE election_candidates SET position_id/);
   assert.match(route,/election_application_reassigned/);
@@ -998,4 +998,45 @@ test('v57 admin checklist offers Fix automatically and refreshes readiness after
   assert.match(admin,/Fix automatically/);
   assert.match(admin,/setReadiness\(r\.readiness/);
   assert.match(admin,/Election data synchronized/);
+});
+
+
+test('v58 voter snapshot permanently locks election setup mutations', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/async function electionSetupLocked/);
+  assert.match(route,/SELECT 1 ok FROM election_voters WHERE election_id=\? LIMIT 1/);
+  assert.match(route,/Election setup is locked after the voter snapshot is created/);
+  assert.match(route,/Application deadline is locked after the voter snapshot is created/);
+  assert.match(route,/Application decisions are locked after the voter snapshot is created/);
+  assert.match(route,/Candidate changes are locked after the voter snapshot is created/);
+  assert.match(route,/Applications are locked after voting opens/);
+});
+
+test('v58 candidate and application management are draft-only once voter snapshot exists', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const withdrawBlock=route.match(/candidates\/:candidateId\/withdraw[\s\S]*?return c\.json\(await electionDetail\(c\.env,id\)\);\n\}\);/)?.[0]||'';
+  assert.match(withdrawBlock,/electionSetupLocked/);
+  assert.doesNotMatch(withdrawBlock,/\["draft","open"\]/);
+  const reviewBlock=route.match(/applications\/:applicationId\/review[\s\S]*?return c\.json\(await electionDetail\(c\.env,id\)\);\n\}\);/)?.[0]||'';
+  assert.match(reviewBlock,/electionSetupLocked/);
+  assert.match(route,/Applications are locked after the voter snapshot is created/);
+});
+
+test('v58 open voting UI is read-only and no longer exposes candidate withdrawal or cancellation', () => {
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  assert.match(admin,/Voting setup locked/);
+  assert.match(admin,/Open Voting & Lock Setup/);
+  assert.match(admin,/permanently locks election setup/);
+  const openBlock=admin.match(/\{detail\.status==="open"&&<>[\s\S]*?<\/>\}/)?.[0]||'';
+  assert.match(openBlock,/LOCKED/);
+  assert.match(openBlock,/Remind members who have not voted/);
+  assert.match(openBlock,/Close voting & calculate results/);
+  assert.doesNotMatch(openBlock,/withdrawCandidate/);
+  assert.doesNotMatch(openBlock,/Cancel election/);
+});
+
+test('v58 election detail exposes setup_locked from status or voter snapshot', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/setup_locked:setupLocked/);
+  assert.match(route,/const setupLocked=election\.status!=="draft"\|\|eligible>0/);
 });

@@ -56,6 +56,13 @@ async function processApplicationReminders(env:any){
   }
 }
 
+async function electionSetupLocked(env:any,election:any){
+  if(!election)return true;
+  if(election.status!=="draft")return true;
+  const snapshot=await env.DB.prepare("SELECT 1 ok FROM election_voters WHERE election_id=? LIMIT 1").bind(election.id).first<any>();
+  return !!snapshot;
+}
+
 async function synchronizeElectionApplications(env:any,electionId:number,adminId:number|null=null){
   const applications=await env.DB.prepare(`SELECT ea.*,m.name member_name FROM election_applications ea
     JOIN members m ON m.id=ea.member_id WHERE ea.election_id=? ORDER BY ea.id`).bind(electionId).all<any>();
@@ -415,7 +422,8 @@ async function electionDetail(env:any,id:number){
       WHERE ea.election_id=? ORDER BY ea.submitted_at DESC`).bind(id).all<any>()
   ]);
   const eligible=Number(voters?.eligible||0),voted=Number(voters?.voted||0);
-  return {...election,positions:positions.results.map((p:any)=>({...p,candidates:candidates.results.filter((x:any)=>Number(x.position_id)===Number(p.id))})),
+  const setupLocked=election.status!=="draft"||eligible>0;
+  return {...election,setup_locked:setupLocked,positions:positions.results.map((p:any)=>({...p,candidates:candidates.results.filter((x:any)=>Number(x.position_id)===Number(p.id))})),
     turnout:{eligible,voted,percent:eligible>0?Math.round((voted/eligible)*1000)/10:0},
     audit_history:audit.results,certified_by_name:certifier?.name||null,applications:applications.results,
     application_phase:applicationPhase(election,localNow(env.FUND_TIMEZONE || "Indian/Maldives"))};
@@ -548,7 +556,8 @@ electionsRoute.post("/", requireSuperAdmin, async c=>{
 
 electionsRoute.patch("/:id", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const before=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
-  if(!before)return c.json({error:"Election not found"},404); if(before.status!=="draft")return c.json({error:"Only draft elections can be edited"},409);
+  if(!before)return c.json({error:"Election not found"},404);
+  if(await electionSetupLocked(c.env,before))return c.json({error:"Election setup is locked after the voter snapshot is created"},409);
   const body=await c.req.json<any>(); const title=text(body.title||before.title);
   const opensAt=iso(body.opens_at??before.opens_at)||null,closesAt=iso(body.closes_at??before.closes_at)||null;
   const applicationsOpenAt=iso(body.applications_open_at??before.applications_open_at)||null,applicationsCloseAt=iso(body.applications_close_at??before.applications_close_at)||null;
@@ -566,7 +575,7 @@ electionsRoute.post("/:id/extend-applications", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const before=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!before)return c.json({error:"Election not found"},404);
-  if(before.status!=="draft" || before.certified_at)return c.json({error:"Application deadline can only be changed before voting opens"},409);
+  if(await electionSetupLocked(c.env,before) || before.certified_at)return c.json({error:"Application deadline is locked after the voter snapshot is created"},409);
   const body=await c.req.json<any>().catch(()=>({}));
   const newClose=iso(body.applications_close_at);
   if(!newClose)return c.json({error:"New application deadline is required"},400);
@@ -597,7 +606,8 @@ electionsRoute.post("/:id/extend-applications", requireSuperAdmin, async c=>{
 
 electionsRoute.post("/:id/positions", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
-  if(!election)return c.json({error:"Election not found"},404); if(election.status!=="draft")return c.json({error:"Election is locked"},409);
+  if(!election)return c.json({error:"Election not found"},404);
+  if(await electionSetupLocked(c.env,election))return c.json({error:"Election setup is locked after the voter snapshot is created"},409);
   const body=await c.req.json<any>(); const title=text(body.title); if(!title)return c.json({error:"Position title is required"},400);
   const seats=Math.max(1,Math.min(20,Number(body.seats)||1)); const maxSelections=Math.max(1,Math.min(seats,Number(body.max_selections)||seats));
   const minSelections=Math.max(0,Math.min(maxSelections,Number(body.min_selections ?? 1)));
@@ -608,8 +618,9 @@ electionsRoute.post("/:id/positions", requireSuperAdmin, async c=>{
 });
 
 electionsRoute.post("/:id/candidates", requireSuperAdmin, async c=>{
-  const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT status FROM elections WHERE id=?").bind(id).first<any>();
-  if(!election)return c.json({error:"Election not found"},404); if(election.status!=="draft")return c.json({error:"Election is locked"},409);
+  const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+  if(await electionSetupLocked(c.env,election))return c.json({error:"Election setup is locked after the voter snapshot is created"},409);
   const body=await c.req.json<any>(); const positionId=Number(body.position_id),memberId=Number(body.member_id);
   const position=await c.env.DB.prepare("SELECT id FROM election_positions WHERE id=? AND election_id=?").bind(positionId,id).first<any>();
   const member=await c.env.DB.prepare("SELECT id,name FROM members WHERE id=? AND active=1").bind(memberId).first<any>();
@@ -627,7 +638,7 @@ electionsRoute.post("/:id/repair-application-sync", requireSuperAdmin, async c=>
   const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
-  if(election.status!=="draft"||election.certified_at)return c.json({error:"Election data can only be repaired before voting opens"},409);
+  if(await electionSetupLocked(c.env,election)||election.certified_at)return c.json({error:"Election data is locked after the voter snapshot is created"},409);
 
   const before=await evaluateElectionReadiness(c.env,election);
   const repaired=await synchronizeElectionApplications(c.env,id,admin.id);
@@ -679,7 +690,8 @@ electionsRoute.post("/:id/close", requireSuperAdmin, async c=>{
 
 electionsRoute.post("/:id/cancel", requireSuperAdmin, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
-  if(!election)return c.json({error:"Election not found"},404); if(election.status==="closed")return c.json({error:"Closed election cannot be cancelled"},409);
+  if(!election)return c.json({error:"Election not found"},404);
+  if(await electionSetupLocked(c.env,election))return c.json({error:"An election cannot be cancelled after the voter snapshot is created"},409);
   await c.env.DB.prepare("UPDATE elections SET status='cancelled',closed_at=datetime('now') WHERE id=?").bind(id).run();
   await auditEntity(c.env,admin.id,"election_cancelled","election",id,election,{...election,status:"cancelled"});
   return c.json(await electionDetail(c.env,id));
@@ -709,6 +721,7 @@ electionsRoute.post("/:id/applications/:applicationId/withdraw", async c=>{
   if(!member)return c.json({error:"Approved member account required"},403);
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
+  if(await electionSetupLocked(c.env,election))return c.json({error:"Applications are locked after voting opens"},409);
   if(applicationPhase(election,localNow(c.env.FUND_TIMEZONE || "Indian/Maldives"))!=="open")return c.json({error:"Application withdrawal period has ended"},409);
   const r=await c.env.DB.prepare(`UPDATE election_applications SET status='withdrawn',withdrawn_at=datetime('now')
     WHERE id=? AND election_id=? AND member_id=? AND status='pending'`).bind(applicationId,id,member.id).run();
@@ -721,7 +734,9 @@ electionsRoute.post("/:id/applications/:applicationId/review", requireSuperAdmin
   const admin=c.get("admin")!,id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId"));
   const electionState=await c.env.DB.prepare("SELECT status,certified_at FROM elections WHERE id=?").bind(id).first<any>();
   if(!electionState)return c.json({error:"Election not found"},404);
-  if(electionState.certified_at)return c.json({error:"Certified election is locked"},409);
+  const electionSnapshotState={id,status:electionState.status,certified_at:electionState.certified_at};
+  if(await electionSetupLocked(c.env,electionSnapshotState)||electionState.certified_at)
+    return c.json({error:"Application decisions are locked after the voter snapshot is created"},409);
   const body=await c.req.json<any>().catch(()=>({})); const decision=String(body.decision||"");
   if(!["approved","rejected"].includes(decision))return c.json({error:"Decision must be approved or rejected"},400);
   const application=await c.env.DB.prepare(`SELECT ea.*,m.name member_name FROM election_applications ea
@@ -756,7 +771,7 @@ electionsRoute.post("/:id/applications/:applicationId/reopen", requireSuperAdmin
   const admin=c.get("admin")!,id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId"));
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
-  if(election.status!=="draft"||election.certified_at)return c.json({error:"Applications can only be reopened before voting opens"},409);
+  if(await electionSetupLocked(c.env,election)||election.certified_at)return c.json({error:"Applications are locked after the voter snapshot is created"},409);
   const application=await c.env.DB.prepare(`SELECT ea.*,m.name member_name,m.telegram_id,ep.title position_title FROM election_applications ea
     JOIN members m ON m.id=ea.member_id JOIN election_positions ep ON ep.id=ea.position_id
     WHERE ea.id=? AND ea.election_id=?`).bind(applicationId,id).first<any>();
@@ -780,7 +795,7 @@ electionsRoute.post("/:id/applications/:applicationId/reassign", requireSuperAdm
   const admin=c.get("admin")!,id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId"));
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
-  if(election.status!=="draft"||election.certified_at)return c.json({error:"Applications can only be reassigned before voting opens"},409);
+  if(await electionSetupLocked(c.env,election)||election.certified_at)return c.json({error:"Applications are locked after the voter snapshot is created"},409);
   const body=await c.req.json<any>().catch(()=>({})); const newPositionId=Number(body.position_id);
   const position=await c.env.DB.prepare("SELECT id,title FROM election_positions WHERE id=? AND election_id=?").bind(newPositionId,id).first<any>();
   if(!position)return c.json({error:"Choose a valid position"},400);
@@ -825,7 +840,7 @@ electionsRoute.post("/:id/candidates/:candidateId/withdraw", requireSuperAdmin, 
   const admin=c.get("admin")!; const id=Number(c.req.param("id")),candidateId=Number(c.req.param("candidateId"));
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
-  if(!["draft","open"].includes(election.status))return c.json({error:"Candidates can only withdraw before voting closes"},409);
+  if(await electionSetupLocked(c.env,election))return c.json({error:"Candidate changes are locked after the voter snapshot is created"},409);
   const before=await c.env.DB.prepare("SELECT * FROM election_candidates WHERE id=? AND election_id=?").bind(candidateId,id).first<any>();
   if(!before)return c.json({error:"Candidate not found"},404);
   const body=await c.req.json<any>().catch(()=>({})); const reason=text(body.reason,300)||"Withdrawn";
