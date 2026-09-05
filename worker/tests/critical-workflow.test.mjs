@@ -936,3 +936,37 @@ test('v55 admin and member UIs render certified election summary records', () =>
   assert.match(member,/OFFICIAL ELECTION SUMMARY/);
   assert.match(member,/OFFICIAL EXCO/);
 });
+
+
+test('v56 certified election archive lists only certified elections with turnout and role metadata', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/get\("\/archive"/);
+  assert.match(route,/WHERE e\.certified_at IS NOT NULL/);
+  assert.match(route,/assigned_roles/);
+  assert.match(route,/runoffs/);
+  assert.match(route,/turnout:\{eligible,voted,percent/);
+});
+
+test('v56 election PDF and CSV exports use certified summary and Telegram delivery', () => {
+  const exportsFile=fs.readFileSync(path.resolve(root,'../frontend/src/utils/electionExports.js'),'utf8');
+  const shared=fs.readFileSync(path.resolve(root,'../frontend/src/utils/exports.js'),'utf8');
+  assert.match(exportsFile,/exportElectionPdf/);
+  assert.match(exportsFile,/exportElectionCsv/);
+  assert.match(exportsFile,/sendExportToTelegram/);
+  assert.match(exportsFile,/Official Election Record/);
+  assert.match(exportsFile,/Certified results/);
+  assert.match(exportsFile,/Assigned EXCO/);
+  assert.match(exportsFile,/Ballot identities/);
+  assert.match(shared,/electionExports/);
+});
+
+test('v56 admin and member election archive surfaces certified history and admin export actions', () => {
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/archive: \(\)/);
+  assert.match(admin,/ELECTION ARCHIVE/);
+  assert.match(admin,/PDF Record/);
+  assert.match(admin,/CSV Record/);
+  assert.match(member,/PAST CERTIFIED ELECTIONS/);
+});

@@ -418,6 +418,27 @@ electionsRoute.get("/exco/current", async c=>{
   return c.json({roles:rows.results});
 });
 
+electionsRoute.get("/archive", async c=>{
+  await ensureOperationalSchema(c.env);
+  const rows=await c.env.DB.prepare(`SELECT e.id,e.title,e.term,e.certified_at,e.closed_at,e.opens_at,e.closes_at,
+    (SELECT COUNT(*) FROM election_positions p WHERE p.election_id=e.id) positions,
+    (SELECT COUNT(*) FROM election_candidates ec WHERE ec.election_id=e.id AND ec.status='active') candidates,
+    (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id) eligible,
+    (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id AND v.voted_at IS NOT NULL) voted,
+    (SELECT COUNT(*) FROM election_runoffs r WHERE r.election_id=e.id) runoffs,
+    (SELECT COUNT(*) FROM exco_role_assignments x WHERE x.election_id=e.id) assigned_roles
+    FROM elections e WHERE e.certified_at IS NOT NULL
+    ORDER BY e.certified_at DESC,e.id DESC`).all<any>();
+  const archive=(rows.results as any[]).map((e:any)=>{
+    const eligible=Number(e.eligible||0),voted=Number(e.voted||0);
+    return {...e,positions:Number(e.positions||0),candidates:Number(e.candidates||0),
+      runoffs:Number(e.runoffs||0),assigned_roles:Number(e.assigned_roles||0),
+      turnout:{eligible,voted,percent:eligible?Math.round((voted/eligible)*1000)/10:0},
+      year:String(e.certified_at||e.closed_at||"").slice(0,4)||null};
+  });
+  return c.json({archive});
+});
+
 electionsRoute.get("/:id/summary", async c=>{
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param("id"));

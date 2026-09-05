@@ -2911,3 +2911,28 @@ button:not(:disabled):active {
 @media(max-width:360px){
   .election-summary-grid{grid-template-columns:1fr}
 }
+
+
+/* v56 election archive and exports */
+.election-archive-card{
+  border:1px solid var(--border);border-radius:13px;background:var(--card);
+  padding:11px 12px;margin-bottom:12px
+}
+.election-archive-row{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border:0;border-top:1px solid var(--divider);background:transparent;color:var(--text);
+  padding:9px 0;text-align:left;cursor:pointer
+}
+.election-archive-row:first-of-type{border-top:0}
+.election-archive-row span{min-width:0;flex:1}
+.election-archive-row b,.election-archive-row small,.election-archive-row strong{display:block}
+.election-archive-row b{font-size:10px;color:var(--primary-text)}
+.election-archive-row span small{font-size:8px;color:var(--soft);margin-top:2px}
+.election-archive-row strong{font-size:10px;color:var(--primary-text);text-align:right}
+.election-archive-row strong small{font-size:7px;color:var(--soft);margin-top:2px}
+.election-export-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0 12px}
+.election-export-actions button{
+  border:1px solid var(--border-strong);border-radius:9px;background:var(--button-soft);
+  color:var(--primary-text);padding:9px 10px;font:inherit;font-size:9px;font-weight:800;cursor:pointer
+}
+.election-export-actions button:disabled{opacity:.55}

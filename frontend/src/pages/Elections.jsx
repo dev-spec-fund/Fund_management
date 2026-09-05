@@ -14,6 +14,7 @@ export default function Elections(){
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const [currentExco,setCurrentExco]=useState(()=>api.peekCached("/api/elections/exco/current")?.roles||[]);
+  const [archive,setArchive]=useState(()=>api.peekCached("/api/elections/archive")?.archive||[]);
   const [form,setForm]=useState({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});
   const [applicationFilter,setApplicationFilter]=useState("all");
   const [position,setPosition]=useState({title:"",seats:"1",min_selections:"1"});
@@ -23,7 +24,8 @@ export default function Elections(){
   const load=()=>Promise.all([
     api.elections.list().then(setRows),
     api.members.list().then(setMembers),
-    api.elections.currentExco().then(r=>setCurrentExco(r.roles||[]))
+    api.elections.currentExco().then(r=>setCurrentExco(r.roles||[])),
+    api.elections.archive().then(r=>setArchive(r.archive||[]))
   ]).catch(e=>setMessage(e.message));
   const open=async(row)=>{setSelected(row);setReadiness(null);setMessage("");try{setDetail(await api.elections.get(row.id))}catch(e){setMessage(e.message)}};
   useEffect(()=>{load()},[]);
@@ -41,6 +43,14 @@ export default function Elections(){
     return ()=>{active=false};
   },[detail?.id,detail?.certified_at]);
 
+  const exportPdf=async()=>{
+    if(!summary)return setMessage("Certified election summary is still loading.");
+    setBusy(true);try{const {exportElectionPdf}=await import("../utils/exports");await exportElectionPdf(summary);setMessage("Election PDF sent to your Telegram chat.")}catch(e){setMessage(e.message||"Could not export election PDF")}finally{setBusy(false)}
+  };
+  const exportCsv=async()=>{
+    if(!summary)return setMessage("Certified election summary is still loading.");
+    setBusy(true);try{const {exportElectionCsv}=await import("../utils/exports");await exportElectionCsv(summary);setMessage("Election CSV sent to your Telegram chat.")}catch(e){setMessage(e.message||"Could not export election CSV")}finally{setBusy(false)}
+  };
   const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});await load();await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addPosition=async()=>{if(!detail||!position.title.trim())return;setBusy(true);try{const seats=Number(position.seats)||1;const d=await api.elections.addPosition(detail.id,{title:position.title,seats,max_selections:seats,min_selections:Math.max(0,Math.min(seats,Number(position.min_selections)||0))});setDetail(d);setPosition({title:"",seats:"1",min_selections:"1"})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addCandidate=async()=>{if(!detail||!candidate.position_id||!candidate.member_id)return;setBusy(true);try{const d=await api.elections.addCandidate(detail.id,candidate);setDetail(d);setCandidate({position_id:"",member_id:""})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
@@ -117,6 +127,13 @@ export default function Elections(){
     {!!currentExco.length&&<section className="official-exco-card">
       <div className="sans member-section-title">CURRENT OFFICIAL EXCO</div>
       {currentExco.map(x=><div key={x.id} className="sans official-exco-row"><span><b>{x.role_title}</b><small>{x.term||x.election_title||""}</small></span><strong>{x.name}</strong></div>)}
+    </section>}
+    {!!archive.length&&<section className="election-archive-card">
+      <div className="sans member-section-title">ELECTION ARCHIVE</div>
+      {archive.map(e=><button key={e.id} type="button" className="sans election-archive-row" onClick={()=>open(e)}>
+        <span><b>{e.title}</b><small>{e.term||e.year||"Certified election"} · Certified {formatElectionDate(e.certified_at)}</small></span>
+        <strong>{e.turnout?.voted||0}/{e.turnout?.eligible||0}<small>{Number(e.turnout?.percent||0).toFixed(1)}%</small></strong>
+      </button>)}
     </section>}
     {!rows.length?<EmptyState>No elections yet.</EmptyState>:rows.map(e=><button key={e.id} type="button" onClick={()=>open(e)} className="expense-row" style={{alignItems:"center"}}>
       <div style={{minWidth:0,flex:1,textAlign:"left"}}><div className="sans" style={{fontSize:13,fontWeight:750}}>{e.title}</div><div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:3}}>{e.term||"No term"} · {String(e.status).toUpperCase()}</div></div>
@@ -207,7 +224,13 @@ export default function Elections(){
         {detail.status==="closed"&&<>
           {!detail.certified_at&&<div className="sans election-certification pending">{detail.unresolved_ties?.length?`Runoff required · ${detail.unresolved_ties.length} unresolved position${detail.unresolved_ties.length===1?"":"s"}`:"Results calculated · Ready for certification"}</div>}
           {detail.certified_at&&<div className="sans election-certification">✓ Certified by {detail.certified_by_name||"Super Admin"} · Results locked</div>}
-          {detail.certified_at&&summary&&<ElectionSummary summary={summary} adminView/>}
+          {detail.certified_at&&summary&&<>
+            <ElectionSummary summary={summary} adminView/>
+            <div className="election-export-actions sans">
+              <button type="button" disabled={busy} onClick={exportPdf}>PDF Record</button>
+              <button type="button" disabled={busy} onClick={exportCsv}>CSV Record</button>
+            </div>
+          </>}
           <ElectionResults detail={detail}/>
           {!detail.certified_at&&detail.unresolved_ties?.map(tie=>{
             const activeRunoff=detail.runoffs?.find(r=>Number(r.position_id)===Number(tie.position_id)&&r.status==="open");

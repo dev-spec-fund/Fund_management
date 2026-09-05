@@ -14,11 +14,13 @@ export function MemberElections(){
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const [currentExco,setCurrentExco]=useState(()=>api.peekCached("/api/elections/exco/current")?.roles||[]);
+  const [archive,setArchive]=useState(()=>api.peekCached("/api/elections/archive")?.archive||[]);
   const [runoffChoices,setRunoffChoices]=useState({});
   const {confirm,confirmationDialog}=useConfirmDialog();
   const load=()=>Promise.all([
     api.elections.list().then(setRows),
-    api.elections.currentExco().then(r=>setCurrentExco(r.roles||[]))
+    api.elections.currentExco().then(r=>setCurrentExco(r.roles||[])),
+    api.elections.archive().then(r=>setArchive(r.archive||[]))
   ]).catch(e=>setMessage(e.message));
   useEffect(()=>{load()},[]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
@@ -62,6 +64,13 @@ export function MemberElections(){
     {!!currentExco.length&&<section className="official-exco-card">
       <div className="sans member-section-title">CURRENT OFFICIAL EXCO</div>
       {currentExco.map(x=><div key={x.id} className="sans official-exco-row"><span><b>{x.role_title}</b><small>{x.term||""}</small></span><strong>{x.name}</strong></div>)}
+    </section>}
+    {!!archive.length&&<section className="election-archive-card">
+      <div className="sans member-section-title">PAST CERTIFIED ELECTIONS</div>
+      {archive.map(e=><button key={e.id} type="button" className="sans election-archive-row" onClick={()=>open(e)}>
+        <span><b>{e.title}</b><small>{e.term||e.year||"Certified election"}</small></span>
+        <strong>{Number(e.turnout?.percent||0).toFixed(1)}%<small>turnout</small></strong>
+      </button>)}
     </section>}
     {!rows.length?<EmptyState>No elections available.</EmptyState>:rows.map(e=><button key={e.id} type="button" onClick={()=>open(e)} className="member-election-card">
       <div><b className="sans">{e.title}</b><span className="sans">{e.term||""}</span></div>
