@@ -17,6 +17,9 @@ export default function Elections(){
   const [currentExco,setCurrentExco]=useState(()=>api.peekCached("/api/elections/exco/current")?.roles||[]);
   const [archive,setArchive]=useState(()=>api.peekCached("/api/elections/archive")?.archive||[]);
   const [dashboard,setDashboard]=useState(()=>api.peekCached("/api/elections/dashboard"));
+  const [excoTerms,setExcoTerms]=useState(()=>api.peekCached("/api/elections/exco/terms"));
+  const [handover,setHandover]=useState(()=>api.peekCached("/api/elections/exco/handover/current"));
+  const [timeline,setTimeline]=useState(null);
   const [form,setForm]=useState({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});
   const [applicationFilter,setApplicationFilter]=useState("all");
   const [position,setPosition]=useState({title:"",seats:"1",min_selections:"1"});
@@ -28,7 +31,9 @@ export default function Elections(){
     api.members.list().then(setMembers),
     api.elections.currentExco().then(r=>setCurrentExco(r.roles||[])),
     api.elections.archive().then(r=>setArchive(r.archive||[])),
-    api.elections.dashboard().then(setDashboard)
+    api.elections.dashboard().then(setDashboard),
+    api.elections.excoTerms().then(setExcoTerms),
+    api.elections.currentHandover().then(setHandover)
   ]).catch(e=>setMessage(e.message));
   const open=async(row)=>{setSelected(row);setReadiness(null);setMessage("");try{setDetail(await api.elections.get(row.id))}catch(e){setMessage(e.message)}};
   useEffect(()=>{load()},[]);
@@ -53,7 +58,31 @@ export default function Elections(){
     if(!detail?.id){setNotificationStatus(null);return;}
     refreshNotificationStatus(detail.id);
   },[detail?.id,detail?.status,detail?.certified_at]);
+  useEffect(()=>{
+    if(!detail?.id){setTimeline(null);return;}
+    let active=true;
+    api.elections.timeline(detail.id).then(r=>{if(active)setTimeline(r)}).catch(()=>{if(active)setTimeline(null)});
+    return ()=>{active=false};
+  },[detail?.id,detail?.status,detail?.certified_at]);
 
+  const updateHandoverItem=async(item,completed)=>{
+    if(!handover?.handover?.id)return;
+    setBusy(true);try{
+      await api.elections.updateHandoverItem(handover.handover.id,item.id,{completed,note:item.note||null});
+      const refreshed=await api.elections.currentHandover();setHandover(refreshed);await load();
+      setMessage(completed?"Handover item completed.":"Handover item reopened.");
+    }catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
+  const completeHandover=async()=>{
+    if(!handover?.handover?.id)return;
+    if(!await confirm({title:"Complete EXCO handover?",message:"This will finalize the handover record. Completed handovers become read-only.",confirmLabel:"Complete handover",tone:"primary"}))return;
+    const notes=window.prompt("Final handover note (optional):","") ?? null;
+    if(notes===null)return;
+    setBusy(true);try{
+      await api.elections.completeHandover(handover.handover.id,notes);
+      setHandover(await api.elections.currentHandover());await load();setMessage("EXCO handover completed.");
+    }catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
   const repairApplicationSync=async()=>{
     if(!detail)return;
     if(!await confirm({title:"Fix election data automatically?",message:"This will synchronize approved/withdrawn applications with their candidate records before voting opens.",confirmLabel:"Fix automatically",tone:"primary"}))return;
@@ -175,6 +204,21 @@ export default function Elections(){
       <div className="sans member-section-title">CURRENT OFFICIAL EXCO</div>
       {currentExco.map(x=><div key={x.id} className="sans official-exco-row"><span><b>{x.role_title}</b><small>{x.term||x.election_title||""}</small></span><strong>{x.name}</strong></div>)}
     </section>}
+    {excoTerms?.current&&<section className="exco-term-card">
+      <div className="sans exco-term-head"><span><b>EXCO TERM</b><small>Current committee term</small></span><strong>{excoTerms.current.term_label||excoTerms.current.election_title}</strong></div>
+      <div className="sans exco-term-dates"><span>Started <b>{formatElectionDate(excoTerms.current.started_at)}</b></span>{excoTerms.previous&&<span>Previous <b>{excoTerms.previous.term_label||excoTerms.previous.election_title}</b></span>}</div>
+      <div className="sans exco-permission-note">Organizational EXCO roles are separate from system Admin permissions. Election results never grant Admin access automatically.</div>
+    </section>}
+    {handover?.handover&&<section className="exco-handover-card">
+      <div className="sans exco-handover-head"><span><b>EXCO HANDOVER</b><small>{handover.outgoing_term?`${handover.outgoing_term.term_label||handover.outgoing_term.election_title} → `:""}{handover.current_term?.term_label||handover.current_term?.election_title}</small></span><strong>{handover.progress?.completed||0}/{handover.progress?.total||0}</strong></div>
+      <div className="exco-handover-progress"><i style={{width:`${handover.progress?.percent||0}%`}}/></div>
+      {handover.items?.map(item=><label key={item.id} className={`sans exco-handover-item ${item.completed?"done":""}`}>
+        <input type="checkbox" checked={!!item.completed} disabled={busy||handover.handover.status==="completed"} onChange={e=>updateHandoverItem(item,e.target.checked)}/>
+        <span><b>{item.label}</b>{item.completed_at&&<small>{item.completed_by_name||"Admin"} · {formatElectionDate(item.completed_at)}</small>}</span>
+      </label>)}
+      {handover.handover.status!=="completed"&&<button type="button" className="sans exco-handover-complete" disabled={busy||Number(handover.progress?.completed||0)!==Number(handover.progress?.total||0)} onClick={completeHandover}>Complete handover</button>}
+      {handover.handover.status==="completed"&&<div className="sans exco-handover-completed">✓ Handover completed {formatElectionDate(handover.handover.completed_at)}</div>}
+    </section>}
     {!!archive.length&&<section className="election-archive-card">
       <div className="sans member-section-title">ELECTION ARCHIVE</div>
       {archive.map(e=><button key={e.id} type="button" className="sans election-archive-row" onClick={()=>open(e)}>
@@ -198,7 +242,7 @@ export default function Elections(){
       <button type="button" disabled={busy} onClick={create} style={{...approveBtn,width:"100%"}}>{busy?"Creating…":"Create draft"}</button>
     </Modal>}
 
-    {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setReadiness(null);setSummary(null);setNotificationStatus(null)}}>
+    {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setReadiness(null);setSummary(null);setNotificationStatus(null);setTimeline(null)}}>
       {!detail?<LoadingState>Loading election…</LoadingState>:<>
         <div className="election-admin-summary sans"><span>Status <b>{detail.status==="draft"&&detail.application_phase==="open"?"Applications Open":detail.status}</b></span><span>Turnout <b>{detail.turnout?.voted||0}/{detail.turnout?.eligible||0}</b></span></div>
         {notificationStatus&&<section className="election-notification-status">
@@ -207,6 +251,18 @@ export default function Elections(){
             <span><b>{notificationEventLabel(n.event_key)}</b><small>{n.audience} · {formatElectionDate(n.created_at)}</small></span>
             <strong className={Number(n.failed||0)>0?"has-fail":""}>{n.sent} sent{Number(n.failed||0)>0?` · ${n.failed} failed`:""}</strong>
           </div>)}
+        </section>}
+        {timeline&&<section className="election-governance-timeline">
+          <div className="sans election-timeline-head"><span><b>ELECTION TIMELINE</b><small>Governance review · ballot selections remain anonymous</small></span><strong>{timeline.events?.length||0}</strong></div>
+          <div className="election-timeline-list">
+            {timeline.events?.slice(-20).map((event,i)=><div key={event.key||i} className={`sans election-timeline-event ${event.type||"audit"}`}>
+              <i/><span><b>{event.label}</b><small>{event.actor||"System"} · {formatElectionDate(event.at)}</small>{event.meta&&<em>{event.meta.sent||0} sent{event.meta.failed?` · ${event.meta.failed} failed`:""}</em>}</span>
+            </div>)}
+          </div>
+          <div className="sans election-governance-review">
+            <span>Created by <b>{timeline.governance?.created_by||"System"}</b></span>
+            <span>Certified by <b>{timeline.governance?.certified_by||"Not certified"}</b></span>
+          </div>
         </section>}
         {detail.status==="draft"&&detail.applications_open_at&&<>
           <div className="sans election-secret-note">Candidate applications: <b>{detail.application_phase}</b> · {String(detail.applications_open_at).replace("T"," ")} → {String(detail.applications_close_at||"").replace("T"," ")}</div>

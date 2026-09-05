@@ -26,7 +26,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 34;
+const REQUIRED_SCHEMA_VERSION = 35;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -68,6 +68,9 @@ export async function ensureOperationalSchema(env: Env) {
       ["election_runoff_ballots", ["runoff_id","ballot_token","candidate_id"]],
       ["exco_role_assignments", ["member_id","election_id","position_id","role_title","term","started_at","ended_at"]],
       ["election_notification_log", ["election_id","event_key","audience","sent","failed","detail","created_by","created_at"]],
+      ["exco_terms", ["election_id","term_label","status","started_at","ended_at"]],
+      ["exco_handover_records", ["incoming_term_id","outgoing_term_id","status","notes","completed_at","completed_by"]],
+      ["exco_handover_items", ["handover_id","item_key","label","completed","completed_at","completed_by","note","sort_order"]],
     ];
     for (const [table,required] of checks) {
       const rows=await env.DB.prepare(`PRAGMA table_info(${table})`).all<any>();

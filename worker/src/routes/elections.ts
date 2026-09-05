@@ -360,6 +360,75 @@ async function calculateElectionResults(env:any,electionId:number){
   return {results,unresolved};
 }
 
+const HANDOVER_CHECKLIST=[
+  {key:"finance_records",label:"Finance records reviewed",sort:10},
+  {key:"cash_bank_balance",label:"Cash and bank balances acknowledged",sort:20},
+  {key:"pending_contributions",label:"Pending contributions reviewed",sort:30},
+  {key:"expenses_donations",label:"Outstanding expenses and donations checked",sort:40},
+  {key:"documents_handed_over",label:"Governance and finance documents handed over",sort:50},
+  {key:"admin_access_reviewed",label:"System Admin access reviewed separately from EXCO roles",sort:60},
+];
+
+async function ensureExcoTerms(env:any){
+  // Backfill certified elections for older deployments without changing Admin permissions.
+  const elections=await env.DB.prepare(`SELECT id,term,certified_at FROM elections
+    WHERE certified_at IS NOT NULL ORDER BY certified_at,id`).all<any>();
+  let previousTermId:number|null=null;
+  for(const e of elections.results as any[]){
+    let term=await env.DB.prepare("SELECT * FROM exco_terms WHERE election_id=?").bind(e.id).first<any>();
+    if(!term){
+      const r=await env.DB.prepare(`INSERT INTO exco_terms(election_id,term_label,status,started_at,ended_at)
+        VALUES(?,?, 'completed',date(?),date(?))`).bind(e.id,e.term||null,e.certified_at,e.certified_at).run();
+      term={id:Number(r.meta.last_row_id),election_id:e.id,term_label:e.term||null,status:"completed",started_at:String(e.certified_at).slice(0,10),ended_at:String(e.certified_at).slice(0,10)};
+    }
+    previousTermId=Number(term.id);
+  }
+  const currentElection=await env.DB.prepare(`SELECT id FROM elections WHERE certified_at IS NOT NULL ORDER BY certified_at DESC,id DESC LIMIT 1`).first<any>();
+  if(currentElection){
+    const current=await env.DB.prepare("SELECT * FROM exco_terms WHERE election_id=?").bind(currentElection.id).first<any>();
+    if(current){
+      await env.DB.prepare("UPDATE exco_terms SET status='completed',ended_at=COALESCE(ended_at,date('now')) WHERE status='current' AND id<>?").bind(current.id).run();
+      await env.DB.prepare("UPDATE exco_terms SET status='current',ended_at=NULL WHERE id=?").bind(current.id).run();
+    }
+  }
+}
+
+async function createExcoTermHandover(env:any,election:any,certifiedAt:string){
+  await ensureExcoTerms(env);
+  const existing=await env.DB.prepare("SELECT * FROM exco_terms WHERE election_id=?").bind(election.id).first<any>();
+  if(existing){
+    await env.DB.prepare("UPDATE exco_terms SET status='current',term_label=?,started_at=date(?),ended_at=NULL WHERE id=?")
+      .bind(election.term||null,certifiedAt,existing.id).run();
+    let handover=await env.DB.prepare("SELECT id FROM exco_handover_records WHERE incoming_term_id=?").bind(existing.id).first<any>();
+    if(!handover){
+      const outgoing=await env.DB.prepare("SELECT * FROM exco_terms WHERE id<>? ORDER BY started_at DESC,id DESC LIMIT 1").bind(existing.id).first<any>();
+      const h=await env.DB.prepare(`INSERT INTO exco_handover_records(incoming_term_id,outgoing_term_id,status)
+        VALUES(?,?, 'pending')`).bind(existing.id,outgoing?.id||null).run();
+      const handoverId=Number(h.meta.last_row_id);
+      await env.DB.batch(HANDOVER_CHECKLIST.map(item=>env.DB.prepare(
+        "INSERT INTO exco_handover_items(handover_id,item_key,label,sort_order) VALUES(?,?,?,?)"
+      ).bind(handoverId,item.key,item.label,item.sort)));
+      handover={id:handoverId};
+    }
+    return {...existing,handover_id:handover.id};
+  }
+
+  const outgoing=await env.DB.prepare("SELECT * FROM exco_terms WHERE status='current' ORDER BY started_at DESC,id DESC LIMIT 1").first<any>();
+  if(outgoing){
+    await env.DB.prepare("UPDATE exco_terms SET status='completed',ended_at=date(?) WHERE id=?").bind(certifiedAt,outgoing.id).run();
+  }
+  const termResult=await env.DB.prepare(`INSERT INTO exco_terms(election_id,term_label,status,started_at)
+    VALUES(?,?, 'current',date(?))`).bind(election.id,election.term||null,certifiedAt).run();
+  const incomingTermId=Number(termResult.meta.last_row_id);
+  const handoverResult=await env.DB.prepare(`INSERT INTO exco_handover_records(incoming_term_id,outgoing_term_id,status)
+    VALUES(?,?, 'pending')`).bind(incomingTermId,outgoing?.id||null).run();
+  const handoverId=Number(handoverResult.meta.last_row_id);
+  await env.DB.batch(HANDOVER_CHECKLIST.map(item=>env.DB.prepare(
+    "INSERT INTO exco_handover_items(handover_id,item_key,label,sort_order) VALUES(?,?,?,?)"
+  ).bind(handoverId,item.key,item.label,item.sort)));
+  return {id:incomingTermId,handover_id:handoverId};
+}
+
 async function assignCertifiedExcoRoles(env:any,election:any,results:any[],certifiedAt:string){
   const elected=results.filter((r:any)=>r.outcome==="elected");
   const candidateRows=await env.DB.prepare(`SELECT ec.id candidate_id,ec.member_id,ep.id position_id,ep.title role_title
@@ -531,6 +600,93 @@ electionsRoute.get("/exco/current", async c=>{
   return c.json({roles:rows.results});
 });
 
+electionsRoute.get("/exco/terms", async c=>{
+  await ensureOperationalSchema(c.env);
+  await ensureExcoTerms(c.env);
+  const rows=await c.env.DB.prepare(`SELECT t.*,e.title election_title,e.certified_at,
+    h.id handover_id,h.status handover_status,h.completed_at handover_completed_at
+    FROM exco_terms t JOIN elections e ON e.id=t.election_id
+    LEFT JOIN exco_handover_records h ON h.incoming_term_id=t.id
+    ORDER BY CASE t.status WHEN 'current' THEN 0 ELSE 1 END,t.started_at DESC,t.id DESC`).all<any>();
+  const terms:any[]=[];
+  for(const term of rows.results as any[]){
+    const roles=await c.env.DB.prepare(`SELECT x.role_title,m.name,m.member_code,m.id member_id
+      FROM exco_role_assignments x JOIN members m ON m.id=x.member_id
+      WHERE x.election_id=? ORDER BY x.position_id,x.id`).bind(term.election_id).all<any>();
+    terms.push({...term,roles:roles.results});
+  }
+  return c.json({terms,current:terms.find((x:any)=>x.status==="current")||null,previous:terms.find((x:any)=>x.status!=="current")||null});
+});
+
+electionsRoute.get("/exco/handover/current", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  await ensureExcoTerms(c.env);
+  const term=await c.env.DB.prepare(`SELECT t.*,e.title election_title,e.certified_at FROM exco_terms t
+    JOIN elections e ON e.id=t.election_id WHERE t.status='current' ORDER BY t.id DESC LIMIT 1`).first<any>();
+  if(!term)return c.json({handover:null,current_term:null,outgoing_term:null,items:[],incoming_roles:[],outgoing_roles:[]});
+  const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(term.election_id).first<any>();
+  await createExcoTermHandover(c.env,election,election.certified_at);
+  const handover=await c.env.DB.prepare("SELECT * FROM exco_handover_records WHERE incoming_term_id=?").bind(term.id).first<any>();
+  const outgoing=handover?.outgoing_term_id?await c.env.DB.prepare(`SELECT t.*,e.title election_title FROM exco_terms t
+    JOIN elections e ON e.id=t.election_id WHERE t.id=?`).bind(handover.outgoing_term_id).first<any>():null;
+  const items=handover?await c.env.DB.prepare(`SELECT i.*,a.name completed_by_name FROM exco_handover_items i
+    LEFT JOIN admins a ON a.id=i.completed_by WHERE i.handover_id=? ORDER BY i.sort_order,i.id`).bind(handover.id).all<any>():{results:[]};
+  const incomingRoles=await c.env.DB.prepare(`SELECT x.role_title,m.name,m.member_code FROM exco_role_assignments x
+    JOIN members m ON m.id=x.member_id WHERE x.election_id=? ORDER BY x.position_id,x.id`).bind(term.election_id).all<any>();
+  const outgoingRoles=outgoing?await c.env.DB.prepare(`SELECT x.role_title,m.name,m.member_code FROM exco_role_assignments x
+    JOIN members m ON m.id=x.member_id WHERE x.election_id=? ORDER BY x.position_id,x.id`).bind(outgoing.election_id).all<any>():{results:[]};
+  const complete=(items.results as any[]).filter((x:any)=>Number(x.completed)===1).length;
+  return c.json({
+    current_term:term,outgoing_term:outgoing,handover,
+    items:items.results,
+    progress:{completed:complete,total:items.results.length,percent:items.results.length?Math.round((complete/items.results.length)*100):0},
+    incoming_roles:incomingRoles.results,outgoing_roles:outgoingRoles.results,
+    permissions_note:"EXCO organizational roles do not grant Admin, Treasurer, Viewer or Super Admin system permissions."
+  });
+});
+
+electionsRoute.patch("/exco/handover/:handoverId/items/:itemId", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  const admin=c.get("admin")!,handoverId=Number(c.req.param("handoverId")),itemId=Number(c.req.param("itemId"));
+  const handover=await c.env.DB.prepare("SELECT * FROM exco_handover_records WHERE id=?").bind(handoverId).first<any>();
+  if(!handover)return c.json({error:"Handover record not found"},404);
+  if(handover.status==="completed")return c.json({error:"Completed handover is read-only"},409);
+  const before=await c.env.DB.prepare("SELECT * FROM exco_handover_items WHERE id=? AND handover_id=?").bind(itemId,handoverId).first<any>();
+  if(!before)return c.json({error:"Handover checklist item not found"},404);
+  const body=await c.req.json<any>().catch(()=>({}));
+  const completed=body.completed===undefined?Number(before.completed):body.completed?1:0;
+  const note=body.note===undefined?before.note:text(body.note,500)||null;
+  await c.env.DB.prepare(`UPDATE exco_handover_items SET completed=?,note=?,
+    completed_at=CASE WHEN ?=1 THEN COALESCE(completed_at,datetime('now')) ELSE NULL END,
+    completed_by=CASE WHEN ?=1 THEN ? ELSE NULL END WHERE id=? AND handover_id=?`)
+    .bind(completed,note,completed,completed,admin.id,itemId,handoverId).run();
+  const counts=await c.env.DB.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END) done
+    FROM exco_handover_items WHERE handover_id=?`).bind(handoverId).first<any>();
+  const status=Number(counts?.done||0)>0?"in_progress":"pending";
+  await c.env.DB.prepare("UPDATE exco_handover_records SET status=?,updated_at=datetime('now') WHERE id=? AND status<>'completed'").bind(status,handoverId).run();
+  const after=await c.env.DB.prepare("SELECT * FROM exco_handover_items WHERE id=?").bind(itemId).first<any>();
+  await auditEntity(c.env,admin.id,"exco_handover_item_updated","exco_handover_item",itemId,before,{...after,handover_id:handoverId});
+  return c.json({ok:true,item:after,progress:{completed:Number(counts?.done||0),total:Number(counts?.total||0)}});
+});
+
+electionsRoute.post("/exco/handover/:handoverId/complete", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  const admin=c.get("admin")!,handoverId=Number(c.req.param("handoverId"));
+  const handover=await c.env.DB.prepare("SELECT * FROM exco_handover_records WHERE id=?").bind(handoverId).first<any>();
+  if(!handover)return c.json({error:"Handover record not found"},404);
+  if(handover.status==="completed")return c.json({error:"Handover is already completed"},409);
+  const counts=await c.env.DB.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END) done
+    FROM exco_handover_items WHERE handover_id=?`).bind(handoverId).first<any>();
+  if(Number(counts?.total||0)===0||Number(counts?.done||0)!==Number(counts?.total||0))
+    return c.json({error:"Complete every handover checklist item before finalizing handover"},409);
+  const body=await c.req.json<any>().catch(()=>({})); const notes=text(body.notes,1000)||null;
+  await c.env.DB.prepare(`UPDATE exco_handover_records SET status='completed',notes=?,completed_at=datetime('now'),
+    completed_by=?,updated_at=datetime('now') WHERE id=?`).bind(notes,admin.id,handoverId).run();
+  const after=await c.env.DB.prepare("SELECT * FROM exco_handover_records WHERE id=?").bind(handoverId).first<any>();
+  await auditEntity(c.env,admin.id,"exco_handover_completed","exco_handover",handoverId,handover,after);
+  return c.json({ok:true,handover:after});
+});
+
 electionsRoute.get("/dashboard", requireSuperAdmin, async c=>{
   await ensureOperationalSchema(c.env);
   await processElectionLifecycle(c.env);
@@ -663,6 +819,59 @@ electionsRoute.get("/:id/notifications", requireSuperAdmin, async c=>{
   }));
   const totals=items.reduce((acc:any,n:any)=>({sent:acc.sent+Number(n.sent||0),failed:acc.failed+Number(n.failed||0)}),{sent:0,failed:0});
   return c.json({items,totals});
+});
+
+electionsRoute.get("/:id/timeline", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  const id=Number(c.req.param("id"));
+  const election=await c.env.DB.prepare(`SELECT e.*,creator.name created_by_name,certifier.name certified_by_name
+    FROM elections e LEFT JOIN admins creator ON creator.id=e.created_by
+    LEFT JOIN admins certifier ON certifier.id=e.certified_by WHERE e.id=?`).bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+
+  const audits=await c.env.DB.prepare(`SELECT a.id,a.action,a.detail,a.created_at,ad.name admin_name
+    FROM audit_log a LEFT JOIN admins ad ON ad.id=a.admin_id
+    WHERE a.action LIKE 'election_%' OR a.action LIKE 'exco_%'
+    ORDER BY a.id ASC LIMIT 1000`).all<any>();
+  const relevant=(audits.results as any[]).filter((a:any)=>{
+    const d=String(a.detail||"");
+    return d.includes(`"entity_id":${id}`)||d.includes(`"election_id":${id}`)||d.includes(`\\"entity_id\\":${id}`)||d.includes(`\\"election_id\\":${id}`);
+  });
+  const notifications=await c.env.DB.prepare(`SELECT id,event_key,audience,sent,failed,created_at FROM election_notification_log
+    WHERE election_id=? ORDER BY id`).bind(id).all<any>();
+
+  const label=(action:string)=>{
+    const map:any={
+      election_created:"Election created",election_application_deadline_extended:"Application deadline extended",
+      election_position_added:"Position added",election_candidate_added:"Candidate added",
+      election_application_admin_notified:"New application submitted",election_application_reopened:"Application reopened",
+      election_application_reassigned:"Application moved",election_candidate_withdrawn:"Candidate withdrawn",
+      election_opened:"Voting opened",election_auto_opened:"Voting opened automatically",
+      election_closed:"Voting closed",election_auto_closed:"Voting closed automatically",
+      election_runoff_opened:"Runoff opened",election_runoff_closed:"Runoff closed",
+      election_runoff_auto_closed:"Runoff closed automatically",election_results_certified:"Results certified",
+      exco_term_started:"New EXCO term started",exco_handover_completed:"EXCO handover completed"
+    };
+    return map[action]||action.replaceAll("_"," ");
+  };
+  const events:any[]=[
+    {type:"milestone",key:"created",label:"Election created",at:election.created_at,actor:election.created_by_name||"System"},
+    ...relevant.map((a:any)=>({type:"audit",key:`audit:${a.id}`,label:label(a.action),action:a.action,at:a.created_at,actor:a.admin_name||"System"})),
+    ...notifications.map((n:any)=>({type:"notification",key:`notification:${n.id}`,label:`Notification · ${String(n.event_key).replaceAll("_"," ")}`,at:n.created_at,actor:"System",meta:{audience:n.audience,sent:Number(n.sent||0),failed:Number(n.failed||0)}}))
+  ].filter((x:any)=>x.at);
+  if(election.opened_at)events.push({type:"milestone",key:"opened",label:"Voting period began",at:election.opened_at,actor:"System"});
+  if(election.closed_at)events.push({type:"milestone",key:"closed",label:"Voting period ended",at:election.closed_at,actor:"System"});
+  if(election.certified_at)events.push({type:"milestone",key:"certified",label:"Official certification",at:election.certified_at,actor:election.certified_by_name||"Super Admin"});
+  events.sort((a:any,b:any)=>String(a.at).localeCompare(String(b.at))||String(a.key).localeCompare(String(b.key)));
+
+  const governance={
+    election_id:id,title:election.title,term:election.term,
+    created_by:election.created_by_name||"System",created_at:election.created_at,
+    voting_opened_at:election.opened_at||null,voting_closed_at:election.closed_at||null,
+    certified_by:election.certified_by_name||null,certified_at:election.certified_at||null,
+    ballot_privacy:"Ballot selections remain anonymous and are not included in the governance timeline."
+  };
+  return c.json({events,governance});
 });
 
 electionsRoute.get("/:id/summary", async c=>{
@@ -1180,7 +1389,9 @@ electionsRoute.post("/:id/certify", requireSuperAdmin, async c=>{
   await c.env.DB.prepare("UPDATE elections SET certified_at=datetime('now'),certified_by=? WHERE id=? AND certified_at IS NULL").bind(admin.id,id).run();
   const after=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   const elected=await assignCertifiedExcoRoles(c.env,after,calculated.results,after.certified_at);
-  await auditEntity(c.env,admin.id,"election_results_certified","election",id,before,{...after,assigned_roles:elected.map((x:any)=>({member_id:x.member_id,role_title:x.role_title}))});
+  const excoTerm=await createExcoTermHandover(c.env,after,after.certified_at);
+  await auditEntity(c.env,admin.id,"election_results_certified","election",id,before,{...after,assigned_roles:elected.map((x:any)=>({member_id:x.member_id,role_title:x.role_title})),exco_term_id:excoTerm?.id||null});
+  await auditEntity(c.env,admin.id,"exco_term_started","exco_term",Number(excoTerm?.id||0),null,{election_id:id,term:after.term||null,handover_id:excoTerm?.handover_id||null});
 
   const brand=await getBranding(c.env);
   const certificationDelivery=await notifyEligible(c.env,after,`🏆 <b>${brand.fund_name} · ${after.title}</b>\n\nElection results have been certified. The official EXCO list is now available in the Mini App.`).catch(()=>({sent:0,failed:0}));

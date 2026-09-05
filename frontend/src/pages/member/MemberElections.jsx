@@ -15,12 +15,14 @@ export function MemberElections(){
   const [message,setMessage]=useState("");
   const [currentExco,setCurrentExco]=useState(()=>api.peekCached("/api/elections/exco/current")?.roles||[]);
   const [archive,setArchive]=useState(()=>api.peekCached("/api/elections/archive")?.archive||[]);
+  const [excoTerms,setExcoTerms]=useState(()=>api.peekCached("/api/elections/exco/terms"));
   const [runoffChoices,setRunoffChoices]=useState({});
   const {confirm,confirmationDialog}=useConfirmDialog();
   const load=()=>Promise.all([
     api.elections.list().then(setRows),
     api.elections.currentExco().then(r=>setCurrentExco(r.roles||[])),
-    api.elections.archive().then(r=>setArchive(r.archive||[]))
+    api.elections.archive().then(r=>setArchive(r.archive||[])),
+    api.elections.excoTerms().then(setExcoTerms)
   ]).catch(e=>setMessage(e.message));
   useEffect(()=>{load()},[]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
@@ -64,6 +66,10 @@ export function MemberElections(){
     {!!currentExco.length&&<section className="official-exco-card">
       <div className="sans member-section-title">CURRENT OFFICIAL EXCO</div>
       {currentExco.map(x=><div key={x.id} className="sans official-exco-row"><span><b>{x.role_title}</b><small>{x.term||""}</small></span><strong>{x.name}</strong></div>)}
+    </section>}
+    {excoTerms?.current&&<section className="exco-term-card member-view">
+      <div className="sans exco-term-head"><span><b>CURRENT EXCO TERM</b><small>Effective from {formatApplicationDate(excoTerms.current.started_at)}</small></span><strong>{excoTerms.current.term_label||excoTerms.current.election_title}</strong></div>
+      {excoTerms.previous&&<div className="sans exco-term-previous"><span>Previous term</span><b>{excoTerms.previous.term_label||excoTerms.previous.election_title}</b><small>{formatApplicationDate(excoTerms.previous.started_at)} → {formatApplicationDate(excoTerms.previous.ended_at)}</small></div>}
     </section>}
     {!!archive.length&&<section className="election-archive-card">
       <div className="sans member-section-title">PAST CERTIFIED ELECTIONS</div>

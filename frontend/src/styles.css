@@ -3085,3 +3085,84 @@ button:not(:disabled):active {
 @media(max-width:420px){
   .election-dashboard-metrics{grid-template-columns:1fr 1fr}
 }
+
+
+/* v62-v63 election governance timeline + EXCO term handover */
+.exco-term-card,.exco-handover-card,.election-governance-timeline{
+  border:1px solid var(--border);border-radius:13px;background:var(--card);
+  padding:11px 12px;margin-bottom:12px
+}
+.exco-term-head,.exco-handover-head,.election-timeline-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:10px
+}
+.exco-term-head span,.exco-handover-head span,.election-timeline-head span{min-width:0}
+.exco-term-head b,.exco-term-head small,
+.exco-handover-head b,.exco-handover-head small,
+.election-timeline-head b,.election-timeline-head small{display:block}
+.exco-term-head b,.exco-handover-head b,.election-timeline-head b{font-size:10px;color:var(--primary-text)}
+.exco-term-head small,.exco-handover-head small,.election-timeline-head small{font-size:7px;color:var(--soft);margin-top:2px;line-height:1.35}
+.exco-term-head>strong{font-size:10px;color:var(--primary-text);text-align:right}
+.exco-handover-head>strong,.election-timeline-head>strong{font-size:13px;color:var(--primary-text)}
+.exco-term-dates{display:flex;justify-content:space-between;gap:10px;margin-top:9px;font-size:8px;color:var(--soft)}
+.exco-term-dates b{color:var(--primary-text)}
+.exco-permission-note{
+  margin-top:9px;border:1px solid var(--border);border-radius:8px;background:var(--bg);
+  padding:7px 8px;font-size:7px;line-height:1.45;color:var(--soft)
+}
+.exco-term-previous{
+  margin-top:9px;border-top:1px solid var(--divider);padding-top:8px
+}
+.exco-term-previous span,.exco-term-previous b,.exco-term-previous small{display:block}
+.exco-term-previous span{font-size:7px;color:var(--soft);text-transform:uppercase;font-weight:800}
+.exco-term-previous b{font-size:9px;color:var(--primary-text);margin-top:2px}
+.exco-term-previous small{font-size:7px;color:var(--soft);margin-top:2px}
+.exco-handover-progress{
+  height:5px;border-radius:999px;background:var(--bg);overflow:hidden;margin:9px 0
+}
+.exco-handover-progress i{display:block;height:100%;border-radius:999px;background:currentColor;color:var(--success)}
+.exco-handover-item{
+  display:flex;align-items:flex-start;gap:8px;border-top:1px solid var(--divider);
+  padding:8px 0;cursor:pointer
+}
+.exco-handover-item input{margin-top:2px}
+.exco-handover-item span{min-width:0;flex:1}
+.exco-handover-item b,.exco-handover-item small{display:block}
+.exco-handover-item b{font-size:9px;color:var(--primary-text)}
+.exco-handover-item small{font-size:7px;color:var(--soft);margin-top:2px}
+.exco-handover-item.done b{text-decoration:line-through;opacity:.72}
+.exco-handover-complete{
+  width:100%;border:0;border-radius:9px;background:var(--primary);color:white;
+  padding:9px;font-size:9px;font-weight:800;margin-top:8px;cursor:pointer
+}
+.exco-handover-complete:disabled{opacity:.45;cursor:default}
+.exco-handover-completed{
+  margin-top:8px;border-radius:8px;background:var(--success-bg);border:1px solid var(--success-border);
+  color:var(--success);padding:8px;text-align:center;font-size:8px;font-weight:800
+}
+.election-timeline-list{position:relative;margin-top:9px}
+.election-timeline-event{
+  position:relative;display:flex;gap:9px;padding:0 0 10px 1px
+}
+.election-timeline-event>i{
+  width:9px;height:9px;flex:0 0 9px;border-radius:999px;background:var(--border-strong);
+  margin-top:3px;box-shadow:0 0 0 3px var(--card);z-index:1
+}
+.election-timeline-event:not(:last-child):after{
+  content:"";position:absolute;left:5px;top:10px;bottom:-1px;width:1px;background:var(--divider)
+}
+.election-timeline-event.notification>i{background:var(--primary)}
+.election-timeline-event.milestone>i{background:var(--success)}
+.election-timeline-event span{min-width:0;flex:1}
+.election-timeline-event b,.election-timeline-event small,.election-timeline-event em{display:block}
+.election-timeline-event b{font-size:9px;color:var(--primary-text)}
+.election-timeline-event small{font-size:7px;color:var(--soft);margin-top:2px}
+.election-timeline-event em{font-size:7px;color:var(--muted);margin-top:2px;font-style:normal}
+.election-governance-review{
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;border-top:1px solid var(--divider);
+  padding-top:8px;font-size:7px;color:var(--soft)
+}
+.election-governance-review b{color:var(--primary-text)}
+@media(max-width:420px){
+  .exco-term-dates,.election-governance-review{display:block}
+  .exco-term-dates span,.election-governance-review span{display:block;margin-top:4px}
+}
