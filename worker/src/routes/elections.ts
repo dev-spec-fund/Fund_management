@@ -458,8 +458,12 @@ electionsRoute.post("/:id/applications/:applicationId/review", requireSuperAdmin
   const reason=text(body.reason,300)||null;
   if(decision==="approved"){
     await c.env.DB.batch([
-      c.env.DB.prepare(`UPDATE election_applications SET status='approved',reviewed_at=datetime('now'),reviewed_by=?,review_reason=? WHERE id=? AND status='pending'`).bind(admin.id,reason,applicationId),
-      c.env.DB.prepare(`INSERT OR IGNORE INTO election_candidates(election_id,position_id,member_id,display_name) VALUES(?,?,?,?)`).bind(id,application.position_id,application.member_id,application.member_name)
+      c.env.DB.prepare(`UPDATE election_applications SET status='approved',reviewed_at=datetime('now'),reviewed_by=?,review_reason=?,withdrawn_at=NULL WHERE id=? AND status='pending'`).bind(admin.id,reason,applicationId),
+      c.env.DB.prepare(`INSERT INTO election_candidates(election_id,position_id,member_id,display_name,status,withdrawn_at,withdrawn_by,withdrawal_reason)
+        VALUES(?,?,?,?,'active',NULL,NULL,NULL)
+        ON CONFLICT(election_id,position_id,member_id) DO UPDATE SET
+          display_name=excluded.display_name,status='active',withdrawn_at=NULL,withdrawn_by=NULL,withdrawal_reason=NULL`)
+        .bind(id,application.position_id,application.member_id,application.member_name)
     ]);
   }else{
     await c.env.DB.prepare(`UPDATE election_applications SET status='rejected',reviewed_at=datetime('now'),reviewed_by=?,review_reason=? WHERE id=? AND status='pending'`)
@@ -473,6 +477,74 @@ electionsRoute.post("/:id/applications/:applicationId/review", requireSuperAdmin
       `❌ <b>${election?.title||"Election"}</b>\n\nYour candidate application was <b>not approved</b>.${reason?`\nReason: ${reason}`:""}`;
     c.executionCtx.waitUntil(sendMessage(c.env,applicant.telegram_id,note).catch(()=>null));
   }
+  return c.json(await electionDetail(c.env,id));
+});
+
+electionsRoute.post("/:id/applications/:applicationId/reopen", requireSuperAdmin, async c=>{
+  const admin=c.get("admin")!,id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId"));
+  const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+  if(election.status!=="draft"||election.certified_at)return c.json({error:"Applications can only be reopened before voting opens"},409);
+  const application=await c.env.DB.prepare(`SELECT ea.*,m.name member_name,m.telegram_id,ep.title position_title FROM election_applications ea
+    JOIN members m ON m.id=ea.member_id JOIN election_positions ep ON ep.id=ea.position_id
+    WHERE ea.id=? AND ea.election_id=?`).bind(applicationId,id).first<any>();
+  if(!application)return c.json({error:"Application not found"},404);
+  if(!["rejected","withdrawn"].includes(application.status))return c.json({error:"Only rejected or withdrawn applications can be reopened"},409);
+  const duplicate=await c.env.DB.prepare(`SELECT id FROM election_applications WHERE election_id=? AND position_id=? AND member_id=? AND id<>?
+    AND status IN ('pending','approved') LIMIT 1`).bind(id,application.position_id,application.member_id,applicationId).first<any>();
+  if(duplicate)return c.json({error:"An active application already exists for this member and position"},409);
+
+  await c.env.DB.prepare(`UPDATE election_applications SET status='pending',reviewed_at=NULL,reviewed_by=NULL,review_reason=NULL,withdrawn_at=NULL
+    WHERE id=? AND election_id=?`).bind(applicationId,id).run();
+  // If the old approved candidacy had been withdrawn, keep the candidate row inactive until Admin approves again.
+  await auditEntity(c.env,admin.id,"election_application_reopened","election_application",applicationId,application,{...application,status:"pending",election_id:id});
+  if(application.telegram_id)c.executionCtx.waitUntil(sendMessage(c.env,application.telegram_id,
+    `🔄 <b>${election.title}</b>\n\nYour application for <b>${application.position_title||"an EXCO position"}</b> has been reopened and is pending review again.`
+  ).catch(()=>null));
+  return c.json(await electionDetail(c.env,id));
+});
+
+electionsRoute.post("/:id/applications/:applicationId/reassign", requireSuperAdmin, async c=>{
+  const admin=c.get("admin")!,id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId"));
+  const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
+  if(!election)return c.json({error:"Election not found"},404);
+  if(election.status!=="draft"||election.certified_at)return c.json({error:"Applications can only be reassigned before voting opens"},409);
+  const body=await c.req.json<any>().catch(()=>({})); const newPositionId=Number(body.position_id);
+  const position=await c.env.DB.prepare("SELECT id,title FROM election_positions WHERE id=? AND election_id=?").bind(newPositionId,id).first<any>();
+  if(!position)return c.json({error:"Choose a valid position"},400);
+  const application=await c.env.DB.prepare(`SELECT ea.*,m.name member_name,m.telegram_id,ep.title old_position_title
+    FROM election_applications ea JOIN members m ON m.id=ea.member_id JOIN election_positions ep ON ep.id=ea.position_id
+    WHERE ea.id=? AND ea.election_id=?`).bind(applicationId,id).first<any>();
+  if(!application)return c.json({error:"Application not found"},404);
+  if(Number(application.position_id)===newPositionId)return c.json({error:"Application is already assigned to this position"},409);
+  const duplicate=await c.env.DB.prepare(`SELECT id FROM election_applications WHERE election_id=? AND position_id=? AND member_id=? AND id<>?
+    LIMIT 1`).bind(id,newPositionId,application.member_id,applicationId).first<any>();
+  if(duplicate)return c.json({error:"This member already has an application for the selected position"},409);
+
+  const statements:any[]=[
+    c.env.DB.prepare("UPDATE election_applications SET position_id=? WHERE id=? AND election_id=?").bind(newPositionId,applicationId,id)
+  ];
+  if(application.status==="approved"){
+    const candidate=await c.env.DB.prepare("SELECT * FROM election_candidates WHERE election_id=? AND position_id=? AND member_id=?")
+      .bind(id,application.position_id,application.member_id).first<any>();
+    if(candidate){
+      const target=await c.env.DB.prepare("SELECT id FROM election_candidates WHERE election_id=? AND position_id=? AND member_id=?")
+        .bind(id,newPositionId,application.member_id).first<any>();
+      if(target){
+        statements.push(c.env.DB.prepare(`UPDATE election_candidates SET status='active',display_name=?,withdrawn_at=NULL,withdrawn_by=NULL,withdrawal_reason=NULL WHERE id=?`)
+          .bind(application.member_name,target.id));
+        statements.push(c.env.DB.prepare("UPDATE election_candidates SET status='withdrawn',withdrawn_at=datetime('now'),withdrawn_by=?,withdrawal_reason='Reassigned to another position' WHERE id=?")
+          .bind(admin.id,candidate.id));
+      }else{
+        statements.push(c.env.DB.prepare("UPDATE election_candidates SET position_id=? WHERE id=?").bind(newPositionId,candidate.id));
+      }
+    }
+  }
+  await c.env.DB.batch(statements);
+  await auditEntity(c.env,admin.id,"election_application_reassigned","election_application",applicationId,application,{...application,position_id:newPositionId,position_title:position.title,election_id:id});
+  if(application.telegram_id)c.executionCtx.waitUntil(sendMessage(c.env,application.telegram_id,
+    `🔁 <b>${election.title}</b>\n\nYour candidate application has been moved from <b>${application.old_position_title}</b> to <b>${position.title}</b>.`
+  ).catch(()=>null));
   return c.json(await electionDetail(c.env,id));
 });
 

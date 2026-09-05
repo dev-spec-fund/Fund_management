@@ -2796,3 +2796,51 @@ button:not(:disabled):active {
   font-size:9px;font-weight:750;margin:-4px 0 12px;cursor:pointer
 }
 .election-extend-deadline:disabled{opacity:.55;cursor:default}
+
+
+/* v53 election application management */
+.election-application-admin.v53{
+  align-items:flex-start;
+  gap:10px;
+}
+.election-application-main{min-width:0;flex:1}
+.election-application-meta{opacity:.85}
+.election-application-reason{
+  padding:5px 6px;border-radius:6px;background:var(--bg);margin-top:5px
+}
+.election-application-actions{
+  display:flex!important;flex-wrap:wrap;justify-content:flex-end;gap:4px;max-width:150px
+}
+.election-application-actions button.neutral{
+  background:var(--button-soft);color:var(--primary-text)
+}
+.election-position-readiness{
+  border:1px solid var(--border);border-radius:10px;padding:9px 10px;margin-bottom:7px;background:var(--card)
+}
+.election-position-readiness.ready{border-color:var(--success-border);background:var(--success-bg)}
+.election-position-readiness.attention{border-color:var(--warning-border);background:var(--warning-bg)}
+.election-position-readiness>div:first-child{
+  display:flex;justify-content:space-between;align-items:center;gap:8px
+}
+.election-position-readiness b{font-size:10px;color:var(--primary-text)}
+.election-position-readiness>div:first-child span{font-size:8px;color:var(--soft)}
+.election-position-counts{
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:6px;font-size:8px;color:var(--muted)
+}
+.election-position-counts strong{margin-left:auto;color:var(--primary-text)}
+.election-my-application.status-approved{border-color:var(--success-border)}
+.election-my-application.status-rejected{border-color:var(--danger-border)}
+.election-my-application.status-withdrawn{border-color:var(--warning-border)}
+.election-member-application-status{
+  font-size:8px!important;font-weight:800!important;color:var(--primary-text)!important
+}
+.election-member-application-date{
+  margin-top:4px!important;color:var(--soft)!important;line-height:1.35
+}
+.election-member-application-reason{
+  margin-top:4px!important;padding:5px 6px;border-radius:6px;background:var(--bg);line-height:1.4
+}
+@media(max-width:420px){
+  .election-application-admin.v53{display:block}
+  .election-application-actions{max-width:none!important;justify-content:flex-start;margin-top:7px}
+}

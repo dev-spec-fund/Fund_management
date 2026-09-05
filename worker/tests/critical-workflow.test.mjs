@@ -656,7 +656,7 @@ test('candidate application stage is migration controlled and separated from vot
   assert.match(route,/Candidate applications are not open/);
   assert.match(route,/Review all pending candidate applications before opening voting/);
   assert.match(route,/election_application_\$\{decision\}/);
-  assert.match(route,/INSERT OR IGNORE INTO election_candidates/);
+  assert.match(route,/INSERT INTO election_candidates/);
 });
 
 test('member can self-apply for election positions and admin can review applications', () => {
@@ -823,4 +823,50 @@ test('application deadline extension cannot move beyond voting opening time', ()
   const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
   assert.match(route,/Application deadline must remain on or before voting opens/);
   assert.match(route,/New application deadline must be in the future/);
+});
+
+
+test('v53 applications can be reopened before voting and reapproved candidates reactivate cleanly', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/applications\/:applicationId\/reopen/);
+  assert.match(route,/Only rejected or withdrawn applications can be reopened/);
+  assert.match(route,/election_application_reopened/);
+  assert.match(route,/ON CONFLICT\(election_id,position_id,member_id\) DO UPDATE SET/);
+  assert.match(route,/status='active',withdrawn_at=NULL,withdrawn_by=NULL,withdrawal_reason=NULL/);
+});
+
+test('v53 admin can reassign an application before voting while keeping candidate records synchronized', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+
+  assert.match(route,/applications\/:applicationId\/reassign/);
+  assert.match(route,/Applications can only be reassigned before voting opens/);
+  assert.match(route,/This member already has an application for the selected position/);
+  assert.match(route,/UPDATE election_candidates SET position_id/);
+  assert.match(route,/election_application_reassigned/);
+  assert.match(api,/reassignApplication/);
+  assert.match(admin,/Move/);
+});
+
+test('v53 application UI provides readiness summary and explicit member application states', () => {
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+
+  assert.match(admin,/POSITION READINESS/);
+  assert.match(admin,/Needs review/);
+  assert.match(admin,/Approved Candidate/);
+  assert.match(admin,/Reopen/);
+  assert.match(member,/Pending Review/);
+  assert.match(member,/Approved Candidate/);
+  assert.match(member,/Withdrawn by Admin/);
+  assert.match(member,/Submitted/);
+});
+
+test('v53 duplicate application safeguards remain position scoped', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const schema=fs.readFileSync(path.join(root,'schema.sql'),'utf8');
+  assert.match(route,/An active application already exists for this member and position/);
+  assert.match(route,/This member already has an application for the selected position/);
+  assert.match(schema,/UNIQUE\(election_id,position_id,member_id\)/);
 });

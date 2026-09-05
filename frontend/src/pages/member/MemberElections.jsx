@@ -70,7 +70,16 @@ export function MemberElections(){
       {!detail?<LoadingState>Loading ballot…</LoadingState>:<>
         <div className="sans election-secret-note">🔒 Secret ballot. The system records that you voted, but ballot selections are stored without your member ID.</div>        {detail.status==="draft"&&<>
           <div className={`sans election-application-status ${detail.application_phase}`}>{detail.application_phase==="open"?"Candidate applications are open":detail.application_phase==="upcoming"?"Candidate applications have not opened yet":"Candidate applications are closed"}</div>
-          {!!detail.applications?.length&&<div className="election-my-applications">{detail.applications.map(a=><div key={a.id} className="sans election-my-application"><div><b>{detail.positions.find(p=>Number(p.id)===Number(a.position_id))?.title||"Position"}</b><span>{a.status}</span>{a.review_reason&&<small>{a.review_reason}</small>}{a.status==="withdrawn"&&!a.review_reason&&<small>Candidacy withdrawn.</small>}</div>{a.status==="pending"&&detail.application_phase==="open"&&<button type="button" onClick={()=>withdrawApplication(a)}>Withdraw</button>}</div>)}</div>}
+          {!!detail.applications?.length&&<div className="election-my-applications">{detail.applications.map(a=><div key={a.id} className={`sans election-my-application status-${a.status}`}>
+            <div>
+              <b>{detail.positions.find(p=>Number(p.id)===Number(a.position_id))?.title||"Position"}</b>
+              <span className="election-member-application-status">{memberApplicationStatus(a)}</span>
+              <small className="election-member-application-date">Submitted {formatApplicationDate(a.submitted_at)}{a.reviewed_at?` · Reviewed ${formatApplicationDate(a.reviewed_at)}`:""}{a.withdrawn_at?` · Withdrawn ${formatApplicationDate(a.withdrawn_at)}`:""}</small>
+              {a.review_reason&&<small className="election-member-application-reason">{a.review_reason}</small>}
+              {a.status==="withdrawn"&&!a.review_reason&&<small>Candidacy withdrawn.</small>}
+            </div>
+            {a.status==="pending"&&detail.application_phase==="open"&&<button type="button" onClick={()=>withdrawApplication(a)}>Withdraw</button>}
+          </div>)}</div>}
           {detail.application_phase==="open"&&<>
             <div className="sans member-section-title">APPLY FOR AN AVAILABLE POSITION</div>
             <div className="sans election-deadline">Applications close: <b>{String(detail.applications_close_at||"").replace("T"," ").slice(0,16)}</b></div>
@@ -115,6 +124,18 @@ export function MemberElections(){
     {confirmationDialog}
   </>;
 }
+function memberApplicationStatus(a){
+  if(a.status==="pending")return "Pending Review";
+  if(a.status==="approved")return "Approved Candidate";
+  if(a.status==="rejected")return "Rejected";
+  if(a.status==="withdrawn")return String(a.review_reason||"").toLowerCase().startsWith("withdrawn by admin")?"Withdrawn by Admin":"Withdrawn";
+  return String(a.status||"");
+}
+function formatApplicationDate(value){
+  if(!value)return "—";
+  return String(value).replace("T"," ").slice(0,16);
+}
+
 function MemberResults({detail}){
   return <div>{detail.positions.map(p=>{
     const ranked=p.candidates.map(c=>{const result=detail.results?.find(r=>Number(r.candidate_id)===Number(c.id));return {...c,votes:Number(result?.votes||0),outcome:result?.outcome||"not_elected"}}).sort((a,b)=>b.votes-a.votes);

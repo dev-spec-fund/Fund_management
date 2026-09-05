@@ -35,6 +35,20 @@ export default function Elections(){
     if(reason===null)return;
     setBusy(true);try{setDetail(await api.elections.reviewApplication(detail.id,a.id,decision,reason));setMessage(`Application ${decision}.`)}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
+  const reopenApplication=async(a)=>{
+    if(!await confirm({title:"Reopen application?",message:`Return ${a.member_name}'s ${a.position_title} application to Pending Review?`,confirmLabel:"Reopen",tone:"primary"}))return;
+    setBusy(true);try{await api.elections.reopenApplication(detail.id,a.id);setDetail(await api.elections.get(detail.id));setMessage("Application reopened and returned to Pending Review.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
+  const reassignApplication=async(a)=>{
+    const options=detail.positions.filter(p=>Number(p.id)!==Number(a.position_id));
+    if(!options.length)return setMessage("No other positions are available.");
+    const menu=options.map(p=>`${p.id}: ${p.title}`).join("\n");
+    const value=window.prompt(`Move ${a.member_name}'s application to which position?\n\n${menu}`,"");
+    if(value===null)return;
+    const positionId=Number(String(value).split(":")[0].trim());
+    if(!options.some(p=>Number(p.id)===positionId))return setMessage("Choose a valid position ID.");
+    setBusy(true);try{await api.elections.reassignApplication(detail.id,a.id,positionId);setDetail(await api.elections.get(detail.id));setMessage("Application position updated.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
   const extendApplications=async()=>{
     if(!detail)return;
     const current=String(detail.applications_close_at||"").slice(0,16);
@@ -116,12 +130,29 @@ export default function Elections(){
         {detail.status==="draft"&&<>
           <div className="sans member-section-title">APPLICATIONS</div>
           <div className="election-application-counts sans">{["pending","approved","rejected","withdrawn"].map(s=><button type="button" key={s} className={applicationFilter===s?"active":""} onClick={()=>setApplicationFilter(applicationFilter===s?"all":s)}><b>{detail.applications?.filter(a=>a.status===s).length||0}</b><span>{s}</span></button>)}</div>
-          {!detail.applications?.length?<div className="sans election-field-help" style={{marginBottom:10}}>No candidate applications yet.</div>:detail.applications.filter(a=>applicationFilter==="all"||a.status===applicationFilter).map(a=><div key={a.id} className="election-application-admin">
-            <div className="sans"><b>{a.member_name}</b><span>{a.position_title} · {a.status}</span>{a.statement&&<small>{a.statement}</small>}</div>
-            {a.status==="pending"&&<div><button type="button" disabled={busy} onClick={()=>reviewApplication(a,"approved")}>Approve</button><button type="button" className="reject" disabled={busy} onClick={()=>reviewApplication(a,"rejected")}>Reject</button></div>}
+          {!detail.applications?.length?<div className="sans election-field-help" style={{marginBottom:10}}>No candidate applications yet.</div>:detail.applications.filter(a=>applicationFilter==="all"||a.status===applicationFilter).map(a=><div key={a.id} className="election-application-admin v53">
+            <div className="sans election-application-main"><b>{a.member_name}</b><span>{a.position_title} · {applicationStatusLabel(a)}</span>{a.statement&&<small>{a.statement}</small>}<small className="election-application-meta">Submitted {formatElectionDate(a.submitted_at)}{a.reviewed_at?` · Reviewed ${formatElectionDate(a.reviewed_at)}`:""}{a.withdrawn_at?` · Withdrawn ${formatElectionDate(a.withdrawn_at)}`:""}</small>{a.review_reason&&<small className="election-application-reason">{a.review_reason}</small>}</div>
+            <div className="election-application-actions">
+              {a.status==="pending"&&<><button type="button" disabled={busy} onClick={()=>reviewApplication(a,"approved")}>Approve</button><button type="button" className="reject" disabled={busy} onClick={()=>reviewApplication(a,"rejected")}>Reject</button></>}
+              {["pending","approved"].includes(a.status)&&<button type="button" className="neutral" disabled={busy} onClick={()=>reassignApplication(a)}>Move</button>}
+              {["rejected","withdrawn"].includes(a.status)&&<><button type="button" className="neutral" disabled={busy} onClick={()=>reassignApplication(a)}>Move</button><button type="button" disabled={busy} onClick={()=>reopenApplication(a)}>Reopen</button></>}
+            </div>
           </div>)}
+          <div className="sans member-section-title">POSITION READINESS</div>
+          {detail.positions.map(p=>{
+            const apps=detail.applications?.filter(a=>Number(a.position_id)===Number(p.id))||[];
+            const pending=apps.filter(a=>a.status==="pending").length;
+            const approved=apps.filter(a=>a.status==="approved").length;
+            const withdrawn=apps.filter(a=>a.status==="withdrawn").length;
+            const activeCandidates=p.candidates.filter(c=>c.status==="active").length;
+            const ready=activeCandidates>=Number(p.seats||1)&&pending===0;
+            return <div key={p.id} className={`election-position-readiness ${ready?"ready":"attention"}`}>
+              <div className="sans"><b>{p.title}</b><span>{p.seats} seat{Number(p.seats)===1?"":"s"} · {activeCandidates} active candidate{activeCandidates===1?"":"s"}</span></div>
+              <div className="sans election-position-counts"><span>{approved} approved</span><span>{pending} pending</span><span>{withdrawn} withdrawn</span><strong>{ready?"✓ Ready":"Needs review"}</strong></div>
+            </div>
+          })}
           <div className="sans member-section-title">POSITIONS</div>
-          {detail.positions.map(p=><div key={p.id} className="election-admin-position"><b className="sans">{p.title}</b><span className="sans">{p.seats} seat{Number(p.seats)===1?"":"s"} · select {p.min_selections}–{p.max_selections} · {p.candidates.length} candidates</span></div>)}
+          {detail.positions.map(p=><div key={p.id} className="election-admin-position"><b className="sans">{p.title}</b><span className="sans">{p.seats} seat{Number(p.seats)===1?"":"s"} · select {p.min_selections}–{p.max_selections} · {p.candidates.filter(c=>c.status==="active").length} active candidates</span></div>)}
           <div className="election-position-create">
             <input className="sans" placeholder="Position e.g. President" value={position.title} onChange={e=>setPosition({...position,title:e.target.value})}/>
             <input className="sans" title="Seats / maximum selections" type="number" min="1" value={position.seats} onChange={e=>setPosition({...position,seats:e.target.value})}/>
@@ -164,6 +195,18 @@ export default function Elections(){
     </Modal>}
     {confirmationDialog}
   </>;
+}
+
+function applicationStatusLabel(a){
+  if(a.status==="pending")return "Pending Review";
+  if(a.status==="approved")return "Approved Candidate";
+  if(a.status==="rejected")return "Rejected";
+  if(a.status==="withdrawn")return String(a.review_reason||"").toLowerCase().startsWith("withdrawn by admin")?"Withdrawn by Admin":"Withdrawn";
+  return String(a.status||"");
+}
+function formatElectionDate(value){
+  if(!value)return "—";
+  return String(value).replace("T"," ").slice(0,16);
 }
 
 function ElectionResults({detail}){

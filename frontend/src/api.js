@@ -428,6 +428,8 @@ export const api = {
     apply: (id,data) => request(`/api/elections/${id}/applications`, { method:"POST", body:JSON.stringify(data) }),
     withdrawApplication: (id,applicationId) => request(`/api/elections/${id}/applications/${applicationId}/withdraw`, { method:"POST" }),
     reviewApplication: (id,applicationId,decision,reason="") => request(`/api/elections/${id}/applications/${applicationId}/review`, { method:"POST", body:JSON.stringify({decision,reason}) }),
+    reopenApplication: (id,applicationId) => request(`/api/elections/${id}/applications/${applicationId}/reopen`, { method:"POST" }),
+    reassignApplication: (id,applicationId,position_id) => request(`/api/elections/${id}/applications/${applicationId}/reassign`, { method:"POST", body:JSON.stringify({position_id}) }),
     withdrawCandidate: (id,candidateId,reason) => request(`/api/elections/${id}/candidates/${candidateId}/withdraw`, { method:"POST", body:JSON.stringify({reason}) }),
     remindNonVoters: (id) => request(`/api/elections/${id}/remind-nonvoters`, { method:"POST" }),
     certify: (id) => request(`/api/elections/${id}/certify`, { method:"POST" }),
