@@ -687,6 +687,99 @@ electionsRoute.post("/exco/handover/:handoverId/complete", requireSuperAdmin, as
   return c.json({ok:true,handover:after});
 });
 
+electionsRoute.get("/exco/workboard", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  await ensureExcoTerms(c.env);
+  const term=await c.env.DB.prepare(`SELECT t.*,e.title election_title FROM exco_terms t
+    JOIN elections e ON e.id=t.election_id WHERE t.status='current' ORDER BY t.id DESC LIMIT 1`).first<any>();
+  if(!term)return c.json({term:null,items:[],summary:{total:0,todo:0,in_progress:0,completed:0,overdue:0,upcoming:0}});
+  const now=localNow(c.env.FUND_TIMEZONE || "Indian/Maldives").slice(0,10);
+  const rows=await c.env.DB.prepare(`SELECT r.*,m.name owner_name,m.member_code
+    FROM exco_responsibilities r LEFT JOIN members m ON m.id=r.owner_member_id
+    WHERE r.term_id=? ORDER BY CASE r.status WHEN 'in_progress' THEN 0 WHEN 'todo' THEN 1 ELSE 2 END,
+      CASE WHEN r.due_date IS NULL THEN 1 ELSE 0 END,r.due_date,r.id DESC`).bind(term.id).all<any>();
+  const items=(rows.results as any[]).map((r:any)=>({
+    ...r,
+    overdue:r.status!=="completed"&&!!r.due_date&&r.due_date<now,
+    upcoming:r.status!=="completed"&&!!r.due_date&&r.due_date>=now&&r.due_date<=String(new Date(Date.now()+7*86400000).toISOString()).slice(0,10)
+  }));
+  return c.json({term,items,summary:{
+    total:items.length,
+    todo:items.filter((x:any)=>x.status==="todo").length,
+    in_progress:items.filter((x:any)=>x.status==="in_progress").length,
+    completed:items.filter((x:any)=>x.status==="completed").length,
+    overdue:items.filter((x:any)=>x.overdue).length,
+    upcoming:items.filter((x:any)=>x.upcoming).length
+  }});
+});
+
+electionsRoute.post("/exco/responsibilities", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  await ensureExcoTerms(c.env);
+  const admin=c.get("admin")!,body=await c.req.json<any>().catch(()=>({}));
+  const term=await c.env.DB.prepare("SELECT * FROM exco_terms WHERE status='current' ORDER BY id DESC LIMIT 1").first<any>();
+  if(!term)return c.json({error:"No current EXCO term"},409);
+  const title=text(body.title,160); if(!title)return c.json({error:"Responsibility title is required"},400);
+  const ownerMemberId=body.owner_member_id?Number(body.owner_member_id):null;
+  let owner:any=null;
+  if(ownerMemberId){
+    owner=await c.env.DB.prepare(`SELECT m.id,m.name,x.role_title FROM members m
+      JOIN exco_role_assignments x ON x.member_id=m.id
+      WHERE m.id=? AND x.election_id=? LIMIT 1`).bind(ownerMemberId,term.election_id).first<any>();
+    if(!owner)return c.json({error:"Owner must be a member of the current EXCO"},400);
+  }
+  const dueDate=body.due_date?String(body.due_date).slice(0,10):null;
+  const status=["todo","in_progress","completed"].includes(String(body.status))?String(body.status):"todo";
+  const r=await c.env.DB.prepare(`INSERT INTO exco_responsibilities(term_id,owner_member_id,owner_role_title,title,description,due_date,status,completed_at,created_by)
+    VALUES(?,?,?,?,?,?,?,CASE WHEN ?='completed' THEN datetime('now') ELSE NULL END,?)`)
+    .bind(term.id,ownerMemberId,owner?.role_title||text(body.owner_role_title,120)||null,title,text(body.description,1000)||null,dueDate,status,status,admin.id).run();
+  const id=Number(r.meta.last_row_id);
+  await c.env.DB.prepare(`INSERT INTO exco_responsibility_history(responsibility_id,action,to_status,note,admin_id)
+    VALUES(?, 'created',?,?,?)`).bind(id,status,text(body.note,500)||null,admin.id).run();
+  await auditEntity(c.env,admin.id,"exco_responsibility_created","exco_responsibility",id,null,{term_id:term.id,title,owner_member_id:ownerMemberId,status,due_date:dueDate});
+  return c.json({ok:true,id},201);
+});
+
+electionsRoute.patch("/exco/responsibilities/:id", requireSuperAdmin, async c=>{
+  await ensureOperationalSchema(c.env);
+  const admin=c.get("admin")!,id=Number(c.req.param("id")),body=await c.req.json<any>().catch(()=>({}));
+  const before=await c.env.DB.prepare("SELECT * FROM exco_responsibilities WHERE id=?").bind(id).first<any>();
+  if(!before)return c.json({error:"Responsibility not found"},404);
+  const term=await c.env.DB.prepare("SELECT * FROM exco_terms WHERE id=?").bind(before.term_id).first<any>();
+  if(!term||term.status!=="current")return c.json({error:"Completed EXCO term responsibilities are read-only"},409);
+  const title=body.title===undefined?before.title:text(body.title,160);
+  const description=body.description===undefined?before.description:text(body.description,1000)||null;
+  const dueDate=body.due_date===undefined?before.due_date:(body.due_date?String(body.due_date).slice(0,10):null);
+  const status=body.status===undefined?before.status:String(body.status);
+  if(!["todo","in_progress","completed"].includes(status))return c.json({error:"Invalid responsibility status"},400);
+  let ownerMemberId=body.owner_member_id===undefined?before.owner_member_id:(body.owner_member_id?Number(body.owner_member_id):null);
+  let ownerRole=before.owner_role_title;
+  if(ownerMemberId){
+    const owner=await c.env.DB.prepare(`SELECT m.id,x.role_title FROM members m JOIN exco_role_assignments x ON x.member_id=m.id
+      WHERE m.id=? AND x.election_id=? LIMIT 1`).bind(ownerMemberId,term.election_id).first<any>();
+    if(!owner)return c.json({error:"Owner must be a member of the current EXCO"},400);
+    ownerRole=owner.role_title;
+  }else ownerRole=null;
+  await c.env.DB.prepare(`UPDATE exco_responsibilities SET title=?,description=?,due_date=?,status=?,owner_member_id=?,owner_role_title=?,
+    completed_at=CASE WHEN ?='completed' THEN COALESCE(completed_at,datetime('now')) ELSE NULL END,
+    updated_by=?,updated_at=datetime('now') WHERE id=?`)
+    .bind(title,description,dueDate,status,ownerMemberId,ownerRole,status,admin.id,id).run();
+  if(status!==before.status || body.note){
+    await c.env.DB.prepare(`INSERT INTO exco_responsibility_history(responsibility_id,action,from_status,to_status,note,admin_id)
+      VALUES(?, 'updated',?,?,?,?)`).bind(id,before.status,status,text(body.note,500)||null,admin.id).run();
+  }
+  const after=await c.env.DB.prepare("SELECT * FROM exco_responsibilities WHERE id=?").bind(id).first<any>();
+  await auditEntity(c.env,admin.id,"exco_responsibility_updated","exco_responsibility",id,before,after);
+  return c.json({ok:true,item:after});
+});
+
+electionsRoute.get("/exco/responsibilities/:id/history", requireSuperAdmin, async c=>{
+  const id=Number(c.req.param("id"));
+  const rows=await c.env.DB.prepare(`SELECT h.*,a.name admin_name FROM exco_responsibility_history h
+    LEFT JOIN admins a ON a.id=h.admin_id WHERE h.responsibility_id=? ORDER BY h.id DESC`).bind(id).all<any>();
+  return c.json({history:rows.results});
+});
+
 electionsRoute.get("/dashboard", requireSuperAdmin, async c=>{
   await ensureOperationalSchema(c.env);
   await processElectionLifecycle(c.env);

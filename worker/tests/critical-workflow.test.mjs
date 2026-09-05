@@ -458,7 +458,7 @@ test('contribution review Telegram messages are persisted and synchronized from 
   assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"rejected"/);
   assert.match(callbacks,/recordContributionReviewMessage/);
   assert.match(callbacks,/syncContributionReviewMessages/);
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 35/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 36/);
 });
 
 test('Telegram callback can self-heal a legacy stale contribution review message', () => {
@@ -581,7 +581,7 @@ test('database backup includes election governance tables and schema version 29'
   for(const table of ['elections','election_positions','election_candidates','election_voters','election_ballots']){
     assert.match(system,new RegExp(table));
   }
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 35/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 36/);
 });
 
 
@@ -630,7 +630,7 @@ test('election integrity migration advances schema to 30', () => {
   assert.ok(candidateCols.has("withdrawal_reason"));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 35/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 36/);
 });
 
 
@@ -723,7 +723,7 @@ test('v50 runoff tables and EXCO role history are migration controlled', () => {
   for(const col of ['member_id','election_id','position_id','role_title','term','started_at','ended_at']) assert.ok(roleCols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 35/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 36/);
 });
 
 test('tie results require anonymous runoff and block certification until resolved', () => {
@@ -1069,7 +1069,7 @@ test('v60 election notification delivery log is migration controlled', () => {
   for(const col of ['election_id','event_key','audience','sent','failed','detail','created_by','created_at']) assert.ok(cols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 35/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 36/);
 });
 
 test('v60 logs voting, reminder, runoff, certification and application notification delivery', () => {
@@ -1183,7 +1183,7 @@ test('v63 EXCO term and handover schema is migration controlled', () => {
   for(const col of ['handover_id','item_key','label','completed','completed_at','completed_by','note','sort_order']) assert.ok(itemCols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 35/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 36/);
 });
 
 test('v63 certification starts EXCO term and creates structured handover without granting admin permissions', () => {
@@ -1243,4 +1243,60 @@ test('v63 admin and member UIs show term history and handover governance', () =>
 test('v63 D1 backup includes notification, EXCO term and handover tables', () => {
   const system=fs.readFileSync(path.join(root,'src/routes/admin/system.ts'),'utf8');
   for(const table of ['election_notification_log','exco_terms','exco_handover_records','exco_handover_items']) assert.match(system,new RegExp(table));
+});
+
+
+test('v64 EXCO responsibility workboard schema is migration controlled', () => {
+  const db=dbWithSchema();
+  for(const table of ['exco_responsibilities','exco_responsibility_history']){
+    assert.ok(db.prepare(`PRAGMA table_info(${table})`).all().length>0);
+  }
+  db.close();
+  const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 36/);
+});
+
+test('v64 EXCO responsibilities are term-linked and owner-restricted to current committee', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/\/exco\/workboard/);
+  assert.match(route,/\/exco\/responsibilities/);
+  assert.match(route,/Owner must be a member of the current EXCO/);
+  assert.match(route,/Completed EXCO term responsibilities are read-only/);
+  assert.match(route,/exco_responsibility_created/);
+  assert.match(route,/exco_responsibility_updated/);
+});
+
+test('v64 workboard exposes overdue upcoming active and completed responsibility counts', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/overdue:/);
+  assert.match(route,/upcoming:/);
+  assert.match(route,/in_progress/);
+  assert.match(route,/completed/);
+  assert.match(route,/remaining/);
+});
+
+test('v64 responsibility history records status transitions without granting admin permissions', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  assert.match(route,/exco_responsibility_history/);
+  assert.match(route,/from_status/);
+  assert.match(route,/to_status/);
+  assert.doesNotMatch(route,/INSERT INTO admins/);
+});
+
+test('v64 Admin UI renders EXCO workboard and responsibility controls', () => {
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/excoWorkboard/);
+  assert.match(api,/createResponsibility/);
+  assert.match(api,/updateResponsibility/);
+  assert.match(api,/responsibilityHistory/);
+  assert.match(admin,/EXCO WORKBOARD/);
+  assert.match(admin,/Add EXCO responsibility/);
+  assert.match(admin,/Responsibilities belong to the EXCO term and do not grant system permissions/);
+});
+
+test('v64 backup includes EXCO responsibility workboard tables', () => {
+  const system=fs.readFileSync(path.join(root,'src/routes/admin/system.ts'),'utf8');
+  assert.match(system,/exco_responsibilities/);
+  assert.match(system,/exco_responsibility_history/);
 });

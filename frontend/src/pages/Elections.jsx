@@ -20,6 +20,9 @@ export default function Elections(){
   const [excoTerms,setExcoTerms]=useState(()=>api.peekCached("/api/elections/exco/terms"));
   const [handover,setHandover]=useState(()=>api.peekCached("/api/elections/exco/handover/current"));
   const [timeline,setTimeline]=useState(null);
+  const [workboard,setWorkboard]=useState(()=>api.peekCached("/api/elections/exco/workboard"));
+  const [showResponsibility,setShowResponsibility]=useState(false);
+  const [responsibilityForm,setResponsibilityForm]=useState({title:"",description:"",owner_member_id:"",due_date:"",status:"todo"});
   const [form,setForm]=useState({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});
   const [applicationFilter,setApplicationFilter]=useState("all");
   const [position,setPosition]=useState({title:"",seats:"1",min_selections:"1"});
@@ -33,7 +36,8 @@ export default function Elections(){
     api.elections.archive().then(r=>setArchive(r.archive||[])),
     api.elections.dashboard().then(setDashboard),
     api.elections.excoTerms().then(setExcoTerms),
-    api.elections.currentHandover().then(setHandover)
+    api.elections.currentHandover().then(setHandover),
+    api.elections.excoWorkboard().then(setWorkboard)
   ]).catch(e=>setMessage(e.message));
   const open=async(row)=>{setSelected(row);setReadiness(null);setMessage("");try{setDetail(await api.elections.get(row.id))}catch(e){setMessage(e.message)}};
   useEffect(()=>{load()},[]);
@@ -65,6 +69,20 @@ export default function Elections(){
     return ()=>{active=false};
   },[detail?.id,detail?.status,detail?.certified_at]);
 
+  const createResponsibility=async()=>{
+    if(!responsibilityForm.title.trim())return setMessage("Responsibility title is required.");
+    setBusy(true);try{
+      await api.elections.createResponsibility({...responsibilityForm,owner_member_id:responsibilityForm.owner_member_id?Number(responsibilityForm.owner_member_id):null});
+      setShowResponsibility(false);setResponsibilityForm({title:"",description:"",owner_member_id:"",due_date:"",status:"todo"});
+      setWorkboard(await api.elections.excoWorkboard());setMessage("EXCO responsibility added.");
+    }catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
+  const changeResponsibilityStatus=async(item,status)=>{
+    setBusy(true);try{
+      await api.elections.updateResponsibility(item.id,{status});
+      setWorkboard(await api.elections.excoWorkboard());setMessage(status==="completed"?"Responsibility completed.":"Responsibility updated.");
+    }catch(e){setMessage(e.message)}finally{setBusy(false)}
+  };
   const updateHandoverItem=async(item,completed)=>{
     if(!handover?.handover?.id)return;
     setBusy(true);try{
@@ -219,6 +237,21 @@ export default function Elections(){
       {handover.handover.status!=="completed"&&<button type="button" className="sans exco-handover-complete" disabled={busy||Number(handover.progress?.completed||0)!==Number(handover.progress?.total||0)} onClick={completeHandover}>Complete handover</button>}
       {handover.handover.status==="completed"&&<div className="sans exco-handover-completed">✓ Handover completed {formatElectionDate(handover.handover.completed_at)}</div>}
     </section>}
+    {workboard?.term&&<section className="exco-workboard-card">
+      <div className="sans exco-workboard-head"><span><b>EXCO WORKBOARD</b><small>{workboard.term.term_label||workboard.term.election_title}</small></span><button type="button" onClick={()=>setShowResponsibility(true)}>+ Add</button></div>
+      <div className="sans exco-workboard-summary">
+        <span><b>{workboard.summary?.overdue||0}</b> overdue</span><span><b>{workboard.summary?.in_progress||0}</b> in progress</span><span><b>{workboard.summary?.upcoming||0}</b> upcoming</span><span><b>{workboard.summary?.completed||0}</b> completed</span>
+      </div>
+      {!workboard.items?.length?<div className="sans election-field-help">No EXCO responsibilities yet.</div>:workboard.items.map(item=><div key={item.id} className={`exco-workboard-item ${item.overdue?"overdue":item.status}`}>
+        <div className="sans"><b>{item.title}</b><span>{item.owner_role_title||"Unassigned"}{item.owner_name?` · ${item.owner_name}`:""}</span>{item.due_date&&<small>Due {item.due_date}{item.overdue?" · OVERDUE":""}</small>}</div>
+        <div className="exco-workboard-actions sans">
+          {item.status==="todo"&&<button type="button" disabled={busy} onClick={()=>changeResponsibilityStatus(item,"in_progress")}>Start</button>}
+          {item.status!=="completed"&&<button type="button" disabled={busy} onClick={()=>changeResponsibilityStatus(item,"completed")}>Complete</button>}
+          {item.status==="completed"&&<span>✓ Done</span>}
+        </div>
+      </div>)}
+      <div className="sans exco-permission-note">Responsibilities belong to the EXCO term and do not grant system permissions.</div>
+    </section>}
     {!!archive.length&&<section className="election-archive-card">
       <div className="sans member-section-title">ELECTION ARCHIVE</div>
       {archive.map(e=><button key={e.id} type="button" className="sans election-archive-row" onClick={()=>open(e)}>
@@ -230,6 +263,19 @@ export default function Elections(){
       <div style={{minWidth:0,flex:1,textAlign:"left"}}><div className="sans" style={{fontSize:13,fontWeight:750}}>{e.title}</div><div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:3}}>{e.term||"No term"} · {String(e.status).toUpperCase()}</div></div>
       <div className="sans" style={{textAlign:"right"}}><b>{e.turnout?.voted||0}/{e.turnout?.eligible||0}</b><div style={{fontSize:9,color:"var(--soft)"}}>{Number(e.turnout?.percent||0).toFixed(1)}% turnout</div></div>
     </button>)}
+
+    {showResponsibility&&<Modal title="Add EXCO responsibility" onClose={()=>setShowResponsibility(false)}>
+      <Field label="Responsibility" value={responsibilityForm.title} onChange={v=>setResponsibilityForm({...responsibilityForm,title:v})}/>
+      <Field label="Description (optional)" value={responsibilityForm.description} onChange={v=>setResponsibilityForm({...responsibilityForm,description:v})}/>
+      <label className="sans election-field-label">Owner
+        <select className="sans election-select" value={responsibilityForm.owner_member_id} onChange={e=>setResponsibilityForm({...responsibilityForm,owner_member_id:e.target.value})}>
+          <option value="">Unassigned</option>
+          {currentExco.map(x=><option key={x.member_id||x.id} value={x.member_id}>{x.role_title} · {x.name}</option>)}
+        </select>
+      </label>
+      <Field label="Due date (optional)" type="date" value={responsibilityForm.due_date} onChange={v=>setResponsibilityForm({...responsibilityForm,due_date:v})}/>
+      <button type="button" disabled={busy} onClick={createResponsibility} style={{...approveBtn,width:"100%"}}>Add responsibility</button>
+    </Modal>}
 
     {showCreate&&<Modal title="Create EXCO election" onClose={()=>setShowCreate(false)}>
       <Field label="Election title" value={form.title} onChange={v=>setForm({...form,title:v})}/>

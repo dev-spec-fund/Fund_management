@@ -3166,3 +3166,24 @@ button:not(:disabled):active {
   .exco-term-dates,.election-governance-review{display:block}
   .exco-term-dates span,.election-governance-review span{display:block;margin-top:4px}
 }
+
+/* v64 EXCO responsibilities + workboard */
+.exco-workboard-card{border:1px solid var(--border);border-radius:13px;background:var(--card);padding:11px 12px;margin-bottom:12px}
+.exco-workboard-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.exco-workboard-head b,.exco-workboard-head small{display:block}
+.exco-workboard-head b{font-size:10px;color:var(--primary-text)}
+.exco-workboard-head small{font-size:7px;color:var(--soft);margin-top:2px}
+.exco-workboard-head button{border:1px solid var(--border);background:var(--button-soft);color:var(--primary-text);border-radius:8px;padding:6px 9px;font-size:8px;font-weight:800}
+.exco-workboard-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:9px 0}
+.exco-workboard-summary span{border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:7px;font-size:7px;color:var(--soft);text-align:center}
+.exco-workboard-summary b{display:block;font-size:11px;color:var(--primary-text);margin-bottom:2px}
+.exco-workboard-item{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--divider);padding:9px 0}
+.exco-workboard-item>div:first-child{min-width:0;flex:1}
+.exco-workboard-item b,.exco-workboard-item span,.exco-workboard-item small{display:block}
+.exco-workboard-item b{font-size:9px;color:var(--primary-text)}
+.exco-workboard-item span,.exco-workboard-item small{font-size:7px;color:var(--soft);margin-top:2px}
+.exco-workboard-item.overdue b,.exco-workboard-item.overdue small{color:var(--danger)}
+.exco-workboard-actions{display:flex;gap:5px;align-items:center}
+.exco-workboard-actions button{border:1px solid var(--border);background:var(--button-soft);border-radius:7px;padding:6px 7px;font-size:7px;font-weight:800;color:var(--primary-text)}
+.exco-workboard-actions>span{color:var(--success)!important;font-weight:800}
+@media(max-width:420px){.exco-workboard-summary{grid-template-columns:1fr 1fr}.exco-workboard-item{align-items:flex-start}.exco-workboard-actions{flex-direction:column}}
