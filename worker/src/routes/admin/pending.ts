@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { AppEnv } from "../../types";
 import { requireFinance } from "../../auth";
-import { auditEntity, contributionDuplicateKey, duplicateSlip, ensureOperationalSchema, normalizeName, normalizePhone, requireOpenMonth, safeLogError, findDuplicateMembers } from "../../ops";
+import { auditEntity, contributionDuplicateKey, duplicateSlip, ensureOperationalSchema, normalizeName, normalizePhone, requireOpenMonth, requireOpenContributionMonths, safeLogError, findDuplicateMembers } from "../../ops";
 import { currentMonth, currentDate, getSetting, getBranding, generateMemberCode } from "../../db";
 import { ensureInitialContributionRate, contributionDueFromRate, firstMonthContributionRule } from "../../contributionRates";
 import { sendMessage } from "../../telegram";
@@ -109,7 +109,7 @@ route.delete('/contributions/:id', requireFinance, async c => {
   const row=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
   if(!row)return c.json({error:'Not found'},404);
   if(!['pending','approved'].includes(String(row.status))) return c.json({error:`Contribution is already ${row.status}`},409);
-  try{await requireOpenMonth(c.env,row.month)}catch(e:any){return c.json({error:e.message},409)}
+  try{await requireOpenContributionMonths(c.env,id,row.month)}catch(e:any){return c.json({error:e.message},409)}
 
   const result=await c.env.DB.batch([
     c.env.DB.prepare("UPDATE contributions SET status='voided',voided_by=?,voided_at=datetime('now'),void_reason=? WHERE id=? AND status IN ('pending','approved')").bind(admin.id,body.reason||'Voided by admin',id),

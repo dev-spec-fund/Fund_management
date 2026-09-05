@@ -1821,3 +1821,15 @@ test('reversed expenses cannot be edited back into approved state', () => {
   assert.match(expenses, /if\(before\.status!==['"]approved['"]\)return c\.json\(\{error:`\$\{String\(before\.status\|\|'Changed'\)/);
   assert.doesNotMatch(expenses, /if\(before\.status===['"]voided['"]\)return c\.json\(\{error:['"]Voided expenses cannot be edited/);
 });
+
+test('contribution void and reversal protect every allocated closed month', () => {
+  const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
+  const pending=fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
+  const governance=fs.readFileSync(path.join(root,'src/routes/governance.ts'),'utf8');
+
+  assert.match(ops,/requireOpenContributionMonths/);
+  assert.match(ops,/contribution_allocations ca WHERE ca\.contribution_id=\?/);
+  assert.match(ops,/Contribution affects closed month/);
+  assert.match(pending,/requireOpenContributionMonths\(c\.env,id,row\.month\)/);
+  assert.match(governance,/if\(type==='contribution'\) await requireOpenContributionMonths\(c\.env,id,month\)/);
+});

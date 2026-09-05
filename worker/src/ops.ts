@@ -161,6 +161,14 @@ export async function requireOpenMonth(env: Env, month: string) {
   if (await isMonthClosed(env, month)) throw new Error(`Month ${month} is closed and cannot be changed.`);
 }
 
+export async function requireOpenContributionMonths(env: Env, contributionId: number, sourceMonth: string) {
+  const closed = await env.DB.prepare(`SELECT mc.month FROM month_closures mc
+    WHERE mc.month=?
+       OR EXISTS (SELECT 1 FROM contribution_allocations ca WHERE ca.contribution_id=? AND ca.month=mc.month)
+    ORDER BY mc.month ASC LIMIT 1`).bind(sourceMonth, contributionId).first<{month:string}>();
+  if (closed?.month) throw new Error(`Contribution affects closed month ${closed.month} and cannot be changed. Reopen that month first.`);
+}
+
 export async function availableFundBalance(env: Env) {
   const row = await env.DB.prepare(`SELECT
     (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved') +

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { requireAdmin, requireFinance, requireCloseMonth } from "../auth";
-import { auditEntity, ensureOperationalSchema, isMonthClosed, requireOpenMonth, safeLogError } from "../ops";
+import { auditEntity, ensureOperationalSchema, isMonthClosed, requireOpenMonth, requireOpenContributionMonths, safeLogError } from "../ops";
 import { validMonth } from "../validation";
 import { currentMonth, getBranding } from "../db";
 import { sendMessage } from "../telegram";
@@ -153,7 +153,11 @@ governanceRoute.post('/reverse', requireFinance, async c=>{
   const cfg:any={contribution:{table:'contributions',month:'month',live:"status='approved'"},expense:{table:'expenses',month:'transaction_month',live:"status='approved'"},donation:{table:'donations',month:'transaction_month',live:"status='active'"}}[type];
   const row=await c.env.DB.prepare(`SELECT * FROM ${cfg.table} WHERE id=?`).bind(id).first<any>();
   if(!row) return c.json({error:'Transaction not found'},404); if(!(['approved','active'].includes(String(row.status)))) return c.json({error:`Transaction is ${row.status} and cannot be reversed`},409);
-  const month=String(row[cfg.month]||''); if(monthRx.test(month)){try{await requireOpenMonth(c.env,month)}catch(e:any){return c.json({error:e.message},409)}}
+  const month=String(row[cfg.month]||'');
+  try {
+    if(type==='contribution') await requireOpenContributionMonths(c.env,id,month);
+    else if(monthRx.test(month)) await requireOpenMonth(c.env,month);
+  } catch(e:any) { return c.json({error:e.message},409); }
   const existing=await c.env.DB.prepare("SELECT reversal_id FROM financial_reversals WHERE entity_type=? AND entity_id=?").bind(type,id).first<any>();
   if(existing) return c.json({error:`Already reversed as ${existing.reversal_id}`},409);
   const reversalId=await nextReversalId(c.env);
