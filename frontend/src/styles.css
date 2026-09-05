@@ -3609,3 +3609,34 @@ textarea:focus {
   font-size:9px;font-weight:800;cursor:pointer
 }
 .election-delete-unused-btn:disabled{opacity:.5}
+
+
+/* v72 meetings, member metadata and advance allocation history */
+.meeting-audience-field{display:block;font-size:11px;color:var(--muted);margin-bottom:10px}
+.meeting-audience-field>span,.meeting-audience-field>small{display:block}
+.meeting-audience-field>span{margin-bottom:5px}
+.meeting-audience-field>small{font-size:8px;color:var(--soft);margin-top:4px}
+.meeting-audience-field select{width:100%;border:1px solid var(--border-strong-2);border-radius:9px;background:var(--card);color:var(--text);padding:9px 10px}
+.meeting-audience-badge,.member-meeting-audience{
+  display:inline-flex;width:max-content;margin-top:7px;border:1px solid var(--border);
+  border-radius:999px;background:var(--button-soft);padding:4px 7px;font-size:8px;font-weight:800;color:var(--primary-text)
+}
+.meeting-attendance-card{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:4px 10px 10px}
+.meeting-attendance-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid var(--divider);padding:8px 0}
+.meeting-attendance-row>span{min-width:0;flex:1}
+.meeting-attendance-row b,.meeting-attendance-row small{display:block}
+.meeting-attendance-row b{font-size:10px;color:var(--primary-text)}
+.meeting-attendance-row small{font-size:7px;color:var(--soft);margin-top:2px}
+.meeting-attendance-row select{min-width:132px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);padding:7px;font-size:9px}
+.meeting-complete-btn{width:100%;margin-top:9px;border:1px solid var(--success-border);border-radius:9px;background:var(--success-bg);color:var(--success);padding:9px;font-size:9px;font-weight:800}
+.meeting-complete-btn:disabled{opacity:.45}
+.meeting-completed-note{margin-top:8px;border:1px solid var(--success-border);border-radius:8px;background:var(--success-bg);color:var(--success);padding:8px;text-align:center;font-size:8px;font-weight:800}
+.member-meeting-attendance-result{margin-top:7px;font-size:8px;color:var(--soft)}
+.member-meeting-attendance-result b{color:var(--primary-text);text-transform:capitalize}
+.member-list-meta{font-size:9px;color:var(--soft);margin-top:4px}
+.member-list-meta b{color:var(--primary-text)}
+.member-history-allocation-breakdown{margin-top:9px;border-top:1px solid var(--divider);padding-top:7px}
+.member-history-allocation-title{font-size:7px;font-weight:800;letter-spacing:.5px;color:var(--soft);margin-bottom:4px}
+.member-history-allocation-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:9px;color:var(--muted)}
+.member-history-allocation-row b{color:var(--primary-text)}
+@media(max-width:390px){.meeting-attendance-row{align-items:flex-start}.meeting-attendance-row select{min-width:118px}}

@@ -8,7 +8,7 @@ import { adminCan } from "../utils/permissions";
 import { MoreHorizontal, Bell, Pencil, XCircle } from "lucide-react";
 
 export default function Meetings({admin}){
-  const emptyForm={title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:""};
+  const emptyForm={title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:"",audience:"all_members"};
   const [rows,setRows]=useState(()=>api.peekCached("/api/admin/meetings"));
   const [showCreate,setShowCreate]=useState(false);
   const [selected,setSelected]=useState(null);
@@ -54,11 +54,9 @@ export default function Meetings({admin}){
 
   const meetingLifecycle=(m)=>{
     if(m.status==="cancelled") return {label:"Cancelled",color:"var(--danger)",bg:"var(--danger-bg)"};
-    const now=new Date();
-    const when=new Date(`${m.meeting_date}T${m.meeting_time||"00:00"}:00`);
-    if(!Number.isNaN(when.getTime()) && when.getTime()<now.getTime()) return {label:"Completed",color:"var(--neutral-text)",bg:"var(--surface-neutral)"};
+    if(m.status==="completed") return {label:"Completed",color:"var(--neutral-text)",bg:"var(--surface-neutral)"};
     if(!m.sent_at && m.status!=="sent") return {label:"Draft",color:"var(--muted)",bg:"var(--surface-warm)"};
-    return {label:"Upcoming",color:"var(--success-strong)",bg:"var(--success-bg)"};
+    return {label:"Open",color:"var(--success-strong)",bg:"var(--success-bg)"};
   };
 
   const openDetails=async(m)=>{
@@ -96,7 +94,7 @@ export default function Meetings({admin}){
     if(!details)return;
     setForm({
       title:details.title||"",meeting_date:details.meeting_date||"",meeting_time:details.meeting_time||"",
-      venue:details.venue||"",agenda:details.agenda||"",rsvp_deadline:details.rsvp_deadline||""
+      venue:details.venue||"",agenda:details.agenda||"",rsvp_deadline:details.rsvp_deadline||"",audience:details.audience||"all_members"
     });
     setEditing(true);
   };
@@ -155,6 +153,26 @@ export default function Meetings({admin}){
     }catch(e){setMessage(e.message||"Could not send RSVP reminder")}finally{setBusy(false)}
   };
 
+  const saveAttendance=async(memberId,attendance)=>{
+    if(!details||!canFinance)return;
+    setBusy(true);setMessage("");
+    try{
+      await api.admin.saveMeetingAttendance(details.id,[{member_id:memberId,attendance}]);
+      setDetails(await api.admin.meeting(details.id));
+      setMessage("Attendance saved.");
+    }catch(e){setMessage(e.message||"Could not save attendance")}finally{setBusy(false)}
+  };
+  const completeMeeting=async()=>{
+    if(!details||!canFinance)return;
+    const unrecorded=details.attendance?.unrecorded?.length||0;
+    if(unrecorded)return setMessage(`Record attendance for all ${unrecorded} remaining member${unrecorded===1?"":"s"} first.`);
+    if(!await confirm({title:"Complete meeting?",message:"Attendance has been recorded. Mark this meeting completed and lock attendance?",confirmLabel:"Complete meeting",tone:"primary"}))return;
+    setBusy(true);setMessage("");
+    try{
+      const r=await api.admin.completeMeeting(details.id);
+      await load();await openDetails(r.meeting);setMessage("Meeting completed.");
+    }catch(e){setMessage(e.message||"Could not complete meeting")}finally{setBusy(false)}
+  };
   const saveMinutes=async()=>{
     if(!details||!canFinance)return;
     setBusy(true);setMessage("");
@@ -255,9 +273,9 @@ export default function Meetings({admin}){
             <div><b>{m.declined||0}</b><div style={{fontSize:9,color:"var(--soft)"}}>Declined</div></div>
             <div><b>{answered}</b><div style={{fontSize:9,color:"var(--soft)"}}>Responded</div></div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:status.label==="Cancelled"?"1fr":"1fr 1fr",gap:7,marginTop:12}}>
+          <div style={{display:"grid",gridTemplateColumns:["Cancelled","Completed"].includes(status.label)?"1fr":"1fr 1fr",gap:7,marginTop:12}}>
             <button type="button" onClick={()=>openDetails(m)} style={{...compactBtn,width:"100%",padding:"9px 10px"}}>View details</button>
-            {status.label!=="Cancelled"&&<button type="button" disabled={busy} onClick={()=>send(m)} style={{...approveBtn,width:"100%",padding:"9px 10px",opacity:busy?.6:1}}>{m.sent_at?"Resend":"Send invite"}</button>}
+            {!["Cancelled","Completed"].includes(status.label)&&<button type="button" disabled={busy} onClick={()=>send(m)} style={{...approveBtn,width:"100%",padding:"9px 10px",opacity:busy?.6:1}}>{m.sent_at?"Resend":"Send invite"}</button>}
           </div>
         </div>
       })}
@@ -274,6 +292,7 @@ export default function Meetings({admin}){
           style={{width:"100%",padding:"10px 11px",border:"1px solid var(--border-strong-2)",borderRadius:9,background:"var(--card)",fontSize:13,resize:"vertical"}}/>
       </label>
       <Field label="RSVP deadline (optional)" value={form.rsvp_deadline} onChange={v=>setForm({...form,rsvp_deadline:v})}/>
+      <label className="sans meeting-audience-field"><span>Meeting audience</span><select value={form.audience} onChange={e=>setForm({...form,audience:e.target.value})}><option value="all_members">All Members</option><option value="exco_only">EXCO Members Only</option></select></label>
       <button type="button" disabled={busy} onClick={create} style={{...approveBtn,width:"100%",padding:"10px 12px",opacity:busy?.6:1}}>{busy?"Creating…":"Create meeting"}</button>
     </Modal>}
 
@@ -289,6 +308,7 @@ export default function Meetings({admin}){
             style={{width:"100%",padding:"10px 11px",border:"1px solid var(--border-strong-2)",borderRadius:9,background:"var(--card)",fontSize:13,resize:"vertical"}}/>
         </label>
         <Field label="RSVP deadline (optional)" value={form.rsvp_deadline} onChange={v=>setForm({...form,rsvp_deadline:v})}/>
+        <label className="sans meeting-audience-field"><span>Meeting audience</span><select disabled={!!details.sent_at} value={form.audience} onChange={e=>setForm({...form,audience:e.target.value})}><option value="all_members">All Members</option><option value="exco_only">EXCO Members Only</option></select>{details.sent_at&&<small>Audience is locked after invitations are sent.</small>}</label>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <button type="button" disabled={busy} onClick={()=>setEditing(false)} style={{...compactBtn,padding:10}}>Cancel edit</button>
           <button type="button" disabled={busy} onClick={saveEdit} style={{...approveBtn,padding:10}}>{busy?"Saving…":"Save changes"}</button>
@@ -306,6 +326,7 @@ export default function Meetings({admin}){
               </div>
               <div className="sans" style={{fontSize:16,fontWeight:700,color:"var(--primary)",marginTop:12}}>{fmtMeetingDateTime(details.meeting_date,details.meeting_time)}</div>
               <div className="sans" style={{fontSize:12,color:"var(--muted)",marginTop:4}}>{details.venue||"Venue not specified"}</div>
+              <div className="sans meeting-audience-badge">{details.audience==="exco_only"?"EXCO Members Only":"All Members"}</div>
               {details.rsvp_deadline&&<div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:6}}>RSVP by {details.rsvp_deadline}</div>}
             </div>
 
@@ -325,6 +346,18 @@ export default function Meetings({admin}){
               <div className="sans" style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:14,marginBottom:5}}>AGENDA / MESSAGE</div>
               <div className="sans" style={{fontSize:12,lineHeight:1.5,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,padding:11}}>{details.agenda}</div>
             </>}
+
+            <div className="sans" style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:16,marginBottom:6}}>ATTENDANCE</div>
+            <div className="meeting-attendance-card">
+              {[...(details.responses?.yes||[]),...(details.responses?.maybe||[]),...(details.responses?.no||[]),...(details.responses?.pending||[])].map(member=><div key={member.id} className="meeting-attendance-row sans">
+                <span><b>{member.name}</b><small>{member.member_code||""}</small></span>
+                <select disabled={busy||details.status==="completed"} value={member.attendance||""} onChange={e=>saveAttendance(member.id,e.target.value)}>
+                  <option value="">Record attendance</option><option value="present">Present</option><option value="late">Late</option><option value="absent">Absent</option><option value="excused">Excused</option>
+                </select>
+              </div>)}
+              {canFinance&&details.status!=="completed"&&<button type="button" disabled={busy||(details.attendance?.unrecorded?.length||0)>0} onClick={completeMeeting} className="sans meeting-complete-btn">Mark meeting completed</button>}
+              {details.status==="completed"&&<div className="sans meeting-completed-note">✓ Meeting completed {details.completed_at?formatLocalDateTime(details.completed_at):""}</div>}
+            </div>
 
             <div className="sans" style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:16,marginBottom:6}}>MINUTES & ACTION ITEMS</div>
             <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,padding:11}}>
@@ -376,7 +409,7 @@ export default function Meetings({admin}){
             {group("no","DECLINED",no,"var(--danger)")}
             {group("pending","AWAITING RESPONSE",pending,"var(--muted)")}
 
-            {details.status!=="cancelled"&&<div className="meeting-actions-wrap">
+            {!["cancelled","completed"].includes(details.status)&&<div className="meeting-actions-wrap">
               <button type="button" disabled={busy} onClick={()=>setShowMeetingActions(v=>!v)} className="meeting-actions-trigger sans" aria-expanded={showMeetingActions}>
                 <span>Meeting actions</span><MoreHorizontal size={16}/>
               </button>

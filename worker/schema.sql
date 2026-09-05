@@ -323,8 +323,31 @@ CREATE TABLE IF NOT EXISTS meetings (
   last_notification_at TEXT,
   cancelled_at TEXT,
   cancelled_by INTEGER REFERENCES admins(id),
-  cancel_reason TEXT
+  cancel_reason TEXT,
+  audience TEXT NOT NULL DEFAULT 'all_members',
+  completed_at TEXT,
+  completed_by INTEGER REFERENCES admins(id)
 );
+
+CREATE TABLE IF NOT EXISTS meeting_invitees (
+  meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL REFERENCES members(id),
+  invited_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY(meeting_id,member_id)
+);
+
+CREATE TABLE IF NOT EXISTS meeting_attendance (
+  meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL REFERENCES members(id),
+  attendance TEXT NOT NULL CHECK(attendance IN ('present','absent','excused','late')),
+  note TEXT,
+  recorded_by INTEGER NOT NULL REFERENCES admins(id),
+  recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY(meeting_id,member_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_meeting_invitees_meeting ON meeting_invitees(meeting_id,member_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_attendance_meeting ON meeting_attendance(meeting_id,attendance);
 
 CREATE TABLE IF NOT EXISTS meeting_rsvps (
   meeting_id INTEGER NOT NULL REFERENCES meetings(id),
@@ -810,3 +833,5 @@ CREATE INDEX IF NOT EXISTS idx_meeting_resolution_history
 INSERT OR IGNORE INTO schema_migrations(version,name)
 VALUES(37,'meeting_resolutions_exco_terms');
 
+
+INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(38,'meeting_audience_attendance_manual_completion');

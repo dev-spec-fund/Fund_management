@@ -21,6 +21,10 @@ export function MyHistory({ member }) {
   if (error) return <ErrorState>{error}</ErrorState>;
   if (!statement) return <HistorySkeleton/>;
   const rows=statement.contributions||[];
+  const allocations=statement.allocations||[];
+  const allocationsFor=(contributionId)=>allocations
+    .filter(a=>Number(a.contribution_id)===Number(contributionId))
+    .sort((a,b)=>String(a.month).localeCompare(String(b.month)));
   const {approved,total}=approvedContributionSummary(rows);
   const normalizedStatus=(row)=>String(row?.status||"pending").toLowerCase();
   const filteredRows=rows.filter((row)=>transactionFilter==="all" || normalizedStatus(row)===transactionFilter);
@@ -55,9 +59,13 @@ export function MyHistory({ member }) {
           <span>{label}</span><b>{transactionCounts[value]||0}</b>
         </button>)}
     </div>
-    {filteredRows.map((h)=><div key={h.id} className="member-history-transaction">
+    {filteredRows.map((h)=>{const applied=allocationsFor(h.id);return <div key={h.id} className="member-history-transaction">
       <div style={{display:"flex",justifyContent:"space-between",gap:10}}><div><div className="sans" style={{fontSize:14,fontWeight:600}}>{monthLabel(h.month)}</div><div className="sans" style={{fontSize:11,color:"var(--soft)",marginTop:3}}>{h.txn_id}{h.ref_number?` · Bank ref: ${h.ref_number}`:""}</div></div><div style={{textAlign:"right"}}><div className="sans" style={{fontSize:14,fontWeight:600}}>MVR {fmt(h.amount)}</div><span className="sans" style={{color:h.status==="approved"?"var(--success)":h.status==="reversed"?"var(--warning)":"var(--muted)",fontSize:10,fontWeight:600,textTransform:"capitalize"}}>{h.status||"pending"}</span></div></div>
-    </div>)}
+      {h.status==="approved"&&applied.length>0&&<div className="member-history-allocation-breakdown sans">
+        <div className="member-history-allocation-title">PAYMENT ALLOCATION</div>
+        {applied.map((a,index)=><div key={`${h.id}-${a.month}`} className="member-history-allocation-row"><span>{monthLabel(a.month)}{index>0?" · Advance allocation":""}</span><b>MVR {fmt(a.amount)}</b></div>)}
+      </div>}
+    </div>})}
     {rows.length===0&&<EmptyState>No contributions yet — send a slip photo to the bot to get started.</EmptyState>}
     {rows.length>0&&filteredRows.length===0&&<EmptyState>No {transactionFilter} contributions.</EmptyState>}
   </>;

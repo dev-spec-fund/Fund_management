@@ -71,8 +71,12 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
   }
   const viewer=admin?.role==='viewer';
   const member = await c.env.DB.prepare(viewer
-    ? "SELECT id,member_code,name,NULL phone,monthly_amount,active,joined_at,created_at,NULL telegram_id FROM members WHERE id=?"
-    : "SELECT id,member_code,name,phone,monthly_amount,active,joined_at,created_at,telegram_id FROM members WHERE id=?").bind(id).first<any>();
+    ? `SELECT m.id,m.member_code,m.name,NULL phone,m.monthly_amount,m.active,m.joined_at,m.created_at,NULL telegram_id,
+        COALESCE((SELECT x.role_title FROM exco_role_assignments x WHERE x.member_id=m.id AND x.ended_at IS NULL ORDER BY x.id DESC LIMIT 1),'Member') exco_role
+       FROM members m WHERE m.id=?`
+    : `SELECT m.id,m.member_code,m.name,m.phone,m.monthly_amount,m.active,m.joined_at,m.created_at,m.telegram_id,
+        COALESCE((SELECT x.role_title FROM exco_role_assignments x WHERE x.member_id=m.id AND x.ended_at IS NULL ORDER BY x.id DESC LIMIT 1),'Member') exco_role
+       FROM members m WHERE m.id=?`).bind(id).first<any>();
   if (!member) return c.json({error:"Not found"},404);
   const contributions = await c.env.DB.prepare(`SELECT id,txn_id,amount,month,${viewer?"NULL":"ref_number"} ref_number,status,submitted_at,approved_at,${viewer?"0":"CASE WHEN slip_file_id IS NOT NULL AND trim(slip_file_id)<>'' THEN 1 ELSE 0 END"} has_slip FROM contributions WHERE member_id=? ORDER BY submitted_at`).bind(id).all<any>();
   const allocations = await c.env.DB.prepare(`

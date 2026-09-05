@@ -458,7 +458,7 @@ test('contribution review Telegram messages are persisted and synchronized from 
   assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"rejected"/);
   assert.match(callbacks,/recordContributionReviewMessage/);
   assert.match(callbacks,/syncContributionReviewMessages/);
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 37/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
 
 test('Telegram callback can self-heal a legacy stale contribution review message', () => {
@@ -581,7 +581,7 @@ test('database backup includes election governance tables and schema version 29'
   for(const table of ['elections','election_positions','election_candidates','election_voters','election_ballots']){
     assert.match(system,new RegExp(table));
   }
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 37/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
 
 
@@ -630,7 +630,7 @@ test('election integrity migration advances schema to 30', () => {
   assert.ok(candidateCols.has("withdrawal_reason"));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 37/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
 
 
@@ -723,7 +723,7 @@ test('v50 runoff tables and EXCO role history are migration controlled', () => {
   for(const col of ['member_id','election_id','position_id','role_title','term','started_at','ended_at']) assert.ok(roleCols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 37/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
 
 test('tie results require anonymous runoff and block certification until resolved', () => {
@@ -1069,7 +1069,7 @@ test('v60 election notification delivery log is migration controlled', () => {
   for(const col of ['election_id','event_key','audience','sent','failed','detail','created_by','created_at']) assert.ok(cols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 37/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
 
 test('v60 logs voting, reminder, runoff, certification and application notification delivery', () => {
@@ -1183,7 +1183,7 @@ test('v63 EXCO term and handover schema is migration controlled', () => {
   for(const col of ['handover_id','item_key','label','completed','completed_at','completed_by','note','sort_order']) assert.ok(itemCols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 37/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
 
 test('v63 certification starts EXCO term and creates structured handover without granting admin permissions', () => {
@@ -1253,7 +1253,7 @@ test('v64 EXCO responsibility workboard schema is migration controlled', () => {
   }
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 37/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
 
 test('v64 EXCO responsibilities are term-linked and owner-restricted to current committee', () => {
@@ -1311,7 +1311,7 @@ test('v65 formal meeting resolution schema is migration controlled', () => {
   for(const col of ['meeting_id','term_id','resolution_no','title','decision_text','proposer_member_id','seconder_member_id','vote_result','status','responsibility_id']) assert.ok(cols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 37/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
 
 test('v65 meeting resolutions are linked to the EXCO term covering the meeting date', () => {
@@ -1615,4 +1615,70 @@ test('v71 election detail exposes authoritative delete eligibility and protectio
   assert.match(route,/const deletion=await electionDeleteEligibility\(env,election\)/);
   assert.match(route,/setup_locked:setupLocked,deletion/);
   assert.match(route,/reasons\.length===0/);
+});
+
+
+test('v72 election timeline iterates D1 notification result rows instead of result object', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
+  const block=route.match(/electionsRoute\.get\("\/:id\/timeline"[\s\S]*?return c\.json\(\{events,governance\}\);\n\}\);/)?.[0]||'';
+  assert.match(block,/\(notifications\.results as any\[\]\)\.map/);
+  assert.doesNotMatch(block,/\.\.\.notifications\.map/);
+});
+
+test('v72 meetings support all-members or EXCO-only audience with invitee snapshot', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/admin/meetings.ts'),'utf8');
+  assert.match(route,/audience.*exco_only/);
+  assert.match(route,/meetingAudienceMembers/);
+  assert.match(route,/exco_role_assignments/);
+  assert.match(route,/meeting_invitees/);
+  assert.match(route,/Meeting audience is locked after invitations are sent/);
+});
+
+test('v72 meeting completion is manual and requires attendance for all invitees', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/admin/meetings.ts'),'utf8');
+  assert.match(route,/\/meetings\/:id\/attendance/);
+  assert.match(route,/\/meetings\/:id\/complete/);
+  assert.match(route,/meeting_attendance/);
+  assert.match(route,/Record attendance for all/);
+  assert.match(route,/status='completed'/);
+  assert.match(route,/meeting_completed/);
+});
+
+test('v72 RSVP and member meeting visibility respect EXCO-only audience', () => {
+  const callbacks=fs.readFileSync(path.join(root,'src/bot/callbacks.ts'),'utf8');
+  const index=fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
+  assert.match(callbacks,/This meeting is for current EXCO members only/);
+  assert.match(callbacks,/meeting_invitees/);
+  assert.match(index,/\/api\/me\/meetings/);
+  assert.match(index,/meeting_invitees/);
+  assert.match(index,/exco_role_assignments/);
+});
+
+test('v72 member statement exposes role and allocation rows for member history', () => {
+  const members=fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
+  const history=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MyHistory.jsx'),'utf8');
+  assert.match(members,/exco_role/);
+  assert.match(members,/allocations:allocations\.results/);
+  assert.match(history,/PAYMENT ALLOCATION/);
+  assert.match(history,/Advance allocation/);
+  assert.match(history,/allocationsFor/);
+});
+
+test('v72 Admin members UI shows join date and role on list/profile', () => {
+  const list=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Members.jsx'),'utf8');
+  const popup=fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/MemberPopup.jsx'),'utf8');
+  assert.match(list,/Joined \{formatMemberDate/);
+  assert.match(list,/Role: <b>/);
+  assert.match(popup,/Joined \{formatMemberPopupDate/);
+  assert.match(popup,/CURRENT MEMBER ROLE/);
+});
+
+test('v72 meeting audience and attendance schema is migration controlled', () => {
+  const db=dbWithSchema();
+  const meetingCols=new Set(db.prepare("PRAGMA table_info(meetings)").all().map(r=>r.name));
+  for(const col of ['audience','completed_at','completed_by']) assert.ok(meetingCols.has(col));
+  for(const table of ['meeting_invitees','meeting_attendance']) assert.ok(db.prepare(`PRAGMA table_info(${table})`).all().length>0);
+  db.close();
+  const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });

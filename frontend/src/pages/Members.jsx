@@ -9,6 +9,12 @@ import Pagination from "../components/Pagination";
 import MemberPopup, { StatusBadge } from "./members/MemberPopup";
 import useMembersData from "./members/useMembersData";
 
+function formatMemberDate(value){
+  if(!value)return "—";
+  try{return new Intl.DateTimeFormat("en-GB",{day:"2-digit",month:"short",year:"numeric"}).format(new Date(`${String(value).slice(0,10)}T00:00:00`));}
+  catch{return String(value).slice(0,10)}
+}
+
 export default function Members({ isAdmin, admin, month: sharedMonth, onMonthChange }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const {
@@ -123,6 +129,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
                   {m.exco_role && <span className="member-exco-badge">{m.exco_role}</span>}
                 </div>
                 <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 2 }}>{m.phone ? m.phone : "Phone not added"} · MVR {fmt(m.monthly_amount)}/mo</div>
+                <div className="sans member-list-meta">Joined {formatMemberDate(m.joined_at||m.created_at)} · Role: <b>{m.exco_role||"Member"}</b></div>
               </div>
               <StatusBadge status={status} />
             </div>

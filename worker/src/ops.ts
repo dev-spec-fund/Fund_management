@@ -26,7 +26,7 @@ export function adminCan(admin: Admin | null | undefined, permission: "read" | "
   return false;
 }
 
-const REQUIRED_SCHEMA_VERSION = 37;
+const REQUIRED_SCHEMA_VERSION = 38;
 let schemaReady = false;
 export async function ensureOperationalSchema(env: Env) {
   if (schemaReady) return;
@@ -46,7 +46,7 @@ export async function ensureOperationalSchema(env: Env) {
       ["expense_documents", ["expense_id","telegram_file_id","original_filename","display_name","document_type","uploaded_by","created_at","removed_at","removed_by","removal_reason"]],
       ["donation_documents", ["donation_id","telegram_file_id","original_filename","display_name","document_type","uploaded_by","created_at","removed_at","removed_by","removal_reason"]],
       ["expense_categories", ["active"]],
-      ["meetings", ["updated_at","last_notification_at","cancelled_at","cancelled_by","cancel_reason"]],
+      ["meetings", ["updated_at","last_notification_at","cancelled_at","cancelled_by","cancel_reason","audience","completed_at","completed_by"]],
       ["error_log", ["status","resolved_at","resolved_by"]],
       ["monthly_snapshots", ["month","closing_balance","collection_rate"]],
       ["financial_reversals", ["reversal_id","entity_type","entity_id","reason"]],
@@ -75,6 +75,8 @@ export async function ensureOperationalSchema(env: Env) {
       ["exco_responsibility_history", ["responsibility_id","action","from_status","to_status","note","admin_id","created_at"]],
       ["meeting_resolutions", ["meeting_id","term_id","resolution_no","title","decision_text","proposer_member_id","seconder_member_id","vote_result","status","responsibility_id","created_by","updated_by"]],
       ["meeting_resolution_history", ["resolution_id","action","from_status","to_status","note","admin_id","created_at"]],
+      ["meeting_invitees", ["meeting_id","member_id","invited_at"]],
+      ["meeting_attendance", ["meeting_id","member_id","attendance","note","recorded_by","recorded_at"]],
     ];
     for (const [table,required] of checks) {
       const rows=await env.DB.prepare(`PRAGMA table_info(${table})`).all<any>();

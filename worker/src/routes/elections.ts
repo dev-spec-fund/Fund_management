@@ -986,7 +986,7 @@ electionsRoute.get("/:id/timeline", requireSuperAdmin, async c=>{
   const events:any[]=[
     {type:"milestone",key:"created",label:"Election created",at:election.created_at,actor:election.created_by_name||"System"},
     ...relevant.map((a:any)=>({type:"audit",key:`audit:${a.id}`,label:label(a.action),action:a.action,at:a.created_at,actor:a.admin_name||"System"})),
-    ...notifications.map((n:any)=>({type:"notification",key:`notification:${n.id}`,label:`Notification · ${String(n.event_key).replaceAll("_"," ")}`,at:n.created_at,actor:"System",meta:{audience:n.audience,sent:Number(n.sent||0),failed:Number(n.failed||0)}}))
+    ...(notifications.results as any[]).map((n:any)=>({type:"notification",key:`notification:${n.id}`,label:`Notification · ${String(n.event_key).replaceAll("_"," ")}`,at:n.created_at,actor:"System",meta:{audience:n.audience,sent:Number(n.sent||0),failed:Number(n.failed||0)}}))
   ].filter((x:any)=>x.at);
   if(election.opened_at)events.push({type:"milestone",key:"opened",label:"Voting period began",at:election.opened_at,actor:"System"});
   if(election.closed_at)events.push({type:"milestone",key:"closed",label:"Voting period ended",at:election.closed_at,actor:"System"});

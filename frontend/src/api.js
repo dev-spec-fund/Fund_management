@@ -571,6 +571,8 @@ export const api = {
     createMeeting: (data) => request("/api/admin/meetings", { method: "POST", body: JSON.stringify(data) }),
     updateMeeting: (id, data) => request(`/api/admin/meetings/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     cancelMeeting: (id, reason = "") => request(`/api/admin/meetings/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+    saveMeetingAttendance: (id, entries) => request(`/api/admin/meetings/${id}/attendance`, { method: "PUT", body: JSON.stringify({ entries }) }),
+    completeMeeting: (id) => request(`/api/admin/meetings/${id}/complete`, { method: "POST" }),
     sendMeetingInvites: (id) => request(`/api/admin/meetings/${id}/send`, { method: "POST" }),
     notifyMeetingUpdate: (id, data = {}) => request(`/api/admin/meetings/${id}/notify-update`, { method: "POST", body: JSON.stringify(data) }),
     remindMeetingPending: (id) => request(`/api/admin/meetings/${id}/remind-pending`, { method: "POST" }),

@@ -58,6 +58,15 @@ export async function handleCallback(env: Env, callback: any) {
     const meeting=await env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(meetingId).first<any>();
     if(!meeting) return answerCallback(env,callback.id,"Meeting not found.");
     if(meeting.status==="cancelled") return answerCallback(env,callback.id,"This meeting has been cancelled.");
+    if(meeting.status==="completed") return answerCallback(env,callback.id,"This meeting has been completed.");
+    const inviteeCount=await env.DB.prepare("SELECT COUNT(*) n FROM meeting_invitees WHERE meeting_id=?").bind(meetingId).first<any>();
+    if(Number(inviteeCount?.n||0)>0){
+      const invited=await env.DB.prepare("SELECT 1 ok FROM meeting_invitees WHERE meeting_id=? AND member_id=?").bind(meetingId,member.id).first<any>();
+      if(!invited)return answerCallback(env,callback.id,"You are not invited to this meeting.");
+    }else if(String(meeting.audience||"all_members")==="exco_only"){
+      const exco=await env.DB.prepare("SELECT 1 ok FROM exco_role_assignments WHERE member_id=? AND ended_at IS NULL LIMIT 1").bind(member.id).first<any>();
+      if(!exco)return answerCallback(env,callback.id,"This meeting is for current EXCO members only.");
+    }
     const existing=await env.DB.prepare("SELECT response FROM meeting_rsvps WHERE meeting_id=? AND member_id=?").bind(meetingId,member.id).first<any>();
 
     if(action === "meeting_rsvp_show"){

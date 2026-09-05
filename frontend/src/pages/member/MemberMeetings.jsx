@@ -26,13 +26,8 @@ export function MemberMeetings() {
   if (error && rows === null) return <ErrorState onRetry={() => load()}>{error}</ErrorState>;
   if (rows === null) return <MeetingsSkeleton/>;
 
-  const now = new Date();
-  const upcoming = rows.filter((m) => {
-    if (m.status === "cancelled") return false;
-    const d = new Date(`${m.meeting_date || "1970-01-01"}T${m.meeting_time || "00:00"}`);
-    return !Number.isNaN(d.getTime()) && d >= now;
-  });
-  const past = rows.filter((m) => !upcoming.includes(m));
+  const upcoming = rows.filter((m) => !["cancelled","completed"].includes(String(m.status)));
+  const past = rows.filter((m) => ["cancelled","completed"].includes(String(m.status)));
 
   return <>
     <div className="member-page-heading">
@@ -52,17 +47,20 @@ export function MemberMeetings() {
 
 function MeetingCard({m,busy,onRsvp,upcoming=false}) {
   const cancelled=m.status==="cancelled";
-  return <article className={`member-meeting-card${upcoming?" upcoming":""}${cancelled?" cancelled":""}`}>
+  const completed=m.status==="completed";
+  return <article className={`member-meeting-card${upcoming?" upcoming":""}${cancelled?" cancelled":""}${completed?" completed":""}`}>
     <div className="member-meeting-top">
       <div style={{minWidth:0}}>
         <div className="member-meeting-title">{m.title}</div>
         <div className="sans member-meeting-datetime"><CalendarDays size={13}/><span>{m.meeting_date}</span><Clock3 size={13}/><span>{m.meeting_time}</span></div>
         {m.venue && <div className="sans member-meeting-venue"><MapPin size={13}/><span>{m.venue}</span></div>}
       </div>
-      <span className={`sans member-meeting-status ${cancelled?"cancelled":upcoming?"upcoming":"past"}`}>{cancelled?"Cancelled":upcoming?"Upcoming":"Past"}</span>
+      <span className={`sans member-meeting-status ${cancelled?"cancelled":completed?"past":"upcoming"}`}>{cancelled?"Cancelled":completed?"Completed":"Open"}</span>
     </div>
 
+    <div className="sans member-meeting-audience">{m.audience==="exco_only"?"EXCO Members Only":"All Members"}</div>
     {m.agenda && <div className="sans member-meeting-agenda"><b>Agenda</b><span>{m.agenda}</span></div>}
+    {completed&&m.attendance&&<div className="sans member-meeting-attendance-result">Your attendance: <b>{String(m.attendance).replace("_"," ")}</b></div>}
     {m.cancel_reason && <div className="sans member-meeting-cancel">Cancelled: {m.cancel_reason}</div>}
 
     {!cancelled && upcoming && <div className="member-rsvp-wrap">

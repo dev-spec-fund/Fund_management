@@ -23,6 +23,12 @@ export function StatusBadge({ status }) {
   );
 }
 
+function formatMemberPopupDate(value){
+  if(!value)return "—";
+  try{return new Intl.DateTimeFormat("en-GB",{day:"2-digit",month:"short",year:"numeric"}).format(new Date(`${String(value).slice(0,10)}T00:00:00`));}
+  catch{return String(value).slice(0,10)}
+}
+
 export default function MemberPopup({ member, month, canRemind, onClose, onChanged }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [detail, setDetail] = useState(null);
@@ -214,15 +220,16 @@ export default function MemberPopup({ member, month, canRemind, onClose, onChang
             <div style={{minWidth:0}}>
               <div style={{fontSize:11,fontWeight:700,color:"var(--primary-text)"}}>{member.member_code}</div>
               <div style={{fontSize:10,color:"var(--soft)",marginTop:2}}>{member.phone || "Phone not added"} · MVR {fmt(member.monthly_amount)}/mo</div>
+              <div style={{fontSize:9,color:"var(--soft)",marginTop:4}}>Joined {formatMemberPopupDate(detail?.member?.joined_at||member.joined_at||member.created_at)} · Role: <b style={{color:"var(--primary-text)"}}>{detail?.member?.exco_role||member.exco_role||"Member"}</b></div>
             </div>
             <div style={{fontSize:9,fontWeight:700,color:member.telegram_id?"var(--success)":"var(--soft)",whiteSpace:"nowrap"}}>
               {member.telegram_id ? "● Telegram linked" : "○ Not linked"}
             </div>
           </div>
 
-          {member.exco_role && <div className="sans member-popup-exco">
-            <span>CURRENT EXCO ROLE</span><b>{member.exco_role}</b>
-          </div>}
+          <div className="sans member-popup-exco">
+            <span>CURRENT MEMBER ROLE</span><b>{detail?.member?.exco_role||member.exco_role||"Member"}</b>
+          </div>
 
           <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:11,padding:11,marginTop:11}}>
             <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
