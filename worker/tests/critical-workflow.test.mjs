@@ -1372,3 +1372,59 @@ test('v65 D1 backup includes formal resolution tables', () => {
   assert.match(system,/meeting_resolutions/);
   assert.match(system,/meeting_resolution_history/);
 });
+
+
+test('v66 member governance archive is linked-member only and certified/read-only', () => {
+  const index=fs.readFileSync(path.resolve(root,'../worker/src/index.ts'),'utf8');
+  assert.match(index,/\/api\/me\/governance-archive/);
+  assert.match(index,/Member account not linked/);
+  assert.match(index,/WHERE e\.certified_at IS NOT NULL/);
+  assert.match(index,/h\.status='completed'/);
+  assert.match(index,/r\.status='adopted'/);
+  assert.match(index,/r\.status='completed'/);
+});
+
+test('v66 member governance archive excludes private admin and ballot internals', () => {
+  const index=fs.readFileSync(path.resolve(root,'../worker/src/index.ts'),'utf8');
+  const block=index.match(/app\.get\("\/api\/me\/governance-archive"[\s\S]*?return c\.json\(\{[\s\S]*?\n  \}\);\n\}\);/)?.[0]||'';
+  assert.doesNotMatch(block,/FROM audit_log/);
+  assert.doesNotMatch(block,/election_ballots/);
+  assert.doesNotMatch(block,/ballot_token/);
+  assert.doesNotMatch(block,/admins /);
+  assert.doesNotMatch(block,/handover.*notes/i);
+  assert.match(block,/ballot_data_included:false/);
+  assert.match(block,/admin_notes_included:false/);
+  assert.match(block,/audit_log_included:false/);
+  assert.match(block,/system_permissions_included:false/);
+});
+
+test('v66 archive preserves Meeting to Resolution to Responsibility chain for members', () => {
+  const index=fs.readFileSync(path.resolve(root,'../worker/src/index.ts'),'utf8');
+  assert.match(index,/meeting_title/);
+  assert.match(index,/meeting_date/);
+  assert.match(index,/resolution_no/);
+  assert.match(index,/decision_text/);
+  assert.match(index,/responsibility_id/);
+  assert.match(index,/responsibility_title/);
+  assert.match(index,/responsibility_status/);
+  assert.match(index,/responsibility_completed_at/);
+});
+
+test('v66 member Elections UI renders governance archive without edit controls', () => {
+  const page=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/myGovernanceArchive/);
+  assert.match(page,/GOVERNANCE ARCHIVE/);
+  assert.match(page,/ADOPTED RESOLUTIONS/);
+  assert.match(page,/COMPLETED EXCO WORK/);
+  assert.match(page,/Handover completed/);
+  assert.match(page,/Read-only member view/);
+  assert.doesNotMatch(page,/updateMeetingResolution/);
+  assert.doesNotMatch(page,/createResponsibility/);
+  assert.doesNotMatch(page,/completeHandover/);
+});
+
+test('v66 member election prefetch includes governance archive', () => {
+  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  assert.match(api,/tab === "elections"[\s\S]*?\/api\/me\/governance-archive/);
+});

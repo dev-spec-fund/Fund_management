@@ -209,7 +209,7 @@ async function prefetchTabData({ tab, adminView = false, canFinance = false, mem
     else if (tab === "activity") paths = ["/api/reports/activity"];
     else if (tab === "projects") paths = ["/api/me/projects"];
     else if (tab === "meetings") paths = ["/api/me/meetings"];
-    else if (tab === "elections") paths = ["/api/elections"];
+    else if (tab === "elections") paths = ["/api/elections","/api/me/governance-archive"];
     else if (tab === "actions") paths = ["/api/me/actions"];
     else if (tab === "profile") paths = ["/api/me/dashboard"];
   }
@@ -278,6 +278,7 @@ export const api = {
   myMeetings: () => request("/api/me/meetings"),
   myProjects: () => request("/api/me/projects"),
   myActions: () => request("/api/me/actions"),
+  myGovernanceArchive: () => request("/api/me/governance-archive"),
   rsvpMeeting: (id, response) => request(`/api/me/meetings/${id}/rsvp`, { method: "POST", body: JSON.stringify({ response }) }),
   completeMyAction: (id) => request(`/api/me/actions/${id}/done`, { method: "POST" }),
 

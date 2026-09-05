@@ -3238,3 +3238,68 @@ button:not(:disabled):active {
   .meeting-resolution-top{display:block}
   .meeting-resolution-top strong{display:block;max-width:none;text-align:left;margin-top:4px}
 }
+
+
+/* v66 member-visible governance archive */
+.member-governance-card{
+  border:1px solid var(--border);border-radius:13px;background:var(--card);
+  padding:0;margin-bottom:12px;overflow:hidden
+}
+.member-governance-head{
+  width:100%;border:0;background:transparent;color:var(--text);padding:11px 12px;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;cursor:pointer
+}
+.member-governance-head span{min-width:0;flex:1}
+.member-governance-head b,.member-governance-head small{display:block}
+.member-governance-head b{font-size:10px;color:var(--primary-text)}
+.member-governance-head small{font-size:7px;color:var(--soft);margin-top:2px}
+.member-governance-head strong{font-size:9px;color:var(--soft)}
+.member-governance-body{border-top:1px solid var(--divider);padding:10px 11px}
+.member-governance-privacy{
+  border:1px solid var(--border);border-radius:8px;background:var(--bg);
+  padding:7px 8px;font-size:7px;color:var(--soft);line-height:1.4;margin-bottom:9px
+}
+.member-governance-term{
+  border:1px solid var(--border);border-radius:11px;background:var(--bg);
+  padding:10px;margin-top:8px
+}
+.member-governance-term:first-of-type{margin-top:0}
+.member-governance-term-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.member-governance-term-head span{min-width:0;flex:1}
+.member-governance-term-head b,.member-governance-term-head small{display:block}
+.member-governance-term-head b{font-size:10px;color:var(--primary-text)}
+.member-governance-term-head small{font-size:7px;color:var(--soft);margin-top:2px}
+.member-governance-term-head strong{
+  font-size:7px;color:var(--primary-text);border:1px solid var(--border);
+  border-radius:999px;padding:3px 6px;background:var(--button-soft)
+}
+.member-governance-election{font-size:8px;color:var(--soft);margin-top:7px}
+.member-governance-election b{color:var(--primary-text)}
+.member-governance-section{margin-top:10px}
+.member-governance-row,.member-governance-work{
+  display:flex;justify-content:space-between;gap:10px;align-items:flex-start;
+  border-top:1px solid var(--divider);padding:7px 0
+}
+.member-governance-row span{font-size:8px;color:var(--soft)}
+.member-governance-row b{font-size:9px;color:var(--primary-text);text-align:right}
+.member-governance-handover{
+  margin-top:8px;border:1px solid var(--success-border);background:var(--success-bg);
+  color:var(--success);border-radius:8px;padding:7px 8px;font-size:8px;font-weight:800
+}
+.member-governance-resolution{
+  border-top:1px solid var(--divider);padding:8px 0
+}
+.member-governance-resolution>div:first-child b,.member-governance-resolution>div:first-child small{display:block}
+.member-governance-resolution>div:first-child b{font-size:9px;color:var(--primary-text)}
+.member-governance-resolution>div:first-child small{font-size:7px;color:var(--soft);margin-top:2px}
+.member-governance-resolution p{font-size:9px;line-height:1.45;color:var(--muted);margin:6px 0;white-space:pre-wrap}
+.member-governance-meta,.member-governance-followup{font-size:7px;color:var(--soft);line-height:1.4}
+.member-governance-followup{
+  margin-top:5px;border:1px solid var(--border);border-radius:7px;background:var(--card);padding:6px 7px
+}
+.member-governance-followup b{color:var(--primary-text)}
+.member-governance-work span{min-width:0;flex:1}
+.member-governance-work b,.member-governance-work small{display:block}
+.member-governance-work b{font-size:9px;color:var(--primary-text)}
+.member-governance-work small{font-size:7px;color:var(--soft);margin-top:2px}
+.member-governance-work strong{color:var(--success)}

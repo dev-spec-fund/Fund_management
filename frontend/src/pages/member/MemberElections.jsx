@@ -16,13 +16,16 @@ export function MemberElections(){
   const [currentExco,setCurrentExco]=useState(()=>api.peekCached("/api/elections/exco/current")?.roles||[]);
   const [archive,setArchive]=useState(()=>api.peekCached("/api/elections/archive")?.archive||[]);
   const [excoTerms,setExcoTerms]=useState(()=>api.peekCached("/api/elections/exco/terms"));
+  const [governanceArchive,setGovernanceArchive]=useState(()=>api.peekCached("/api/me/governance-archive"));
+  const [archiveOpen,setArchiveOpen]=useState(false);
   const [runoffChoices,setRunoffChoices]=useState({});
   const {confirm,confirmationDialog}=useConfirmDialog();
   const load=()=>Promise.all([
     api.elections.list().then(setRows),
     api.elections.currentExco().then(r=>setCurrentExco(r.roles||[])),
     api.elections.archive().then(r=>setArchive(r.archive||[])),
-    api.elections.excoTerms().then(setExcoTerms)
+    api.elections.excoTerms().then(setExcoTerms),
+    api.myGovernanceArchive().then(setGovernanceArchive)
   ]).catch(e=>setMessage(e.message));
   useEffect(()=>{load()},[]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
@@ -70,6 +73,40 @@ export function MemberElections(){
     {excoTerms?.current&&<section className="exco-term-card member-view">
       <div className="sans exco-term-head"><span><b>CURRENT EXCO TERM</b><small>Effective from {formatApplicationDate(excoTerms.current.started_at)}</small></span><strong>{excoTerms.current.term_label||excoTerms.current.election_title}</strong></div>
       {excoTerms.previous&&<div className="sans exco-term-previous"><span>Previous term</span><b>{excoTerms.previous.term_label||excoTerms.previous.election_title}</b><small>{formatApplicationDate(excoTerms.previous.started_at)} → {formatApplicationDate(excoTerms.previous.ended_at)}</small></div>}
+    </section>}
+    {governanceArchive?.terms?.length>0&&<section className="member-governance-card">
+      <button type="button" className="sans member-governance-head" onClick={()=>setArchiveOpen(v=>!v)}>
+        <span><b>GOVERNANCE ARCHIVE</b><small>Certified elections, EXCO terms, resolutions and completed work</small></span>
+        <strong>{archiveOpen?"▲":"▼"}</strong>
+      </button>
+      {archiveOpen&&<div className="member-governance-body">
+        <div className="sans member-governance-privacy">Read-only member view · no private ballots, Admin notes, audit logs or system permissions.</div>
+        {governanceArchive.terms.map(term=><section key={term.id} className="member-governance-term">
+          <div className="sans member-governance-term-head">
+            <span><b>{term.term_label||term.election_title}</b><small>{term.started_at||"—"}{term.ended_at?` → ${term.ended_at}`:" · Current term"}</small></span>
+            <strong>{term.status==="current"?"CURRENT":"ARCHIVED"}</strong>
+          </div>
+          <div className="sans member-governance-election">Certified election: <b>{term.election_title}</b>{term.certified_at?` · ${formatApplicationDate(term.certified_at)}`:""}</div>
+          {!!term.roles?.length&&<div className="member-governance-section">
+            <div className="sans member-section-title">EXCO</div>
+            {term.roles.map((r,i)=><div key={`${r.role_title}-${i}`} className="sans member-governance-row"><span>{r.role_title}</span><b>{r.name}</b></div>)}
+          </div>}
+          {term.handover?.status==="completed"&&<div className="sans member-governance-handover">✓ Handover completed {formatApplicationDate(term.handover.completed_at)}</div>}
+          {!!term.resolutions?.length&&<div className="member-governance-section">
+            <div className="sans member-section-title">ADOPTED RESOLUTIONS</div>
+            {term.resolutions.map(r=><div key={r.id} className="member-governance-resolution">
+              <div className="sans"><b>{r.resolution_no||"Resolution"} · {r.title}</b><small>{r.meeting_title} · {r.meeting_date}</small></div>
+              <p className="sans">{r.decision_text}</p>
+              <div className="sans member-governance-meta">{r.vote_result||"Adopted"}{r.proposer_name?` · Proposed by ${r.proposer_name}`:""}{r.seconder_name?` · Seconded by ${r.seconder_name}`:""}</div>
+              {r.responsibility_id&&<div className="sans member-governance-followup">Follow-up: <b>{r.responsibility_title||"EXCO responsibility"}</b> · {r.responsibility_status==="completed"?"Completed":r.responsibility_status||"Open"}{r.responsibility_owner_role?` · ${r.responsibility_owner_role}`:""}{r.responsibility_owner_name?` · ${r.responsibility_owner_name}`:""}</div>}
+            </div>)}
+          </div>}
+          {!!term.completed_responsibilities?.length&&<div className="member-governance-section">
+            <div className="sans member-section-title">COMPLETED EXCO WORK</div>
+            {term.completed_responsibilities.map(r=><div key={r.id} className="sans member-governance-work"><span><b>{r.title}</b><small>{r.owner_role_title||"EXCO"}{r.owner_name?` · ${r.owner_name}`:""}{r.completed_at?` · Completed ${formatApplicationDate(r.completed_at)}`:""}</small></span><strong>✓</strong></div>)}
+          </div>}
+        </section>)}
+      </div>}
     </section>}
     {!!archive.length&&<section className="election-archive-card">
       <div className="sans member-section-title">PAST CERTIFIED ELECTIONS</div>

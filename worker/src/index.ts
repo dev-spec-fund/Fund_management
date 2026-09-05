@@ -211,6 +211,75 @@ app.get("/api/me/meetings", async (c) => {
   return c.json(rows.results);
 });
 
+app.get("/api/me/governance-archive", async (c) => {
+  const user=c.get("telegramUser");
+  const member=await c.env.DB.prepare("SELECT id FROM members WHERE telegram_id=? AND active=1 LIMIT 1").bind(String(user.id)).first<any>();
+  if(!member) return c.json({error:"Member account not linked"},404);
+
+  const terms=await c.env.DB.prepare(`SELECT t.id,t.election_id,t.term_label,t.status,t.started_at,t.ended_at,
+      e.title election_title,e.certified_at,
+      h.id handover_id,h.status handover_status,h.completed_at handover_completed_at
+    FROM exco_terms t
+    JOIN elections e ON e.id=t.election_id
+    LEFT JOIN exco_handover_records h ON h.incoming_term_id=t.id AND h.status='completed'
+    WHERE e.certified_at IS NOT NULL
+    ORDER BY date(t.started_at) DESC,t.id DESC`).all<any>();
+
+  const result=[] as any[];
+  for(const term of terms.results as any[]){
+    const [roles,resolutions,responsibilities]=await Promise.all([
+      c.env.DB.prepare(`SELECT x.role_title,m.name,m.member_code
+        FROM exco_role_assignments x JOIN members m ON m.id=x.member_id
+        WHERE x.election_id=? ORDER BY x.position_id,x.id`).bind(term.election_id).all<any>(),
+      c.env.DB.prepare(`SELECT r.id,r.resolution_no,r.title,r.decision_text,r.vote_result,r.created_at,
+          mt.id meeting_id,mt.title meeting_title,mt.meeting_date,
+          p.name proposer_name,s.name seconder_name,
+          xr.id responsibility_id,xr.title responsibility_title,xr.status responsibility_status,xr.completed_at responsibility_completed_at,
+          owner.name responsibility_owner_name,xr.owner_role_title responsibility_owner_role
+        FROM meeting_resolutions r
+        JOIN meetings mt ON mt.id=r.meeting_id
+        LEFT JOIN members p ON p.id=r.proposer_member_id
+        LEFT JOIN members s ON s.id=r.seconder_member_id
+        LEFT JOIN exco_responsibilities xr ON xr.id=r.responsibility_id
+        LEFT JOIN members owner ON owner.id=xr.owner_member_id
+        WHERE r.term_id=? AND r.status='adopted'
+        ORDER BY mt.meeting_date DESC,r.id DESC`).bind(term.id).all<any>(),
+      c.env.DB.prepare(`SELECT r.id,r.title,r.description,r.due_date,r.completed_at,r.owner_role_title,
+          m.name owner_name
+        FROM exco_responsibilities r
+        LEFT JOIN members m ON m.id=r.owner_member_id
+        WHERE r.term_id=? AND r.status='completed'
+        ORDER BY COALESCE(r.completed_at,r.updated_at,r.created_at) DESC,r.id DESC`).bind(term.id).all<any>()
+    ]);
+
+    result.push({
+      id:term.id,
+      election_id:term.election_id,
+      term_label:term.term_label,
+      status:term.status,
+      started_at:term.started_at,
+      ended_at:term.ended_at,
+      election_title:term.election_title,
+      certified_at:term.certified_at,
+      handover:term.handover_id?{status:"completed",completed_at:term.handover_completed_at}:null,
+      roles:roles.results,
+      resolutions:resolutions.results,
+      completed_responsibilities:responsibilities.results
+    });
+  }
+
+  return c.json({
+    terms:result,
+    current_term:result.find((x:any)=>x.status==="current")||null,
+    privacy:{
+      ballot_data_included:false,
+      admin_notes_included:false,
+      audit_log_included:false,
+      system_permissions_included:false
+    }
+  });
+});
+
 app.get("/api/me/actions", async (c) => {
   const user=c.get("telegramUser");
   const member=await c.env.DB.prepare("SELECT id FROM members WHERE telegram_id=? AND active=1 LIMIT 1").bind(String(user.id)).first<any>();
