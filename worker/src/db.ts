@@ -123,18 +123,6 @@ export async function ensureMemberLinked(env: Env, telegramId: string, _displayN
   return existing?.id ?? null;
 }
 
-export async function findUnlinkedMemberMatches(env: Env, displayName: string) {
-  if (!displayName.trim()) return [] as any[];
-  const rows = await env.DB.prepare(`
-    SELECT id, member_code, name, phone, monthly_amount
-    FROM members
-    WHERE telegram_id IS NULL AND active = 1 AND lower(trim(name)) = lower(trim(?))
-    ORDER BY member_code ASC
-    LIMIT 3
-  `).bind(displayName).all<any>();
-  return rows.results;
-}
-
 /** Ensures registration storage exists for old D1 databases too. */
 export async function ensureMemberRegistrationTable(env: Env) {
   await env.DB.prepare(`
