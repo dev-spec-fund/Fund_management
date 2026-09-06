@@ -100,11 +100,17 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
   for (const r of balanceItems) { running += Number(r.amount||0); balanceHistory.push({...r,balance:running}); }
   const firstMonth = member.joined_at?.slice(0,7) || currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
   const nowMonth = currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives');
+  const allocatedContributionIds=new Set((allocations.results as any[]).map((row:any)=>Number(row.contribution_id)));
   const latestAllocatedMonth=(allocations.results as any[]).reduce((latest:any,row:any)=>{
     const month=String(row.month||'');
     return /^\d{4}-\d{2}$/.test(month) && month>latest ? month : latest;
   },nowMonth);
-  const statusEndMonth=latestAllocatedMonth>nowMonth?latestAllocatedMonth:nowMonth;
+  const latestLegacyMonth=approved.reduce((latest:any,row:any)=>{
+    if(allocatedContributionIds.has(Number(row.id))) return latest;
+    const month=String(row.month||'');
+    return /^\d{4}-\d{2}$/.test(month) && month>latest ? month : latest;
+  },nowMonth);
+  const statusEndMonth=[nowMonth,latestAllocatedMonth,latestLegacyMonth].sort().at(-1)!;
   const months:string[]=[]; let [y,m]=firstMonth.split('-').map(Number); const [ey,em]=statusEndMonth.split('-').map(Number);
   while (y<ey || (y===ey && m<=em)) { months.push(`${y}-${String(m).padStart(2,'0')}`); m++; if(m>12){m=1;y++;} }
   const exSet = new Map(exemptions.results.map((x:any)=>[x.month,x]));
@@ -112,7 +118,7 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
   for(const a of allocations.results) allocationMap.set(a.month,(allocationMap.get(a.month)||0)+Number(a.amount||0));
   // Historical approved transactions without allocation rows keep their original month.
   for(const x of approved){
-    const hasAllocation=allocations.results.some((a:any)=>Number(a.contribution_id)===Number(x.id));
+    const hasAllocation=allocatedContributionIds.has(Number(x.id));
     if(!hasAllocation) allocationMap.set(x.month,(allocationMap.get(x.month)||0)+Number(x.amount||0));
   }
   const firstMonthRule=await firstMonthContributionRule(c.env);

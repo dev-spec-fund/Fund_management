@@ -1735,10 +1735,12 @@ test('v72 meeting audience and attendance schema is migration controlled', () =>
 });
 
 
-test('v73 member statement extends monthly status through latest future allocation', () => {
+test('v73 member statement extends monthly status through latest future allocation or legacy advance', () => {
   const members=fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
   assert.match(members,/latestAllocatedMonth/);
-  assert.match(members,/statusEndMonth=latestAllocatedMonth>nowMonth\?latestAllocatedMonth:nowMonth/);
+  assert.match(members,/latestLegacyMonth=approved\.reduce/);
+  assert.match(members,/allocatedContributionIds\.has\(Number\(row\.id\)\)/);
+  assert.match(members,/statusEndMonth=\[nowMonth,latestAllocatedMonth,latestLegacyMonth\]\.sort\(\)\.at\(-1\)!/);
   assert.match(members,/const isAdvance=month>nowMonth/);
   assert.match(members,/advance:isAdvance/);
 });
