@@ -315,13 +315,6 @@
 }
 .member-project-detail span {color:var(--muted);}
 .member-project-detail strong {text-align:right;}
-.member-project-subtitle {
-  font-size:9px;
-  font-weight:800;
-  color:var(--soft);
-  letter-spacing:.7px;
-  margin:15px 0 5px;
-}
 .member-project-transaction {
   display:flex;
   justify-content:space-between;

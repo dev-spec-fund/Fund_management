@@ -169,16 +169,6 @@
   padding-top:1px;
 }
 
-/* v67: keep horizontally scrolling admin tabs comfortably inside the viewport. */
-.admin-tab-strip {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.admin-tab-strip::-webkit-scrollbar { display: none; }
-.admin-tab-strip > button:first-child { margin-left: 2px; }
-.admin-tab-strip > button:last-child { margin-right: 2px; }
-
-
 /* v68: compact mobile shell/navigation.
    Keeps the existing visual identity while giving page content more vertical room. */
 .app-brand-header {
@@ -226,6 +216,8 @@
 .admin-tab-strip {
   flex-shrink: 0;
   display: flex;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   align-items: flex-end;
   gap: 18px;
   padding: 0 18px;
@@ -239,9 +231,12 @@
 }
 .admin-tab-strip > button {
   flex: 0 0 auto;
-  min-height: 36px;
+  min-height: 38px;
   scroll-snap-align: center;
 }
+.admin-tab-strip::-webkit-scrollbar { display: none; }
+.admin-tab-strip > button:first-child { margin-left: 2px; }
+.admin-tab-strip > button:last-child { margin-right: 2px; }
 
 .app-page-content {
   width: 100%;
@@ -623,12 +618,6 @@ button:not(:disabled):active {
 }
 
 /* Touch targets stay compact but comfortably tappable. */
-.admin-tab-strip > button {
-  min-height: 38px;
-}
-.expense-filter-chip {
-  min-height: 30px;
-}
 .report-header-action,
 .expense-filter-toggle {
   min-height: 34px;
