@@ -425,7 +425,9 @@ route.post('/meetings/:id/complete', requireFinance, async c=>{
   if(before.status==='completed')return c.json({error:'Meeting is already completed'},409);
   if(!before.sent_at)return c.json({error:'Send meeting invitations before completing the meeting'},409);
   const invitees=await ensureMeetingInvitees(c.env,before);
-  const recorded=await c.env.DB.prepare("SELECT COUNT(*) n FROM meeting_attendance WHERE meeting_id=?").bind(id).first<any>();
+  const recorded=await c.env.DB.prepare(`SELECT COUNT(*) n FROM meeting_attendance a
+    JOIN meeting_invitees i ON i.meeting_id=a.meeting_id AND i.member_id=a.member_id
+    WHERE a.meeting_id=?`).bind(id).first<any>();
   if(Number(recorded?.n||0)!==invitees.results.length)
     return c.json({error:`Record attendance for all ${invitees.results.length} invited member${invitees.results.length===1?'':'s'} before completing the meeting`},409);
   await c.env.DB.prepare(`UPDATE meetings SET status='completed',completed_at=datetime('now'),completed_by=?,updated_at=datetime('now') WHERE id=?`)

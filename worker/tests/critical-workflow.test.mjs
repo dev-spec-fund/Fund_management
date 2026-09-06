@@ -1688,6 +1688,13 @@ test('v72 meeting completion is manual and requires attendance for all invitees'
   assert.match(route,/meeting_completed/);
 });
 
+test('v72 meeting completion counts attendance only for saved invitees', () => {
+  const route=fs.readFileSync(path.join(root,'src/routes/admin/meetings.ts'),'utf8');
+  assert.match(route,/JOIN meeting_invitees i ON i\.meeting_id=a\.meeting_id AND i\.member_id=a\.member_id/);
+  assert.match(route,/WHERE a\.meeting_id=\?/);
+});
+
+
 test('v72 RSVP and member meeting visibility respect EXCO-only audience', () => {
   const callbacks=fs.readFileSync(path.join(root,'src/bot/callbacks.ts'),'utf8');
   const index=fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
