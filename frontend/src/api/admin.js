@@ -1,0 +1,27 @@
+import { request } from "./client";
+
+export const adminApi = {
+  pending: () => request("/api/admin/pending"),
+  sendPaymentReminders: (data = {}) => request("/api/admin/payment-reminders", { method: "POST", body: JSON.stringify(data) }),
+  meetings: () => request("/api/admin/meetings"),
+  meeting: (id) => request(`/api/admin/meetings/${id}`),
+  createMeeting: (data) => request("/api/admin/meetings", { method: "POST", body: JSON.stringify(data) }),
+  updateMeeting: (id, data) => request(`/api/admin/meetings/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  cancelMeeting: (id, reason = "") => request(`/api/admin/meetings/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+  saveMeetingAttendance: (id, entries) => request(`/api/admin/meetings/${id}/attendance`, { method: "PUT", body: JSON.stringify({ entries }) }),
+  completeMeeting: (id) => request(`/api/admin/meetings/${id}/complete`, { method: "POST" }),
+  sendMeetingInvites: (id) => request(`/api/admin/meetings/${id}/send`, { method: "POST" }),
+  notifyMeetingUpdate: (id, data = {}) => request(`/api/admin/meetings/${id}/notify-update`, { method: "POST", body: JSON.stringify(data) }),
+  remindMeetingPending: (id) => request(`/api/admin/meetings/${id}/remind-pending`, { method: "POST" }),
+  approveRegistration: (id, member_id) => request(`/api/admin/pending/registrations/${id}/approve`, { method: "POST", body: JSON.stringify({ member_id }) }),
+  rejectRegistration: (id, reason) => request(`/api/admin/pending/registrations/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  correctContribution: (id, data) => request(`/api/admin/pending/contributions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  approveContribution: (id) => request(`/api/admin/pending/contributions/${id}/approve`, { method: "POST" }),
+  rejectContribution: (id, reason) => request(`/api/admin/pending/contributions/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  health: () => request("/api/admin/health"),
+  errors: () => request("/api/admin/errors"),
+  retryError: (id) => request(`/api/admin/errors/${id}/retry`, { method: "POST" }),
+  resolveError: (id) => request(`/api/admin/errors/${id}/resolve`, { method: "POST" }),
+  resolveAllErrors: () => request("/api/admin/errors/resolve-all", { method: "POST" }),
+  backup: () => request("/api/admin/backup"),
+};

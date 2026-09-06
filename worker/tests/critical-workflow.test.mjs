@@ -15,6 +15,16 @@ function electionSource() {
   return fs.readFileSync(path.join(root, 'src/routes/elections.ts'), 'utf8') + modular + fs.readFileSync(path.join(root, 'src/elections/core.ts'), 'utf8');
 }
 
+
+function frontendApiSource() {
+  const frontend = path.resolve(root, '../frontend/src');
+  const apiDir = path.join(frontend, 'api');
+  const modules = fs.existsSync(apiDir)
+    ? fs.readdirSync(apiDir).filter((name) => name.endsWith('.js')).sort().map((name) => fs.readFileSync(path.join(apiDir, name), 'utf8')).join('\n')
+    : '';
+  return fs.readFileSync(path.join(frontend, 'api.js'), 'utf8') + '\n' + modules;
+}
+
 function frontendCss() {
   const frontend = path.resolve(root, '../frontend/src');
   return [
@@ -135,7 +145,7 @@ test('PDF/CSV export paths remain wired through member statement and Telegram do
   const exportSource = [
     'exports.js','statementExports.js','exportDelivery.js'
   ].map((file) => fs.readFileSync(path.resolve(root,'../frontend/src/utils',file),'utf8')).join('\n');
-  const apiSource = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const apiSource = frontendApiSource();
   const reportsSource = fs.readFileSync(path.join(root,'src/routes/reports.ts'),'utf8');
   assert.match(exportSource, /exportStatementCsv/);
   assert.match(exportSource, /exportStatementPdf/);
@@ -190,14 +200,14 @@ test('stability routes guard historical month reopen and repeat void actions', (
 test('frontend crashes are reported to the authenticated production error log endpoint', () => {
   const indexSource = fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
   const appSource = fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
-  const apiSource = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const apiSource = frontendApiSource();
 
   assert.match(indexSource, /app\.post\("\/api\/client-error"/);
   assert.match(indexSource, /safeLogError\(c\.env,`client:\$\{source\}`/);
   assert.match(appSource, /window\.addEventListener\("error"/);
   assert.match(appSource, /window\.addEventListener\("unhandledrejection"/);
   assert.match(appSource, /source: "page-boundary"/);
-  assert.match(apiSource, /async function reportClientError/);
+  assert.match(apiSource, /(?:export\s+)?async function reportClientError/);
   assert.match(apiSource, /keepalive: true/);
 });
 
@@ -501,7 +511,7 @@ test('Telegram callback can self-heal a legacy stale contribution review message
 
 test('contribution review UX reports Telegram sync and prevents duplicate review taps', () => {
   const pending = fs.readFileSync(path.resolve(root,'../frontend/src/pages/PendingApprovals.jsx'),'utf8');
-  const api = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api = frontendApiSource();
   assert.match(pending,/const \[busy, setBusy\]/);
   assert.match(pending,/finishContribution/);
   assert.match(pending,/Telegram review messages updated/);
@@ -525,7 +535,7 @@ test('failed Telegram contribution review sync is logged, retryable, and retaine
 
 test('pending contribution review loads Telegram-backed slip inline with retry and large preview', () => {
   const pending = fs.readFileSync(path.resolve(root,'../frontend/src/pages/PendingApprovals.jsx'),'utf8');
-  const api = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api = frontendApiSource();
   const members = fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
 
   assert.match(pending,/loadReviewSlip/);
@@ -541,7 +551,7 @@ test('pending contribution review loads Telegram-backed slip inline with retry a
 
 
 test('performance stage v44 deduplicates GETs, uses short lived caches, and preserves warmed tab data', () => {
-  const api = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api = frontendApiSource();
   const app = fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
   const reports = fs.readFileSync(path.resolve(root,'../frontend/src/pages/reports/useReportsData.js'),'utf8');
   const members = fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/useMembersData.js'),'utf8');
@@ -560,7 +570,7 @@ test('performance stage v44 deduplicates GETs, uses short lived caches, and pres
 });
 
 test('financial write requests remain uncached and invalidate read cache', () => {
-  const api = fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api = frontendApiSource();
   assert.match(api,/MUTATION_METHODS/);
   assert.match(api,/invalidateAfterMutation\(path\)/);
   assert.match(api,/if \(!isGet\) return run\(\)/);
@@ -591,7 +601,7 @@ test('EXCO election UI supports admin setup, member voting, turnout and closed r
   const app=fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
   const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
 
   assert.match(app,/elections/);
   assert.match(admin,/Create election/);
@@ -617,7 +627,7 @@ test('database backup includes election governance tables and schema version 29'
 test('election integrity adds automatic lifecycle, withdrawal, reminders, certification and turnout percent', () => {
   const elections=electionSource();
   const scheduled=fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
 
   assert.match(elections,/processElectionLifecycle/);
   assert.match(elections,/election_auto_opened/);
@@ -691,7 +701,7 @@ test('candidate application stage is migration controlled and separated from vot
 test('member can self-apply for election positions and admin can review applications', () => {
   const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(member,/APPLY FOR AN AVAILABLE POSITION/);
   assert.match(member,/Submit candidate application/);
   assert.match(member,/withdrawApplication/);
@@ -786,7 +796,7 @@ test('member and admin UIs surface current EXCO role and runoff workflow', () =>
   const profile=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MyProfile.jsx'),'utf8');
   const elections=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
   const memberElection=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(members,/member-exco-badge/);
   assert.match(profile,/EXCO ROLE/);
   assert.match(profile,/PREVIOUS EXCO ROLES/);
@@ -826,7 +836,7 @@ test('true admin-only election drafts remain hidden from members', () => {
 
 test('admin can extend candidate application deadline before voting opens', () => {
   const route=electionSource();
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
 
   assert.match(route,/extend-applications/);
@@ -866,7 +876,7 @@ test('v53 applications can be reopened before voting and reapproved candidates r
 
 test('v53 admin can reassign an application before voting while keeping candidate records synchronized', () => {
   const route=electionSource();
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
 
   assert.match(route,/applications\/:applicationId\/reassign/);
@@ -929,7 +939,7 @@ test('v54 readiness checks application review, position candidates, synchronizat
 
 test('v54 admin UI disables Open Voting until server checklist passes', () => {
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/readiness: \(id\)/);
   assert.match(admin,/PRE-VOTE CHECKLIST/);
   assert.match(admin,/Ready to Open Voting/);
@@ -956,7 +966,7 @@ test('v55 exposes read-only certified election governance summary without ballot
 test('v55 admin and member UIs render certified election summary records', () => {
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
   const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/summary: \(id\)/);
   assert.match(admin,/OFFICIAL ELECTION SUMMARY/);
   assert.match(admin,/RUNOFF HISTORY/);
@@ -992,7 +1002,7 @@ test('v56 election PDF and CSV exports use certified summary and Telegram delive
 test('v56 admin and member election archive surfaces certified history and admin export actions', () => {
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
   const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/archive: \(\)/);
   assert.match(admin,/ELECTION ARCHIVE/);
   assert.match(admin,/PDF Record/);
@@ -1021,7 +1031,7 @@ test('v57 readiness flags sync failures as repairable and opening self-heals leg
 
 test('v57 admin checklist offers Fix automatically and refreshes readiness after repair', () => {
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/repairApplicationSync/);
   assert.match(admin,/Fix election data automatically/);
   assert.match(admin,/Fix automatically/);
@@ -1121,7 +1131,7 @@ test('v60 logs voting, reminder, runoff, certification and application notificat
 test('v60 Admin can review notification delivery status with sent and failed counts', () => {
   const route=electionSource();
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(route,/\/:id\/notifications/);
   assert.match(route,/ORDER BY n\.id DESC LIMIT 50/);
   assert.match(api,/notifications: \(id\)/);
@@ -1181,7 +1191,7 @@ test('v61 dashboard surfaces actionable election warnings', () => {
 
 test('v61 admin UI renders at-a-glance election monitoring cards', () => {
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/dashboard: \(\)/);
   assert.match(admin,/ELECTION DASHBOARD/);
   assert.match(admin,/Applications/);
@@ -1256,7 +1266,7 @@ test('v62-v63 governance timeline preserves ballot anonymity while surfacing act
 test('v63 admin and member UIs show term history and handover governance', () => {
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
   const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/excoTerms/);
   assert.match(api,/currentHandover/);
   assert.match(api,/updateHandoverItem/);
@@ -1314,7 +1324,7 @@ test('v64 responsibility history records status transitions without granting adm
 
 test('v64 Admin UI renders EXCO workboard and responsibility controls', () => {
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/excoWorkboard/);
   assert.match(api,/createResponsibility/);
   assert.match(api,/updateResponsibility/);
@@ -1384,7 +1394,7 @@ test('v65 meeting detail returns term resolutions and linked follow-up status', 
 
 test('v65 Meetings UI records formal resolution and optional EXCO follow-up', () => {
   const page=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Meetings.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/addMeetingResolution/);
   assert.match(api,/updateMeetingResolution/);
   assert.match(api,/meetingResolutionHistory/);
@@ -1441,7 +1451,7 @@ test('v66 archive preserves Meeting to Resolution to Responsibility chain for me
 
 test('v66 member Elections UI renders governance archive without edit controls', () => {
   const page=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/myGovernanceArchive/);
   assert.match(page,/GOVERNANCE ARCHIVE/);
   assert.match(page,/ADOPTED RESOLUTIONS/);
@@ -1454,7 +1464,7 @@ test('v66 member Elections UI renders governance archive without edit controls',
 });
 
 test('v66 member election prefetch includes governance archive', () => {
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/tab === "elections"[\s\S]*?\/api\/me\/governance-archive/);
 });
 
@@ -1524,7 +1534,7 @@ test('v68 mobile polish does not replace functional navigation or modal controls
 
 
 test('v69 GET cache invalidation is targeted by feature family instead of globally clearing every write', () => {
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/function invalidateCacheMatching/);
   assert.match(api,/if\(p\.startsWith\("\/api\/elections"\)\)/);
   assert.match(api,/if\(p\.startsWith\("\/api\/admin\/meetings"\)/);
@@ -1534,7 +1544,7 @@ test('v69 GET cache invalidation is targeted by feature family instead of global
 });
 
 test('v69 data-change events can be coalesced to avoid duplicate refresh bursts', () => {
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/export function onDataChangeDebounced/);
   assert.match(api,/const paths=new Set\(\)/);
   assert.match(api,/paths:\[\.\.\.paths\]/);
@@ -1563,7 +1573,7 @@ test('v69 keeps a bounded four-tab warm window and idle-prefetches only one like
 });
 
 test('v69 extends cache life for stable election governance data while keeping pending data short-lived', () => {
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/\/api\/elections\/exco\/.*60_000/);
   assert.match(api,/\/api\/me\/governance-archive.*60_000/);
   assert.match(api,/\/api\/admin\/pending.*8_000/);
@@ -1630,7 +1640,7 @@ test('v71 unused draft deletion is audited and removes the election only after e
 
 test('v71 Admin UI only shows permanent delete action when backend marks draft eligible', () => {
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
-  const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
+  const api=frontendApiSource();
   assert.match(api,/deleteUnusedDraft/);
   assert.match(admin,/detail\.deletion\?\.allowed/);
   assert.match(admin,/Delete election permanently/);
