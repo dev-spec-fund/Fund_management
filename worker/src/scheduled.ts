@@ -1,7 +1,7 @@
 import type { Env } from "./types";
 import { sendInBatches } from "./telegram";
 import { currentDayOfMonth, currentMonth, getSetting, getBranding } from "./db";
-import { isMonthClosed, safeLogError } from "./ops";
+import { auditEntity, isMonthClosed, safeLogError } from "./ops";
 import { allocatedPaidSql } from "./allocations";
 import { contributionDueForMonth } from "./contributionRates";
 import { cleanupContributionReviewMessages } from "./contributionReviewMessages";
@@ -39,15 +39,18 @@ export async function runScheduled(env: Env, cron = "0 19 * * *") {
     const members = await env.DB.prepare(`
       SELECT m.*, ${allocatedPaidSql} paid
       FROM members m
-      WHERE m.active=1 AND m.telegram_id IS NOT NULL
+      WHERE m.active=1
       AND NOT EXISTS (SELECT 1 FROM exemptions e WHERE e.member_id=m.id AND e.month=?)
     `).bind(month,month,month).all<any>();
 
     const messages:any[]=[];
+    let dueMembers=0, unlinked=0;
     for (const member of members.results as any[]) {
       const rate=await contributionDueForMonth(env,member.id,month,Number(member.monthly_amount||0),member.joined_at||member.created_at);
       const paid=Number(member.paid||0), due=Math.max(0,rate-paid);
       if (due <= 0.005) continue;
+      dueMembers++;
+      if (!member.telegram_id) { unlinked++; continue; }
       const status=paid>0?"partially paid":"unpaid";
       messages.push({chatId:member.telegram_id,text:`🔔 <b>${branding.fund_name}</b> contribution reminder\n\n${month} is ${status}. Paid: MVR ${paid}. Remaining: MVR ${due}. Send a bank slip photo to submit the balance.`,context:{member_id:member.id}});
     }
@@ -55,6 +58,9 @@ export async function runScheduled(env: Env, cron = "0 19 * * *") {
     for (const failure of result.failures) {
       await safeLogError(env,"scheduled.reminder_send",failure.error,failure.message.context);
     }
+    const summary={month,reminder_day:Number(reminderDay),due:dueMembers,sent:Number(result.sent||0),unlinked,failed:Number(result.failed||0),attempted_at:new Date().toISOString()};
+    await env.DB.prepare(`INSERT INTO settings(key,value) VALUES('reminder_last_result',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).bind(JSON.stringify(summary)).run();
+    await auditEntity(env,null,'automatic_payment_reminders_sent','month',month,null,summary);
   } catch (e) {
     await safeLogError(env,"scheduled.reminders",e);
     throw e;

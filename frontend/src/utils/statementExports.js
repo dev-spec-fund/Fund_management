@@ -10,6 +10,18 @@ export async function exportStatementCsv(member) {
   for (const x of st.monthly_status) rows.push([x.month,x.status,x.paid,x.due,x.reason||""]);
   rows.push([], ["Contribution transaction","Month","Amount","Bank reference","Status","Submitted"]);
   for (const x of st.contributions) rows.push([x.txn_id,x.month,x.amount,x.ref_number||"",x.status,x.submitted_at]);
+  const contributionById = new Map((st.contributions || []).map(x => [Number(x.id), x]));
+  rows.push([], ["Contribution allocation","Applied month","Allocated amount","Contribution month","Allocation type"]);
+  for (const a of (st.allocations || [])) {
+    const contribution = contributionById.get(Number(a.contribution_id));
+    rows.push([
+      contribution?.txn_id || `Contribution #${a.contribution_id}`,
+      a.month,
+      a.amount,
+      contribution?.month || "",
+      contribution?.month && a.month > contribution.month ? "Advance allocation" : "Current/arrears allocation",
+    ]);
+  }
   rows.push([], ["Donation transaction","Month","Amount","Note","Date"]);
   for (const x of (st.donations || [])) rows.push([x.txn_id,x.transaction_month||"",x.amount,x.note||"",x.created_at]);
   rows.push([], ["Balance date","Transaction","Type","Amount","Running balance"]);
@@ -80,6 +92,32 @@ export async function exportStatementPdf(member) {
     st.contributions || [],
     { fontSize: 7.1 }
   );
+
+  if ((st.allocations || []).length) {
+    const contributionById = new Map((st.contributions || []).map(x => [Number(x.id), x]));
+    const allocationRows = (st.allocations || []).map(a => {
+      const contribution = contributionById.get(Number(a.contribution_id));
+      return {
+        txn_id: contribution?.txn_id || `#${a.contribution_id}`,
+        contribution_month: contribution?.month || "-",
+        applied_month: a.month,
+        amount: a.amount,
+        allocation_type: contribution?.month && a.month > contribution.month ? "Advance" : "Current / arrears",
+      };
+    });
+    sectionTitle(ctx, "Contribution allocations", "Shows how each approved contribution was applied across monthly obligations, including advance payments.");
+    table(ctx,
+      [
+        { key: "txn_id", label: "Transaction", width: 32, bold: true },
+        { key: "contribution_month", label: "Paid in", width: 29 },
+        { key: "applied_month", label: "Applied to", width: 31, bold: true },
+        { key: "amount", label: "Allocated", width: 40, align: "right", bold: true, format: v => money(v) },
+        { key: "allocation_type", label: "Type", width: 50 },
+      ],
+      allocationRows,
+      { fontSize: 7.2 }
+    );
+  }
 
   if ((st.donations || []).length) {
     sectionTitle(ctx, "Donations");

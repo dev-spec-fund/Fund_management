@@ -264,8 +264,17 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
     `).bind(month,month,month,month,month).all<any>()
   ]);
 
-  const monthNet = num(income?.total) + num(donationTotal?.total) - num(expenseTotal?.total);
-  const balances = await balanceChainForMonth(c.env, month, monthNet);
+  const liveMonthNet = num(income?.total) + num(donationTotal?.total) - num(expenseTotal?.total);
+  const balances = await balanceChainForMonth(c.env, month, liveMonthNet);
+  const snapshotFinancials = balances.snapshot ? {
+    contributions:num(balances.snapshot.contribution_cash),
+    donations:num(balances.snapshot.donation_cash),
+    expenses:num(balances.snapshot.expenses),
+  } : null;
+  const reportContributions = snapshotFinancials?.contributions ?? num(income?.total);
+  const reportDonations = snapshotFinancials?.donations ?? num(donationTotal?.total);
+  const reportExpenses = snapshotFinancials?.expenses ?? num(expenseTotal?.total);
+  const reportNet = reportContributions + reportDonations - reportExpenses;
   const firstMonthRule=await firstMonthContributionRule(c.env);
   const collectionRows=(collection?.results||[]).map((row:any)=>{
     const due=contributionDueFromRate(Number(row.base_due||0),row.joined_at||row.created_at,month,firstMonthRule);
@@ -278,12 +287,12 @@ reportsRoute.get("/public-summary", requireMemberOrAdmin, async (c) => {
 
   return c.json({
     month,
-    memberIncome: income?.total ?? 0,
+    memberIncome: reportContributions,
     allocatedContributions,
     advanceAllocated,
-    donationIncome: donationTotal?.total ?? 0,
-    expenses: expenseTotal?.total ?? 0,
-    net: monthNet,
+    donationIncome: reportDonations,
+    expenses: reportExpenses,
+    net: reportNet,
     byCategory: byCategory.results,
     byProject: byProject.results,
     openingBalance: balances.openingBalance,
@@ -425,8 +434,17 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
     `).all<any>()
   ]);
 
-  const monthNet = num(income?.total) + num(donationTotal?.total) - num(expenseTotal?.total);
-  const balances = await balanceChainForMonth(c.env, month, monthNet);
+  const liveMonthNet = num(income?.total) + num(donationTotal?.total) - num(expenseTotal?.total);
+  const balances = await balanceChainForMonth(c.env, month, liveMonthNet);
+  const snapshotFinancials = balances.snapshot ? {
+    contributions:num(balances.snapshot.contribution_cash),
+    donations:num(balances.snapshot.donation_cash),
+    expenses:num(balances.snapshot.expenses),
+  } : null;
+  const reportContributions = snapshotFinancials?.contributions ?? num(income?.total);
+  const reportDonations = snapshotFinancials?.donations ?? num(donationTotal?.total);
+  const reportExpenses = snapshotFinancials?.expenses ?? num(expenseTotal?.total);
+  const reportNet = reportContributions + reportDonations - reportExpenses;
   const firstMonthRule=await firstMonthContributionRule(c.env);
   const adjustedOutstanding=(outstanding.results as any[]).map((row:any)=>{
     const required=contributionDueFromRate(Number(row.monthly_amount||0),row.joined_at||row.created_at,month,firstMonthRule);
@@ -437,12 +455,12 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
 
   return c.json({
     month,
-    memberIncome: income?.total ?? 0,
+    memberIncome: reportContributions,
     allocatedContributions,
     advanceAllocated,
-    donationIncome: donationTotal?.total ?? 0,
-    expenses: expenseTotal?.total ?? 0,
-    net: monthNet,
+    donationIncome: reportDonations,
+    expenses: reportExpenses,
+    net: reportNet,
     byCategory: byCategory.results,
     byProject: byProject.results,
     projectDonations: projectDonationDetails.results,
@@ -472,13 +490,19 @@ reportsRoute.get("/trend", requireAdmin, async (c) => {
   const [by,bm]=base.split('-').map(Number);
   const months=Array.from({length:6},(_,i)=>{const d=new Date(Date.UTC(by,bm-1-(5-i),1));return d.toISOString().slice(0,7);});
   const first=months[0],last=months[months.length-1];
-  const [contributions,donations,expenses]=await Promise.all([
+  const [contributions,donations,expenses,snapshots]=await Promise.all([
     c.env.DB.prepare("SELECT month,COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month BETWEEN ? AND ? GROUP BY month").bind(first,last).all<any>(),
     c.env.DB.prepare("SELECT transaction_month month,COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month BETWEEN ? AND ? GROUP BY transaction_month").bind(first,last).all<any>(),
-    c.env.DB.prepare("SELECT transaction_month month,COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month BETWEEN ? AND ? GROUP BY transaction_month").bind(first,last).all<any>()
+    c.env.DB.prepare("SELECT transaction_month month,COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month BETWEEN ? AND ? GROUP BY transaction_month").bind(first,last).all<any>(),
+    c.env.DB.prepare("SELECT month,contribution_cash,donation_cash,expenses FROM monthly_snapshots WHERE month BETWEEN ? AND ?").bind(first,last).all<any>()
   ]);
   const cm=new Map(contributions.results.map((r:any)=>[r.month,Number(r.total||0)]));
   const dm=new Map(donations.results.map((r:any)=>[r.month,Number(r.total||0)]));
   const em=new Map(expenses.results.map((r:any)=>[r.month,Number(r.total||0)]));
-  return c.json(months.map(month=>({month,income:Number(cm.get(month)||0)+Number(dm.get(month)||0),expense:Number(em.get(month)||0)})));
+  const sm=new Map(snapshots.results.map((r:any)=>[String(r.month),r]));
+  return c.json(months.map(month=>{
+    const snapshot:any=sm.get(month);
+    if(snapshot) return {month,income:num(snapshot.contribution_cash)+num(snapshot.donation_cash),expense:num(snapshot.expenses),source:'snapshot'};
+    return {month,income:Number(cm.get(month)||0)+Number(dm.get(month)||0),expense:Number(em.get(month)||0),source:'live'};
+  }));
 });

@@ -97,6 +97,11 @@ export function GeneralSettingsSection(ctx) {
 
         {settings.reminder_day==="off" && <div className="sans" style={{fontSize:11,color:"var(--soft)",background:"var(--bg)",borderRadius:9,padding:10}}>Automatic reminders are off. Manual reminders are still available.</div>}
 
+        {health?.reminder_last_result && <div className="sans" style={{marginTop:10,background:"var(--bg)",borderRadius:9,padding:10,fontSize:11,color:"var(--muted)"}}>
+          <div style={{fontWeight:700,color:"var(--primary-text)",marginBottom:5}}>Last automatic reminder · {health.reminder_last_result.month}</div>
+          <div>Due {health.reminder_last_result.due || 0} · Sent {health.reminder_last_result.sent || 0} · Unlinked {health.reminder_last_result.unlinked || 0} · Failed {health.reminder_last_result.failed || 0}</div>
+        </div>}
+
         {financeAdmin && <button type="button" onClick={async()=>{
           if(!await confirm({title:"Send payment reminders?",message:"Send payment reminders now to all members with an outstanding balance for the current month?",confirmLabel:"Send reminders",tone:"primary"})) return;
           try{

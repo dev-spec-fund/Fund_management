@@ -30,6 +30,7 @@ export async function exportAnnualAgmPdf(data) {
     ["Net cash change", `${Number(t.net || 0) >= 0 ? "+" : "-"} ${money(Math.abs(Number(t.net || 0)))}`],
     ["Annual collection rate", Number(t.due || 0) > 0 ? `${Number(t.collection_rate || 0).toFixed(1)}%` : "N/A"],
     ["Meetings held", String(data?.meetings || 0)],
+    ["Attendance recorded", String(data?.meeting_attendance?.recorded || 0)],
     ["Financial reversals", String(data?.reversals?.count || 0)],
   ]);
 
@@ -109,20 +110,28 @@ export async function exportAnnualAgmPdf(data) {
   }
 
   if ((data?.meeting_summary || []).length) {
-    sectionTitle(ctx, "Meeting summary / RSVP", "RSVP responses are shown because the current system does not yet store confirmed post-meeting attendance.", 16);
+    sectionTitle(ctx, "Meeting summary / attendance", "Completed meetings include confirmed attendance; RSVP responses remain visible for invitation-response context.", 16);
     table(ctx,
       [
         { key: "meeting_date", label: "Date", width: 24, bold: true, format: v => String(v || "").slice(0,10) },
         { key: "title", label: "Meeting", width: 57 },
-        { key: "rsvp_yes", label: "Going", width: 20, align: "right", bold: true, color: C.green2 },
-        { key: "rsvp_maybe", label: "Maybe", width: 20, align: "right", color: C.amber },
-        { key: "rsvp_no", label: "No", width: 18, align: "right", color: C.red },
-        { key: "minutes_recorded", label: "Minutes", width: 21, align: "right", bold: true, format: v => Number(v) ? "YES" : "NO", color: r => Number(r.minutes_recorded) ? C.green2 : C.muted },
-        { key: "action_total", label: "Actions", width: 22, align: "right", bold: true },
+        { key: "attendance_present", label: "Present", width: 18, align: "right", bold: true, color: C.green2 },
+        { key: "attendance_late", label: "Late", width: 15, align: "right", color: C.amber },
+        { key: "attendance_absent", label: "Absent", width: 17, align: "right", color: C.red },
+        { key: "attendance_excused", label: "Excused", width: 18, align: "right" },
+        { key: "rsvp_yes", label: "RSVP yes", width: 18, align: "right", color: C.green2 },
+        { key: "minutes_recorded", label: "Minutes", width: 18, align: "right", bold: true, format: v => Number(v) ? "YES" : "NO", color: r => Number(r.minutes_recorded) ? C.green2 : C.muted },
       ],
       data.meeting_summary,
       { fontSize: PDF_TYPE.table }
     );
+    infoPanel(ctx, [
+      ["Completed meetings held", String(data?.meetings || 0)],
+      ["Present", String(data?.meeting_attendance?.present || 0)],
+      ["Late", String(data?.meeting_attendance?.late || 0)],
+      ["Absent", String(data?.meeting_attendance?.absent || 0)],
+      ["Excused", String(data?.meeting_attendance?.excused || 0)],
+    ]);
   }
 
   if ((data?.meeting_actions || []).length) {

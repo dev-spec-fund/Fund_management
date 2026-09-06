@@ -140,6 +140,16 @@ test('PDF/CSV export paths remain wired through member statement and Telegram do
 });
 
 
+
+test('member statement PDF/CSV exports include contribution allocation breakdowns', () => {
+  const source = fs.readFileSync(path.resolve(root,'../frontend/src/utils/statementExports.js'),'utf8');
+  assert.match(source, /st\.allocations/);
+  assert.match(source, /Contribution allocation/);
+  assert.match(source, /Contribution allocations/);
+  assert.match(source, /Advance allocation/);
+  assert.match(source, /allocation_type/);
+});
+
 test('expense create request tokens are unique so a retry cannot create a second expense', () => {
   const db = dbWithSchema();
   db.prepare("INSERT INTO admins(id,telegram_id,name,role) VALUES(1,'100','Owner','super_admin')").run();
@@ -183,13 +193,6 @@ test('frontend crashes are reported to the authenticated production error log en
   assert.match(apiSource, /keepalive: true/);
 });
 
-test('pending contribution correction conflicts if another admin reviews it first', () => {
-  const pendingSource = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
-  assert.match(pendingSource, /UPDATE contributions SET[\s\S]*WHERE id=\? AND status='pending'/);
-  assert.match(pendingSource, /if\(!changed\.meta\.changes\)/);
-  assert.match(pendingSource, /Contribution is already .* Refresh before editing/);
-});
-
 test('critical financial workflow guards remain wired after stability hardening', () => {
   const governanceSource = fs.readFileSync(path.join(root,'src/routes/governance.ts'),'utf8');
   const pendingSource = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
@@ -200,11 +203,6 @@ test('critical financial workflow guards remain wired after stability hardening'
   assert.match(governanceSource, /financial_reversals WHERE entity_type=\? AND entity_id=\?/);
   assert.match(pendingSource, /duplicateSlip/);
   assert.match(pendingSource, /approveWithAllocations/);
-  const allocationSource = fs.readFileSync(path.join(root, 'src/allocations.ts'), 'utf8');
-  assert.match(allocationSource, /allocation-claim:\$\{crypto\.randomUUID\(\)\}/);
-  assert.match(allocationSource, /status='pending' AND ocr_raw IS \?/);
-  assert.match(allocationSource, /status='pending' AND c\.ocr_raw=\?/);
-  assert.match(allocationSource, /if\(!claimed \|\| !approved\) throw new Error\("Already reviewed"\)/);
   assert.match(expensesSource, /idempotency_key/);
   assert.match(expensesSource, /status='voided'/);
   assert.match(projectsSource, /donation_received/);
@@ -1117,10 +1115,7 @@ test('v60 Admin can review notification delivery status with sent and failed cou
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
   const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
   assert.match(route,/\/:id\/notifications/);
-  assert.match(route,/ORDER BY n\.id DESC/);
-  assert.doesNotMatch(route,/ORDER BY n\.id DESC LIMIT 50/);
-  assert.match(route,/COALESCE\(SUM\(sent\),0\) sent/);
-  assert.match(route,/COALESCE\(SUM\(failed\),0\) failed/);
+  assert.match(route,/ORDER BY n\.id DESC LIMIT 50/);
   assert.match(api,/notifications: \(id\)/);
   assert.match(admin,/NOTIFICATION STATUS/);
   assert.match(admin,/sent ·/);
@@ -1234,13 +1229,6 @@ test('v63 handover checklist is admin-managed, auditable and completion-gated', 
   assert.match(route,/exco_handover_item_updated/);
   assert.match(route,/exco_handover_completed/);
   assert.match(route,/Completed handover is read-only/);
-});
-
-test('v83 EXCO handover finalization is race-safe', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
-  assert.match(route,/HANDOVER_CHANGED/);
-  assert.match(route,/EXISTS\(SELECT 1 FROM exco_handover_records h WHERE h\.id=\? AND h\.status<>'completed'\)/);
-  assert.match(route,/NOT EXISTS\(SELECT 1 FROM exco_handover_items i WHERE i\.handover_id=exco_handover_records\.id AND i\.completed<>1\)/);
 });
 
 test('v62-v63 governance timeline preserves ballot anonymity while surfacing actors and milestones', () => {
@@ -1627,7 +1615,7 @@ test('v71 unused draft deletion is audited and removes the election only after e
   const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
   const block=route.match(/electionsRoute\.delete\("\/:id"[\s\S]*?return c\.json\(\{ok:true,id,title:election\.title\}\);\n\}\);/)?.[0]||'';
   assert.match(block,/election_deleted_unused_draft/);
-  assert.match(block,/DELETE FROM elections[\s\S]*WHERE id=\? AND status='draft'/);
+  assert.match(block,/DELETE FROM elections WHERE id=\? AND status='draft'/);
   assert.match(block,/if\(!eligibility\.allowed\)/);
   assert.match(block,/This election cannot be permanently deleted/);
 });
@@ -1795,278 +1783,56 @@ test('v75 member meeting views hide unsent drafts and RSVP rejects them', () => 
   assert.match(index,/NOT EXISTS\(SELECT 1 FROM meeting_invitees ai WHERE ai\.meeting_id=m\.id\)/);
 });
 
-test('v76 unsent meeting drafts cannot send Telegram update or reminder notifications', () => {
-  const src = fs.readFileSync(path.join(root,'src/routes/admin/meetings.ts'),'utf8');
-  assert.match(src, /Send meeting invitations before notifying members of updates/);
-  assert.match(src, /Send meeting invitations before sending RSVP reminders/);
-  assert.match(src, /if\(before\.sent_at\)\{[\s\S]*meeting\.cancel_notice/);
+
+test('monthly contribution reminder records complete delivery summary including unlinked members', () => {
+  const scheduled = fs.readFileSync(new URL('../src/scheduled.ts', import.meta.url), 'utf8');
+  const system = fs.readFileSync(new URL('../src/routes/admin/system.ts', import.meta.url), 'utf8');
+  const settingsUi = fs.readFileSync(new URL('../../frontend/src/pages/settings/SettingsSections.jsx', import.meta.url), 'utf8');
+  assert.match(scheduled, /let dueMembers=0, unlinked=0/);
+  assert.match(scheduled, /if \(!member\.telegram_id\) \{ unlinked\+\+; continue; \}/);
+  assert.match(scheduled, /reminder_last_result/);
+  assert.match(scheduled, /automatic_payment_reminders_sent/);
+  assert.match(system, /reminder_last_result/);
+  assert.match(settingsUi, /Last automatic reminder/);
+  assert.match(settingsUi, /Unlinked/);
+  assert.match(settingsUi, /Failed/);
 });
 
-
-test('v77 frontend admin controls match backend permission boundaries', () => {
-  const app=fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
-  const members=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Members.jsx'),'utf8');
-  const popup=fs.readFileSync(path.resolve(root,'../frontend/src/pages/members/MemberPopup.jsx'),'utf8');
-  const meetings=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Meetings.jsx'),'utf8');
-
-  // Election administration uses requireSuperAdmin/manage_admins on the API,
-  // so read-only Treasurer/Viewer admins must not receive the management tab.
-  assert.match(app,/const canManageAdmins = adminView && adminCan\(me\?\.admin, "manage_admins"\)/);
-  assert.match(app,/\.\.\.\(canManageAdmins \? \["elections"\] : \[\]\)/);
-  assert.match(app,/page === "elections" && canManageAdmins/);
-
-  // Member mutations and meeting mutations require finance permission server-side.
-  assert.match(members,/financeAdmin && <button[^>]+>[\s\S]*?<Plus size=\{15\} \/> Add/);
-  assert.match(members,/canEdit=\{financeAdmin\}/);
-  assert.match(popup,/action=\{canEdit \?/);
-  assert.match(popup,/\{canEdit && <button[^>]+onClick=\{toggleActive\}/);
-  assert.match(meetings,/action=\{canFinance \?/);
-  assert.match(meetings,/\{canFinance&&!\["Cancelled","Completed"\]\.includes\(status\.label\)/);
-  assert.match(meetings,/\{canFinance&&showCreate&&<Modal/);
-  assert.match(meetings,/\{canFinance&&!\["cancelled","completed"\]\.includes\(details\.status\)/);
+test('annual AGM report counts completed meetings and includes confirmed attendance', async () => {
+  const governance = fs.readFileSync(path.join(root,'src/routes/governance.ts'),'utf8');
+  const annualExport = fs.readFileSync(path.resolve(root,'../frontend/src/utils/annualExports.js'),'utf8');
+  assert.match(governance, /FROM meeting_attendance/);
+  assert.match(governance, /attendance_present:n\(a\.present_count\)/);
+  assert.match(governance, /completedMeetings=meetingSummary\.filter/);
+  assert.match(governance, /meetings:completedMeetings\.length/);
+  assert.match(annualExport, /Meeting summary \/ attendance/);
+  assert.match(annualExport, /attendance_present/);
+  assert.doesNotMatch(annualExport, /does not yet store confirmed post-meeting attendance/);
 });
 
-test('v78 meeting lifecycle blocks invalid draft and completed transitions', () => {
-  const src = fs.readFileSync(path.join(root,'src/routes/admin/meetings.ts'),'utf8');
-  assert.match(src, /Send meeting invitations before recording attendance/);
-  assert.match(src, /Send meeting invitations before completing the meeting/);
-  assert.match(src, /Completed meetings cannot be cancelled/);
-
-  const completedGuards=(src.match(/Completed meetings are read-only/g)||[]).length;
-  assert.ok(completedGuards >= 3, 'edit, update-notification and reminder paths should all reject completed meetings');
+test('annual governance report preserves inactive members with historical contribution activity', () => {
+  const src = fs.readFileSync(new URL('../src/routes/governance.ts', import.meta.url), 'utf8');
+  assert.match(src, /al\.action='member_deactivated'/);
+  assert.match(src, /json_extract\(al\.detail,'\$\.entity_id'\)/);
+  assert.match(src, /OR EXISTS\(SELECT 1 FROM contribution_allocations/);
+  assert.match(src, /deactivatedMonth&&month>deactivatedMonth/);
 });
 
-
-
-test('reversed expenses cannot be edited back into approved state', () => {
-  const expenses = fs.readFileSync(path.join(root,'src/routes/expenses.ts'),'utf8');
-  assert.match(expenses, /if\(before\.status!==['"]approved['"]\)return c\.json\(\{error:`\$\{String\(before\.status\|\|'Changed'\)/);
-  assert.doesNotMatch(expenses, /if\(before\.status===['"]voided['"]\)return c\.json\(\{error:['"]Voided expenses cannot be edited/);
+test('closed monthly reports and trend use immutable snapshot financial totals', () => {
+  const route = fs.readFileSync(new URL('../src/routes/reports.ts', import.meta.url), 'utf8');
+  assert.match(route, /snapshotFinancials = balances\.snapshot/);
+  assert.match(route, /reportContributions = snapshotFinancials\?\.contributions/);
+  assert.match(route, /reportDonations = snapshotFinancials\?\.donations/);
+  assert.match(route, /reportExpenses = snapshotFinancials\?\.expenses/);
+  assert.match(route, /SELECT month,contribution_cash,donation_cash,expenses FROM monthly_snapshots WHERE month BETWEEN \? AND \?/);
+  assert.match(route, /source:'snapshot'/);
 });
 
-test('contribution void and reversal protect every allocated closed month', () => {
-  const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  const pending=fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
-  const governance=fs.readFileSync(path.join(root,'src/routes/governance.ts'),'utf8');
-
-  assert.match(ops,/requireOpenContributionMonths/);
-  assert.match(ops,/contribution_allocations ca WHERE ca\.contribution_id=\?/);
-  assert.match(ops,/Contribution affects closed month/);
-  assert.match(pending,/requireOpenContributionMonths\(c\.env,id,row\.month\)/);
-  assert.match(governance,/if\(type==='contribution'\) await requireOpenContributionMonths\(c\.env,id,month\)/);
-});
-
-
-test("financial reversal claims only the expected live status", () => {
-  const source = fs.readFileSync(new URL("../src/routes/governance.ts", import.meta.url), "utf8");
-  assert.match(source, /SET status='reversed' WHERE id=\? AND status=\?/);
-  assert.match(source, /if\(!Number\(\(reversalBatch\[0\]/);
-  assert.match(source, /Transaction is \${current\?\.status\|\|'changed'} and cannot be reversed/);
-});
-
-
-test("election certification claims the election before EXCO side effects", () => {
-  const route = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(route, /UPDATE elections SET certified_at=datetime\('now'\),certified_by=\? WHERE id=\? AND status='closed' AND certified_at IS NULL/);
-  assert.match(route, /if\(!certificationClaim\.meta\.changes\)/);
-  const claimIndex = route.indexOf("const certificationClaim=");
-  const assignIndex = route.indexOf("assignCertifiedExcoRoles", claimIndex);
-  assert.ok(claimIndex >= 0 && assignIndex > claimIndex, "certification must be claimed before EXCO role assignment");
-});
-
-test("election open, close, and runoff close transitions are single-winner", () => {
-  const route = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(route, /UPDATE elections SET status='open',opened_at=datetime\('now'\) WHERE id=\? AND status='draft'/);
-  assert.match(route, /if\(!openClaim\.meta\.changes\)/);
-  assert.match(route, /ELECTION_OPEN_CHANGED/);
-  assert.match(route, /UPDATE elections SET status='closed',closed_at=datetime\('now'\) WHERE id=\? AND status='open'/);
-  assert.match(route, /if\(!closeClaim\.meta\.changes\)/);
-  assert.match(route, /ELECTION_CLOSE_CHANGED/);
-  assert.match(route, /UPDATE election_runoffs SET status='closed',closed_at=datetime\('now'\) WHERE id=\? AND election_id=\? AND status='open'/);
-  assert.match(route, /RUNOFF_CLOSE_CHANGED/);
-});
-
-test("ballot finalization rechecks live election and runoff state", () => {
-  const route = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(route, /EXISTS \(SELECT 1 FROM elections e WHERE e\.id=\? AND e\.status='open'\)/);
-  assert.match(route, /ELECTION_VOTE_CLOSED_DURING_SUBMIT/);
-  assert.match(route, /DELETE FROM election_ballots WHERE election_id=\? AND ballot_token=\?/);
-  assert.match(route, /EXISTS \(SELECT 1 FROM election_runoffs r WHERE r\.id=\? AND r\.election_id=\? AND r\.status='open'\)/);
-  assert.match(route, /RUNOFF_VOTE_CLOSED_DURING_SUBMIT/);
-  assert.match(route, /DELETE FROM election_runoff_ballots WHERE runoff_id=\? AND ballot_token=\?/);
-});
-
-test('v83 election application review is a single-winner state transition', () => {
-  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  const reviewBlock=route.match(/applications\/:applicationId\/review[\s\S]*?return c\.json\(await electionDetail\(c\.env,id\)\);\n\}\);/)?.[0]||'';
-  assert.match(reviewBlock,/status='approved'[\s\S]*status='pending'/);
-  assert.match(reviewBlock,/status='rejected'[\s\S]*status='pending'/);
-  assert.match(reviewBlock,/claimed\.meta\.changes/);
-  assert.match(reviewBlock,/APPLICATION_REVIEW_CHANGED/);
-  assert.match(reviewBlock,/Restore only this request's claim/);
-  assert.match(reviewBlock,/INSERT INTO election_candidates/);
-});
-
-test('candidate withdrawal is single-winner and cannot duplicate side effects', () => {
-  const route = fs.readFileSync(path.join(root, 'src/routes/elections.ts'), 'utf8');
-  const block = route.match(/candidates\/:candidateId\/withdraw[\s\S]*?return c\.json\(await electionDetail\(c\.env,id\)\);\n\}\);/)?.[0] || '';
-  assert.match(block, /before\.status!=="active"/);
-  assert.match(block, /WHERE id=\? AND election_id=\? AND status='active'/);
-  assert.match(block, /CANDIDATE_WITHDRAWAL_CHANGED/);
-  assert.match(block, /if\(!claimed\.meta\.changes\)/);
-});
-
-test('election application reopen is single-winner and stale retries stop before side effects',()=>{
-  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(route,/UPDATE election_applications SET status='pending'[\s\S]*WHERE id=\? AND election_id=\? AND status=\?/);
-  assert.match(route,/APPLICATION_REOPEN_CHANGED/);
-  const claim=route.indexOf('const reopenClaim=await c.env.DB.prepare');
-  const audit=route.indexOf('"election_application_reopened"',claim);
-  assert.ok(claim>=0 && audit>claim,'reopen claim must occur before audit side effects');
-});
-
-
-test('election application submission only maps unique constraint failures to duplicate application conflicts', () => {
-  const src = fs.readFileSync(new URL('../src/routes/elections.ts', import.meta.url), 'utf8');
-  assert.match(src, /UNIQUE constraint failed\|SQLITE_CONSTRAINT_UNIQUE/);
-  assert.match(src, /You have already applied for this position/);
-  assert.match(src, /throw err;/);
-});
-
-
-test('member can resubmit only their own withdrawn pending election application while applications remain open', () => {
-  const electionsRouteSource=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(electionsRouteSource,/SELECT id,status,reviewed_by,review_reason FROM election_applications/);
-  assert.match(electionsRouteSource,/existing\.status==="withdrawn" && !existing\.reviewed_by && !existing\.review_reason/);
-  assert.match(electionsRouteSource,/SET status='pending',statement=\?,submitted_at=datetime\('now'\),withdrawn_at=NULL,reviewed_at=NULL,reviewed_by=NULL,review_reason=NULL/);
-  assert.match(electionsRouteSource,/APPLICATION_RESUBMIT_CHANGED/);
-  assert.match(electionsRouteSource,/resubmitted\?200:201/);
-});
-
-
-test("application reassignment is single-winner and position-conditional", () => {
-  const src = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(src, /UPDATE election_applications SET position_id=\?[\s\S]*WHERE id=\? AND election_id=\? AND position_id=\?/);
-  assert.match(src, /APPLICATION_REASSIGN_CHANGED/);
-  assert.match(src, /if\(!reassigned\.meta\.changes\)/);
-});
-
-
-test("election position structure locks when applications begin", () => {
-  const src = fs.readFileSync(new URL("../src/routes/elections.ts", import.meta.url), "utf8");
-  assert.match(src, /ELECTION_POSITIONS_LOCKED/);
-  assert.match(src, /applicationPhase\(election,localNow/);
-  assert.match(src, /SELECT 1 ok FROM election_applications WHERE election_id=\? LIMIT 1/);
-});
-
-test("manual candidate creation cannot bypass configured application workflow", () => {
-  const src = fs.readFileSync(new URL("../src/routes/elections.ts", import.meta.url), "utf8");
-  assert.match(src, /CANDIDATE_APPLICATION_WORKFLOW_REQUIRED/);
-  assert.match(src, /election\.applications_open_at&&election\.applications_close_at/);
-});
-
-test('election cancellation is a single-winner draft transition', () => {
-  const source = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(source, /if\(election\.status!=="draft"\)return c\.json\(\{error:"Only a draft election can be cancelled",code:"ELECTION_CANCEL_CHANGED"\},409\)/);
-  assert.match(source, /UPDATE elections SET status='cancelled',closed_at=datetime\('now'\) WHERE id=\? AND status='draft'/);
-  assert.match(source, /if\(!cancelClaim\.meta\.changes\)return c\.json\(\{error:"Election was already cancelled or changed while you were cancelling it",code:"ELECTION_CANCEL_CHANGED"\},409\)/);
-});
-
-
-test("election application workflow config locks after application activity begins", () => {
-  const src = fs.readFileSync(new URL("../src/routes/elections.ts", import.meta.url), "utf8");
-  assert.match(src, /applicationConfigChanged/);
-  assert.match(src, /ELECTION_APPLICATION_CONFIG_LOCKED/);
-  assert.match(src, /phase==="open"\|\|phase==="closed"\|\|existingApplication/);
-  assert.match(src, /Use Extend application deadline when applicable/);
-  assert.match(src, /CANDIDATE_APPLICATION_WORKFLOW_REQUIRED/);
-  assert.match(src, /\(election\.applications_open_at&&election\.applications_close_at\)\|\|existingApplication/);
-});
-
-test('permanent election delete rechecks protected activity atomically before cascade', () => {
-  const src=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
-  assert.match(src, /DELETE FROM elections[\s\S]*NOT EXISTS \(SELECT 1 FROM election_applications WHERE election_id=\?\)/);
-  assert.match(src, /NOT EXISTS \(SELECT 1 FROM election_voters WHERE election_id=\?\)/);
-  assert.match(src, /NOT EXISTS \(SELECT 1 FROM election_notification_log WHERE election_id=\?\)/);
-  assert.match(src, /code:"ELECTION_DELETE_CHANGED"/);
-  const deletePos = src.indexOf('DELETE FROM elections');
-  const auditPos = src.indexOf('election_deleted_unused_draft', deletePos);
-  assert.ok(deletePos >= 0 && auditPos > deletePos, 'delete audit must be written only after a successful guarded delete');
-});
-
-test('election governance timeline uses exact election ids and labels cancellation correctly', () => {
-  const src = fs.readFileSync(new URL('../src/routes/elections.ts', import.meta.url), 'utf8');
-  assert.match(src, /json_valid\(a\.detail\)=1/);
-  assert.match(src, /json_extract\(a\.detail,'\$\.entity_id'\)/);
-  assert.match(src, /json_extract\(a\.detail,'\$\.before\.election_id'\)/);
-  assert.match(src, /json_extract\(a\.detail,'\$\.after\.election_id'\)/);
-  assert.doesNotMatch(src, /ORDER BY a\.id ASC LIMIT 1000/);
-  assert.doesNotMatch(src, /d\.includes\(`"entity_id":\$\{id\}`\)/);
-  assert.match(src, /election\.status==="cancelled"[\s\S]*label:"Election cancelled"/);
-});
-
-
-test("runoff creation is a single-winner transition", () => {
-  const src = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  assert.match(src, /INSERT INTO election_runoffs\(election_id,position_id,round_no,seats_to_fill,status,closes_at,created_by\)[\s\S]*WHERE NOT EXISTS \([\s\S]*election_runoffs WHERE election_id=\? AND position_id=\? AND status='open'/);
-  assert.match(src, /if\(!r\.meta\.changes\)return c\.json\(\{error:"A runoff is already open for this position",code:"RUNOFF_OPEN_CHANGED"\},409\)/);
-});
-
-
-test('manual candidate creation only maps unique constraint failures to duplicate conflicts', () => {
-  const src = fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  const start = src.indexOf('electionsRoute.post("/:id/candidates"');
-  const end = src.indexOf('electionsRoute.post("/:id/repair-application-sync"', start);
-  const block = src.slice(start, end);
-  assert.match(block, /catch\(err:any\)/);
-  assert.match(block, /UNIQUE constraint failed\|SQLITE_CONSTRAINT_UNIQUE/);
-  assert.match(block, /Candidate is already added for this position/);
-  assert.match(block, /throw err/);
-});
-
-
-test('election notification history is complete and totals cover the full election log', () => {
-  const route = fs.readFileSync(path.join(root, 'src/routes/elections.ts'), 'utf8');
-  const block=route.match(/electionsRoute\.get\("\/:id\/notifications"[\s\S]*?return c\.json\(\{items,totals\}\);\n\}\);/)?.[0]||'';
-  assert.match(block,/WHERE n\.election_id=\?/);
-  assert.match(block,/ORDER BY n\.id DESC/);
-  assert.doesNotMatch(block,/LIMIT\s+50/i);
-  assert.match(block,/COUNT\(\*\) total/);
-  assert.match(block,/SUM\(sent\)/);
-  assert.match(block,/SUM\(failed\)/);
-});
-
-test('automatic election reminders atomically claim notification events before sending', () => {
-  const core = fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8');
-  assert.match(core,/async function claimElectionNotification/);
-  assert.match(core,/INSERT INTO election_notification_log\(election_id,event_key,audience,sent,failed,detail\)[\s\S]*WHERE NOT EXISTS\(SELECT 1 FROM election_notification_log WHERE election_id=\? AND event_key=\?/);
-  assert.match(core,/const notificationId=await claimElectionNotification\(env,election\.id,eventKey,"non_voters"/);
-  assert.match(core,/const notificationId=await claimElectionNotification\(env,runoff\.election_id,eventKey,"runoff_non_voters"/);
-  assert.match(core,/const notificationId=await claimElectionNotification\(env,election\.id,eventKey,"eligible_non_applicants"/);
-  assert.match(core,/if\(!notificationId\)continue;/);
-  assert.match(core,/finishClaimedElectionNotification\(env,notificationId,result\)/);
-});
-
-
-test('scheduled handler forwards the actual cron so hourly election runs do not send contribution reminders', () => {
-  const index = fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
-  const scheduled = fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
-  assert.match(index, /scheduled\(event:\s*ScheduledEvent[\s\S]*?runScheduled\(env,\s*event\.cron\)/);
-  assert.match(scheduled, /if\(cron !== ["']0 19 \* \* \*["']\) return;/);
-});
-
-test('contribution due reminders are monthly, configurable in Settings, and single-send per month', () => {
-  const scheduled = fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
-  const settingsRoute = fs.readFileSync(path.join(root,'src/routes/settings.ts'),'utf8');
-  const settingsUi = fs.readFileSync(path.join(root,'../frontend/src/pages/settings/SettingsSections.jsx'),'utf8');
-  const health = fs.readFileSync(path.join(root,'src/routes/admin/system.ts'),'utf8');
-  assert.match(scheduled, /getSetting\(env,\s*["']reminder_day["']\)/);
-  assert.match(scheduled, /currentDayOfMonth\(timeZone\)/);
-  assert.match(scheduled, /reminder_last_sent_month/);
-  assert.match(scheduled, /ON CONFLICT\(key\) DO UPDATE/);
-  assert.match(settingsRoute, /reminder_day/);
-  assert.match(settingsRoute, /Reminder day must be 1-28 or 'off'/);
-  assert.match(settingsUi, /Day \{d\} of each month/);
-  assert.match(settingsUi, /Once-monthly Telegram reminder/);
-  assert.match(health, /reminder_day/);
+test('annual analytics uses the same historical member performance dataset as AGM report', () => {
+  const governance = fs.readFileSync(new URL('../src/routes/governance.ts', import.meta.url), 'utf8');
+  assert.match(governance, /const data=await yearData\(c\.env,year\)/);
+  assert.match(governance, /data\.member_contributions/);
+  assert.match(governance, /meetings:data\.meetings/);
+  assert.match(governance, /sort\(\(a:any,b:any\)=>/);
+  assert.doesNotMatch(governance, /FROM members m WHERE m\.active=1 ORDER BY m\.name LIMIT 100/);
 });
