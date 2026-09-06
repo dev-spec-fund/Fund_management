@@ -10,7 +10,7 @@ route.get('/health', requireAdmin, async c => {
   await ensureOperationalSchema(c.env);
   const admin=c.get('admin')!; const full=admin.role==='owner'||admin.role==='super_admin';
   const out:any={checked_at:new Date().toISOString(),db:{ok:false},telegram:{ok:false},webhook:{ok:false},ai:{ok:!!c.env.AI}};
-  if(full){out.mini_app_url=await getSetting(c.env,'mini_app_url');out.reminder_schedule=await getSetting(c.env,'reminder_schedule');out.month=currentMonth(c.env.FUND_TIMEZONE||'Indian/Maldives');}
+  if(full){out.mini_app_url=await getSetting(c.env,'mini_app_url');out.reminder_day=(await getSetting(c.env,'reminder_day'))||'5';out.month=currentMonth(c.env.FUND_TIMEZONE||'Indian/Maldives');}
   try{const x=await c.env.DB.prepare('SELECT 1 ok').first<any>();out.db={ok:Number(x?.ok)===1}}catch(e){await safeLogError(c.env,'health.db',e)}
   try{const r=await fetch(`https://api.telegram.org/bot${c.env.TELEGRAM_BOT_TOKEN}/getMe`);const j:any=await r.json();out.telegram=full?{ok:!!j.ok,username:j.result?.username||null}:{ok:!!j.ok}}catch(e){await safeLogError(c.env,'health.telegram',e)}
   try{const r=await fetch(`https://api.telegram.org/bot${c.env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`);const j:any=await r.json();out.webhook=full?{ok:!!j.ok,url:j.result?.url||'',pending:j.result?.pending_update_count||0,last_error:j.result?.last_error_message||null}:{ok:!!j.ok}}catch(e){await safeLogError(c.env,'health.webhook',e)}

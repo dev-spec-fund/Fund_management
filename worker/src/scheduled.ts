@@ -7,7 +7,7 @@ import { contributionDueForMonth } from "./contributionRates";
 import { cleanupContributionReviewMessages } from "./contributionReviewMessages";
 import { processElectionLifecycle } from "./elections/core";
 
-/** Runs daily and evaluates reminder dates in FUND_TIMEZONE (Indian/Maldives by default). */
+/** Runs scheduled jobs. Contribution due reminders are sent once per month on the configured reminder_day in FUND_TIMEZONE. */
 export async function runScheduled(env: Env, cron = "0 19 * * *") {
   try {
     // Governance lifecycle runs independently from contribution reminder settings.
@@ -17,12 +17,23 @@ export async function runScheduled(env: Env, cron = "0 19 * * *") {
     // Keep contribution reminders on the original once-daily cron. The hourly
     // trigger exists only so election application/voting lifecycle is timely.
     if(cron !== "0 19 * * *") return;
-    const reminderDay = await getSetting(env, "reminder_day");
-    if (!reminderDay || reminderDay === "off") return;
+    const reminderDay = (await getSetting(env, "reminder_day")) || "5";
+    if (reminderDay === "off") return;
     const timeZone = env.FUND_TIMEZONE || "Indian/Maldives";
     if (String(Number(currentDayOfMonth(timeZone))) !== String(Number(reminderDay))) return;
     const month = currentMonth(timeZone);
     if (await isMonthClosed(env, month)) return;
+
+    // Claim this month before sending so a retried/overlapping daily cron cannot
+    // send the same monthly contribution reminder twice. Manual reminders remain
+    // available from Settings/Members when an administrator intentionally wants
+    // to send another message.
+    const claim = await env.DB.prepare(`
+      INSERT INTO settings(key,value) VALUES('reminder_last_sent_month',?)
+      ON CONFLICT(key) DO UPDATE SET value=excluded.value
+      WHERE settings.value<>excluded.value
+    `).bind(month).run();
+    if (!claim.meta.changes) return;
 
     const branding = await getBranding(env);
     const members = await env.DB.prepare(`

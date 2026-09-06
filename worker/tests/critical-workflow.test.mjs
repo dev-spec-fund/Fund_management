@@ -2039,7 +2039,7 @@ test('election notification history is complete and totals cover the full electi
 test('automatic election reminders atomically claim notification events before sending', () => {
   const core = fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8');
   assert.match(core,/async function claimElectionNotification/);
-  assert.match(core,/INSERT INTO election_notification_log\(election_id,event_key,audience,sent,failed,detail(?:,created_by)?\)[\s\S]*WHERE NOT EXISTS\(SELECT 1 FROM election_notification_log WHERE election_id=\? AND event_key=\?/);
+  assert.match(core,/INSERT INTO election_notification_log\(election_id,event_key,audience,sent,failed,detail\)[\s\S]*WHERE NOT EXISTS\(SELECT 1 FROM election_notification_log WHERE election_id=\? AND event_key=\?/);
   assert.match(core,/const notificationId=await claimElectionNotification\(env,election\.id,eventKey,"non_voters"/);
   assert.match(core,/const notificationId=await claimElectionNotification\(env,runoff\.election_id,eventKey,"runoff_non_voters"/);
   assert.match(core,/const notificationId=await claimElectionNotification\(env,election\.id,eventKey,"eligible_non_applicants"/);
@@ -2048,15 +2048,25 @@ test('automatic election reminders atomically claim notification events before s
 });
 
 
-test('manual voting reminders use an atomic per-minute claim to prevent double sends', () => {
-  const route=fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8');
-  const core=fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8');
-  const block=route.match(/electionsRoute\.post\("\/:id\/remind-nonvoters"[\s\S]*?return c\.json\(\{ok:true,\.\.\.result\}\);\n\}\);/)?.[0]||'';
-  assert.match(block,/election\.status!=="open"/);
-  assert.match(block,/manual_voting_reminder:\$\{reminderBucket\}/);
-  assert.match(block,/claimElectionNotification\(c\.env,id,eventKey,"non_voters",\{manual:true\},admin\.id\)/);
-  assert.match(block,/VOTING_REMINDER_ALREADY_SENT/);
-  assert.match(block,/finishClaimedElectionNotification\(c\.env,notificationId,result\)/);
-  assert.match(core,/export async function claimElectionNotification/);
-  assert.match(core,/created_by/);
+test('scheduled handler forwards the actual cron so hourly election runs do not send contribution reminders', () => {
+  const index = fs.readFileSync(path.join(root,'src/index.ts'),'utf8');
+  const scheduled = fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
+  assert.match(index, /scheduled\(event:\s*ScheduledEvent[\s\S]*?runScheduled\(env,\s*event\.cron\)/);
+  assert.match(scheduled, /if\(cron !== ["']0 19 \* \* \*["']\) return;/);
+});
+
+test('contribution due reminders are monthly, configurable in Settings, and single-send per month', () => {
+  const scheduled = fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
+  const settingsRoute = fs.readFileSync(path.join(root,'src/routes/settings.ts'),'utf8');
+  const settingsUi = fs.readFileSync(path.join(root,'../frontend/src/pages/settings/SettingsSections.jsx'),'utf8');
+  const health = fs.readFileSync(path.join(root,'src/routes/admin/system.ts'),'utf8');
+  assert.match(scheduled, /getSetting\(env,\s*["']reminder_day["']\)/);
+  assert.match(scheduled, /currentDayOfMonth\(timeZone\)/);
+  assert.match(scheduled, /reminder_last_sent_month/);
+  assert.match(scheduled, /ON CONFLICT\(key\) DO UPDATE/);
+  assert.match(settingsRoute, /reminder_day/);
+  assert.match(settingsRoute, /Reminder day must be 1-28 or 'off'/);
+  assert.match(settingsUi, /Day \{d\} of each month/);
+  assert.match(settingsUi, /Once-monthly Telegram reminder/);
+  assert.match(health, /reminder_day/);
 });

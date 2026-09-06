@@ -338,7 +338,7 @@ app.get("/", async (c) => { const branding=await getBranding(c.env); return c.te
 
 export default {
   fetch: app.fetch,
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runScheduled(env));
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runScheduled(env, event.cron));
   },
 };

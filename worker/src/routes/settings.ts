@@ -8,7 +8,7 @@ import { boundedText, telegramId } from "../validation";
 export const settingsRoute = new Hono<AppEnv>();
 
 const FINANCE_SETTINGS = new Set(["reminder_day","notify_new_slip","notify_member_deactivated","notify_budget_exceeded","notify_monthly_report"]);
-const SUPER_SETTINGS = new Set(["fund_name","short_name","default_monthly_amount","first_month_contribution_rule","mini_app_url","reminder_schedule","show_projects_to_members"]);
+const SUPER_SETTINGS = new Set(["fund_name","short_name","default_monthly_amount","first_month_contribution_rule","mini_app_url","show_projects_to_members"]);
 const ROLE_PERMISSIONS = ["read","finance","manage_admins","close_month","backup"] as const;
 const BUILTIN_ROLES = new Set(["super_admin","treasurer","viewer"]);
 

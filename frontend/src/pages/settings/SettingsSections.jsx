@@ -77,7 +77,7 @@ export function GeneralSettingsSection(ctx) {
         <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}}>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:"var(--primary-text)"}}>Automatic reminders</div>
-            <div style={{fontSize:10,color:"var(--soft)",marginTop:3}}>Telegram reminder to unpaid and partially paid members.</div>
+            <div style={{fontSize:10,color:"var(--soft)",marginTop:3}}>Once-monthly Telegram reminder to unpaid and partially paid members.</div>
           </div>
           <button type="button" disabled={!financeAdmin} onClick={()=>financeAdmin&&saveSetting("reminder_day",settings.reminder_day==="off"?"5":"off")}
             aria-label="Toggle automatic reminders"
@@ -92,7 +92,7 @@ export function GeneralSettingsSection(ctx) {
             className="sans" style={{width:"100%",border:"1px solid var(--border-strong)",borderRadius:9,padding:"10px 11px",fontSize:13,background:"var(--bg)"}}>
             {Array.from({length:28},(_,i)=>String(i+1)).map(d=><option key={d} value={d}>Day {d} of each month</option>)}
           </select>
-          <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:6}}>The daily scheduler checks at 12:00 AM Maldives time and sends only to members with an outstanding balance.</div>
+          <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:6}}>Sent once per month on the selected day, to members who still have an outstanding balance. Automatic reminders will not repeat again during the same month.</div>
         </>}
 
         {settings.reminder_day==="off" && <div className="sans" style={{fontSize:11,color:"var(--soft)",background:"var(--bg)",borderRadius:9,padding:10}}>Automatic reminders are off. Manual reminders are still available.</div>}
@@ -331,8 +331,8 @@ export function SystemSettingsSection(ctx) {
             </div>
           )}
           <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0"}}>
-            <span style={{color:"var(--muted)"}}>Reminder check</span>
-            <b>{health.reminder_schedule ? "Daily" : "Not set"}</b>
+            <span style={{color:"var(--muted)"}}>Contribution due reminder</span>
+            <b>{health.reminder_day === "off" ? "Off" : `Monthly · Day ${health.reminder_day || 5}`}</b>
           </div>
         </div> : <div className="sans" style={{fontSize:12,color:"var(--soft)"}}>Checking…</div>}
         <button type="button" onClick={()=>api.admin.health().then(setHealth).catch(e=>setMessage(e.message))} style={{...compactBtn,marginTop:8}}>Refresh status</button>
