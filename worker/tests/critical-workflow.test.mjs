@@ -7,6 +7,14 @@ import { DatabaseSync } from 'node:sqlite';
 const root = path.resolve(import.meta.dirname, '..');
 const schema = fs.readFileSync(path.join(root, 'schema.sql'), 'utf8');
 
+function electionSource() {
+  const routeDir = path.join(root, 'src/routes/elections');
+  const modular = fs.existsSync(routeDir)
+    ? fs.readdirSync(routeDir).filter((name) => name.endsWith('.ts')).sort().map((name) => fs.readFileSync(path.join(routeDir, name), 'utf8')).join('\n')
+    : '';
+  return fs.readFileSync(path.join(root, 'src/routes/elections.ts'), 'utf8') + modular + fs.readFileSync(path.join(root, 'src/elections/core.ts'), 'utf8');
+}
+
 function frontendCss() {
   const frontend = path.resolve(root, '../frontend/src');
   return [
@@ -571,7 +579,7 @@ test('EXCO elections use secret ballot storage separated from voter identity', (
   assert.ok(!ballotCols.has("member_id"),"secret ballots must not contain member_id");
   db.close();
 
-  const elections=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const elections=electionSource();
   assert.match(elections,/INSERT OR IGNORE INTO election_voters/);
   assert.match(elections,/crypto\.randomUUID\(\)/);
   assert.match(elections,/vote_claim IS NULL/);
@@ -607,7 +615,7 @@ test('database backup includes election governance tables and schema version 29'
 
 
 test('election integrity adds automatic lifecycle, withdrawal, reminders, certification and turnout percent', () => {
-  const elections=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const elections=electionSource();
   const scheduled=fs.readFileSync(path.join(root,'src/scheduled.ts'),'utf8');
   const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
 
@@ -627,7 +635,7 @@ test('election integrity adds automatic lifecycle, withdrawal, reminders, certif
 });
 
 test('uncertified election results stay hidden from members and ties are not auto elected', () => {
-  const elections=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const elections=electionSource();
   const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
 
@@ -656,7 +664,7 @@ test('election integrity migration advances schema to 30', () => {
 
 
 test('election voting rechecks lifecycle before accepting ballots and reminders require super admin', () => {
-  const elections=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const elections=electionSource();
   assert.match(elections,/post\("\/:id\/vote", async c=>\{\n  await processElectionLifecycle\(c\.env\)/);
   assert.match(elections,/remind-nonvoters", requireSuperAdmin/);
   assert.match(elections,/candidates\/:candidateId\/withdraw", requireSuperAdmin/);
@@ -672,7 +680,7 @@ test('candidate application stage is migration controlled and separated from vot
   for(const col of ["election_id","position_id","member_id","statement","status","review_reason"]) assert.ok(appCols.has(col));
   db.close();
 
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/applicationPhase/);
   assert.match(route,/Candidate applications are not open/);
   assert.match(route,/No applications are waiting for review/);
@@ -693,7 +701,7 @@ test('member can self-apply for election positions and admin can review applicat
 });
 
 test('ordinary members only receive their own election application records', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/detail\.applications\.filter/);
   assert.match(route,/Number\(a\.member_id\)===Number\(member\.id\)/);
   assert.match(route,/visibleApplications/);
@@ -705,7 +713,7 @@ test('ordinary members only receive their own election application records', () 
 
 
 test('all registered active members can apply for any election position', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
 
@@ -724,7 +732,7 @@ test('all registered active members can apply for any election position', () => 
 });
 
 test('candidate application Telegram events remain active after eligibility simplification', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/submitted and is awaiting review/);
   assert.match(route,/application has been <b>approved<\/b>/);
   assert.match(route,/application was <b>not approved<\/b>/);
@@ -748,7 +756,7 @@ test('v50 runoff tables and EXCO role history are migration controlled', () => {
 });
 
 test('tie results require anonymous runoff and block certification until resolved', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/calculateElectionResults/);
   assert.match(route,/unresolved/);
   assert.match(route,/Resolve all tied seats with runoff voting before certification/);
@@ -764,7 +772,7 @@ test('tie results require anonymous runoff and block certification until resolve
 });
 
 test('certification automatically archives old EXCO and assigns elected roles without admin permissions', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/assignCertifiedExcoRoles/);
   assert.match(route,/UPDATE exco_role_assignments SET ended_at/);
   assert.match(route,/INSERT OR IGNORE INTO exco_role_assignments/);
@@ -802,14 +810,14 @@ test('member APIs expose current and historical EXCO positions', () => {
 
 
 test('members can see draft elections during configured application stage', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/e\.status='draft' AND e\.applications_open_at IS NOT NULL AND e\.applications_close_at IS NOT NULL/);
   assert.match(route,/detail\.status==="draft" && !\(detail\.applications_open_at && detail\.applications_close_at\)/);
   assert.doesNotMatch(route,/if\(!admin && detail\.status==="draft"\)return c\.json/);
 });
 
 test('true admin-only election drafts remain hidden from members', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/Election not available/);
   assert.match(route,/applications_open_at/);
   assert.match(route,/applications_close_at/);
@@ -817,7 +825,7 @@ test('true admin-only election drafts remain hidden from members', () => {
 
 
 test('admin can extend candidate application deadline before voting opens', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
 
@@ -830,7 +838,7 @@ test('admin can extend candidate application deadline before voting opens', () =
 });
 
 test('admin candidate withdrawal synchronizes approved member application status', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   const member=fs.readFileSync(path.resolve(root,'../frontend/src/pages/member/MemberElections.jsx'),'utf8');
 
   assert.match(route,/UPDATE election_applications/);
@@ -841,14 +849,14 @@ test('admin candidate withdrawal synchronizes approved member application status
 });
 
 test('application deadline extension cannot move beyond voting opening time', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/Application deadline must remain on or before voting opens/);
   assert.match(route,/New application deadline must be in the future/);
 });
 
 
 test('v53 applications can be reopened before voting and reapproved candidates reactivate cleanly', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/applications\/:applicationId\/reopen/);
   assert.match(route,/Only rejected or withdrawn applications can be reopened/);
   assert.match(route,/election_application_reopened/);
@@ -857,7 +865,7 @@ test('v53 applications can be reopened before voting and reapproved candidates r
 });
 
 test('v53 admin can reassign an application before voting while keeping candidate records synchronized', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
 
@@ -885,7 +893,7 @@ test('v53 application UI provides readiness summary and explicit member applicat
 });
 
 test('v53 duplicate application safeguards remain position scoped', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   const schema=fs.readFileSync(path.join(root,'schema.sql'),'utf8');
   assert.match(route,/An active application already exists for this member and position/);
   assert.match(route,/This member already has an application for the selected position/);
@@ -894,7 +902,7 @@ test('v53 duplicate application safeguards remain position scoped', () => {
 
 
 test('v54 pre-vote readiness is enforced server side for both manual and automatic opening', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/evaluateElectionReadiness/);
   assert.match(route,/Election is not ready to open voting/);
   assert.match(route,/const readiness=await evaluateElectionReadiness\(env,election\)/);
@@ -903,7 +911,7 @@ test('v54 pre-vote readiness is enforced server side for both manual and automat
 });
 
 test('v54 readiness checks application review, position candidates, synchronization, times and voters', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   for(const key of [
     'applications_closed',
     'applications_reviewed',
@@ -932,7 +940,7 @@ test('v54 admin UI disables Open Voting until server checklist passes', () => {
 
 
 test('v55 exposes read-only certified election governance summary without ballot identities', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/buildElectionSummary/);
   assert.match(route,/\/:id\/summary/);
   assert.match(route,/Official election summary is available after certification/);
@@ -960,7 +968,7 @@ test('v55 admin and member UIs render certified election summary records', () =>
 
 
 test('v56 certified election archive lists only certified elections with turnout and role metadata', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/get\("\/archive"/);
   assert.match(route,/WHERE e\.certified_at IS NOT NULL/);
   assert.match(route,/assigned_roles/);
@@ -994,7 +1002,7 @@ test('v56 admin and member election archive surfaces certified history and admin
 
 
 test('v57 auto-repair synchronizes approved and withdrawn applications with candidate records', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/synchronizeElectionApplications/);
   assert.match(route,/status='active',withdrawn_at=NULL,withdrawn_by=NULL,withdrawal_reason=NULL/);
   assert.match(route,/INSERT INTO election_candidates/);
@@ -1004,7 +1012,7 @@ test('v57 auto-repair synchronizes approved and withdrawn applications with cand
 });
 
 test('v57 readiness flags sync failures as repairable and opening self-heals legacy mismatches', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/approved_candidates_linked[\s\S]*?repairable:true/);
   assert.match(route,/withdrawals_synced[\s\S]*?repairable:true/);
   assert.match(route,/await synchronizeElectionApplications\(c\.env,id,admin\.id\)/);
@@ -1023,7 +1031,7 @@ test('v57 admin checklist offers Fix automatically and refreshes readiness after
 
 
 test('v58 voter snapshot permanently locks election setup mutations', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/(?:export )?async function electionSetupLocked/);
   assert.match(route,/SELECT 1 ok FROM election_voters WHERE election_id=\? LIMIT 1/);
   assert.match(route,/Election setup is locked after the voter snapshot is created/);
@@ -1034,7 +1042,7 @@ test('v58 voter snapshot permanently locks election setup mutations', () => {
 });
 
 test('v58 candidate and application management are draft-only once voter snapshot exists', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   const withdrawBlock=route.match(/candidates\/:candidateId\/withdraw[\s\S]*?return c\.json\(await electionDetail\(c\.env,id\)\);\n\}\);/)?.[0]||'';
   assert.match(withdrawBlock,/electionSetupLocked/);
   assert.doesNotMatch(withdrawBlock,/\["draft","open"\]/);
@@ -1057,14 +1065,14 @@ test('v58 open voting UI is read-only and no longer exposes candidate withdrawal
 });
 
 test('v58 election detail exposes setup_locked from status or voter snapshot', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/setup_locked:setupLocked/);
   assert.match(route,/const setupLocked=election\.status!=="draft"\|\|eligible>0/);
 });
 
 
 test('v59 new election applications immediately notify admins in Telegram', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/notifyAdmins/);
   assert.match(route,/New EXCO application/);
   assert.match(route,/Pending Review/);
@@ -1075,7 +1083,7 @@ test('v59 new election applications immediately notify admins in Telegram', () =
 });
 
 test('v59 election application notification safely escapes member supplied text', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/esc\(member\.name\)/);
   assert.match(route,/esc\(position\.title\)/);
   assert.match(route,/esc\(election\.title\)/);
@@ -1094,7 +1102,7 @@ test('v60 election notification delivery log is migration controlled', () => {
 });
 
 test('v60 logs voting, reminder, runoff, certification and application notification delivery', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   for(const event of [
     'applications_closing_24h',
     'voting_opened',
@@ -1111,7 +1119,7 @@ test('v60 logs voting, reminder, runoff, certification and application notificat
 });
 
 test('v60 Admin can review notification delivery status with sent and failed counts', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
   const api=fs.readFileSync(path.resolve(root,'../frontend/src/api.js'),'utf8');
   assert.match(route,/\/:id\/notifications/);
@@ -1139,7 +1147,7 @@ test('v60 Member App exposes clear election lifecycle stages and next actions', 
 });
 
 test('v60 election list includes own application status and open-runoff state', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/my_application_status/);
   assert.match(route,/open_runoffs/);
   assert.match(route,/application_phase:applicationPhase/);
@@ -1147,7 +1155,7 @@ test('v60 election list includes own application status and open-runoff state', 
 
 
 test('v61 admin election dashboard aggregates operational election state', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/get\("\/dashboard"/);
   assert.match(route,/pending_applications/);
   assert.match(route,/open_voting/);
@@ -1158,7 +1166,7 @@ test('v61 admin election dashboard aggregates operational election state', () =>
 });
 
 test('v61 dashboard surfaces actionable election warnings', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   for(const key of [
     'pending_applications',
     'readiness',
@@ -1185,7 +1193,7 @@ test('v61 admin UI renders at-a-glance election monitoring cards', () => {
 });
 
 test('v61 dashboard reuses notification log and readiness as authoritative sources', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   const block=route.match(/electionsRoute\.get\("\/dashboard"[\s\S]*?return c\.json\(\{[\s\S]*?\n\}\);/)?.[0]||'';
   assert.match(block,/election_notification_log/);
   assert.match(block,/evaluateElectionReadiness/);
@@ -1208,7 +1216,7 @@ test('v63 EXCO term and handover schema is migration controlled', () => {
 });
 
 test('v63 certification starts EXCO term and creates structured handover without granting admin permissions', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/createExcoTermHandover/);
   assert.match(route,/HANDOVER_CHECKLIST/);
   assert.match(route,/Finance records reviewed/);
@@ -1222,7 +1230,7 @@ test('v63 certification starts EXCO term and creates structured handover without
 });
 
 test('v63 handover checklist is admin-managed, auditable and completion-gated', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/exco\/handover\/:handoverId\/items\/:itemId/);
   assert.match(route,/exco\/handover\/:handoverId\/complete/);
   assert.match(route,/Complete every handover checklist item before finalizing handover/);
@@ -1232,7 +1240,7 @@ test('v63 handover checklist is admin-managed, auditable and completion-gated', 
 });
 
 test('v62-v63 governance timeline preserves ballot anonymity while surfacing actors and milestones', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/\/:id\/timeline/);
   assert.match(route,/Election created/);
   assert.match(route,/Voting opened/);
@@ -1278,7 +1286,7 @@ test('v64 EXCO responsibility workboard schema is migration controlled', () => {
 });
 
 test('v64 EXCO responsibilities are term-linked and owner-restricted to current committee', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/\/exco\/workboard/);
   assert.match(route,/\/exco\/responsibilities/);
   assert.match(route,/Owner must be a member of the current EXCO/);
@@ -1288,7 +1296,7 @@ test('v64 EXCO responsibilities are term-linked and owner-restricted to current 
 });
 
 test('v64 workboard exposes overdue upcoming active and completed responsibility counts', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/overdue:/);
   assert.match(route,/upcoming:/);
   assert.match(route,/in_progress/);
@@ -1297,7 +1305,7 @@ test('v64 workboard exposes overdue upcoming active and completed responsibility
 });
 
 test('v64 responsibility history records status transitions without granting admin permissions', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/exco_responsibility_history/);
   assert.match(route,/from_status/);
   assert.match(route,/to_status/);
@@ -1571,7 +1579,7 @@ test('stability audit: D1 backup covers every application table in schema', () =
 });
 
 test('stability audit: election notification delivery does not count Telegram null failures as sent', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/r\.status==="fulfilled"&&r\.value\?\.ok===true/);
   assert.match(route,/failed:results\.length-sent/);
 });
@@ -1585,7 +1593,7 @@ test('stability audit: meeting action notification failures are persisted to err
 
 
 test('v71 only Super Admin can permanently delete an unused draft election', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/electionsRoute\.delete\("\/:id", requireSuperAdmin/);
   assert.match(route,/electionDeleteEligibility/);
   assert.match(route,/Only draft elections can be permanently deleted/);
@@ -1593,7 +1601,7 @@ test('v71 only Super Admin can permanently delete an unused draft election', () 
 });
 
 test('v71 permanent election deletion is blocked after any real election activity', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   for(const table of [
     'election_applications',
     'election_voters',
@@ -1612,10 +1620,10 @@ test('v71 permanent election deletion is blocked after any real election activit
 });
 
 test('v71 unused draft deletion is audited and removes the election only after eligibility check', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   const block=route.match(/electionsRoute\.delete\("\/:id"[\s\S]*?return c\.json\(\{ok:true,id,title:election\.title\}\);\n\}\);/)?.[0]||'';
   assert.match(block,/election_deleted_unused_draft/);
-  assert.match(block,/DELETE FROM elections WHERE id=\? AND status='draft'/);
+  assert.match(block,/DELETE\s+FROM\s+elections\s+WHERE\s+id=\?\s+AND\s+status='draft'/);
   assert.match(block,/if\(!eligibility\.allowed\)/);
   assert.match(block,/This election cannot be permanently deleted/);
 });
@@ -1632,7 +1640,7 @@ test('v71 Admin UI only shows permanent delete action when backend marks draft e
 });
 
 test('v71 election detail exposes authoritative delete eligibility and protection reasons', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   assert.match(route,/const deletion=await electionDeleteEligibility\(env,election\)/);
   assert.match(route,/setup_locked:setupLocked,deletion/);
   assert.match(route,/reasons\.length===0/);
@@ -1640,7 +1648,7 @@ test('v71 election detail exposes authoritative delete eligibility and protectio
 
 
 test('v72 election timeline iterates D1 notification result rows instead of result object', () => {
-  const route=(fs.readFileSync(path.join(root,'src/routes/elections.ts'),'utf8') + fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8'));
+  const route=electionSource();
   const block=route.match(/electionsRoute\.get\("\/:id\/timeline"[\s\S]*?return c\.json\(\{events,governance\}\);\n\}\);/)?.[0]||'';
   assert.match(block,/\(notifications\.results as any\[\]\)\.map/);
   assert.doesNotMatch(block,/\.\.\.notifications\.map/);

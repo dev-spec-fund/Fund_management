@@ -4,6 +4,11 @@ import fs from "node:fs";
 
 const read = p => fs.readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 
+const electionSource = () => {
+  const files = ['src/routes/elections.ts','src/routes/elections/applications.ts','src/routes/elections/exco.ts','src/routes/elections/management.ts','src/routes/elections/overview.ts','src/routes/elections/voting.ts','src/elections/core.ts'];
+  return files.filter((file) => fs.existsSync(new URL(`../${file}`, import.meta.url))).map(read).join('\n');
+};
+
 test("production auth requires explicit local dev flag", () => {
   const auth=read("src/auth.ts");
   assert.match(auth,/DEV_AUTH_ENABLED/);
@@ -47,7 +52,7 @@ test("migration numeric versions are unique", () => {
 test("election application migration matches canonical runtime schema", () => {
   const migration = read("migrations/0032_election_application_eligibility.sql");
   const schema = read("schema.sql");
-  const elections = (read("src/routes/elections.ts") + read("src/elections/core.ts"));
+  const elections = electionSource();
   assert.match(migration, /application_reminder_sent_at/);
   assert.match(schema, /application_reminder_sent_at/);
   assert.match(elections, /application_reminder_sent_at/);
