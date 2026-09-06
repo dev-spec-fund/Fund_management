@@ -399,6 +399,11 @@ test('new member inserts explicitly store a Maldives-local joined date', () => {
 });
 
 
+test('admin monthly-status endpoint treats zero-due months as not applicable', () => {
+  const members = fs.readFileSync(path.join(root,'src/routes/members.ts'),'utf8');
+  assert.match(members, /rate <= 0\.004 \? \"not_applicable\"/);
+});
+
 test('admin member cards do not show a due amount for not-applicable months', () => {
   const members = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Members.jsx'),'utf8');
   assert.match(members,/status === "not_applicable"/);

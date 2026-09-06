@@ -55,7 +55,7 @@ membersRoute.get("/:id/monthly-status", requireAdmin, async (c) => {
   const ex = await c.env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(id,month).first<any>();
   const total = await paidForMonth(c.env,id,month);
   const rate = await contributionDueForMonth(c.env,id,month,Number(member.monthly_amount),member.joined_at||member.created_at);
-  const status = ex ? "exempt" : total <= 0 ? "unpaid" : total + 0.005 < rate ? "partial" : "paid";
+  const status = ex ? "exempt" : rate <= 0.004 ? "not_applicable" : total <= 0 ? "unpaid" : total + 0.005 < rate ? "partial" : "paid";
   return c.json({month,status,paid:total,due:ex?0:Math.max(0,rate-total),monthly_amount:rate,exemption_reason:ex?.reason||null});
 });
 
