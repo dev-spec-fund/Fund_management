@@ -205,7 +205,7 @@ export function MonthManagementSettingsSection(ctx) {
 }
 
 export function AdminSettingsSection(ctx) {
-  const {superAdmin,confirm,load,setMessage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin} = ctx;
+  const {superAdmin,confirm,load,setMessage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,loadAdminSupport} = ctx;
   const permissionRows=[["read","Read access"],["finance","Finance access"],["manage_admins","Manage admins"],["close_month","Close / reopen month"],["backup","Database backup"]];
   const roleName=(a)=>a.custom_role_name || ((a.role==="owner"||a.role==="super_admin")?"Super Admin":a.role==="treasurer"?"Treasurer":"Viewer");
   return <>
@@ -218,7 +218,7 @@ export function AdminSettingsSection(ctx) {
     <div className="settings-access-section sans">
       <div className="settings-access-heading">
         <div><h3>Admins</h3><p>People with administrative access.</p></div>
-        {superAdmin&&<details className="settings-inline-action">
+        {superAdmin&&<details className="settings-inline-action" onToggle={e=>{if(e.currentTarget.open){loadAdminSupport?.("members");loadAdminSupport?.("roles");}}}>
           <summary><UserPlus size={17}/><span>Promote</span></summary>
           <div className="settings-action-panel">
             <strong>Promote member</strong>
@@ -245,7 +245,7 @@ export function AdminSettingsSection(ctx) {
       <div className="settings-access-list">
         {admins.map(a=>{
           const displayRole=a.custom_role_id?`custom:${a.custom_role_id}`:(a.role==="owner"?"super_admin":a.role);
-          return <details key={a.id} className="settings-access-item">
+          return <details key={a.id} className="settings-access-item" onToggle={e=>{if(e.currentTarget.open)loadAdminSupport?.("roles");}}>
             <summary>
               <span className="settings-access-icon"><ShieldCheck size={18}/></span>
               <span className="settings-access-main"><strong>{a.member_name||a.name}</strong><small>{roleName(a)}{a.member_code?` · ${a.member_code}`:""}</small></span>
@@ -271,7 +271,7 @@ export function AdminSettingsSection(ctx) {
     <div className="settings-access-section sans">
       <div className="settings-access-heading">
         <div><h3>Roles</h3><p>Open a role only when you need to edit permissions.</p></div>
-        {superAdmin&&<details className="settings-inline-action">
+        {superAdmin&&<details className="settings-inline-action" onToggle={e=>{if(e.currentTarget.open)loadAdminSupport?.("roles");}}>
           <summary><Plus size={17}/><span>Create</span></summary>
           <div className="settings-action-panel">
             <strong>Create role</strong><p>Read access is always included.</p>

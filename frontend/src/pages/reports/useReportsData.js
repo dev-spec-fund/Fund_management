@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, onDataChangeDebounced } from "../../api";
 import { shiftMonthValue } from "../../utils/date";
 
@@ -8,22 +8,25 @@ export function useReportsData(sharedMonth, onMonthChange, { enabled = true } = 
   const trendPath=`/api/reports/trend?month=${month}`;
   const [summary, setSummary] = useState(()=>api.peekCached(summaryPath));
   const [trend, setTrend] = useState(()=>api.peekCached(trendPath)||[]);
+  const monthCache=useRef(new Map());
+  if(summary && !monthCache.current.has(month)) monthCache.current.set(month,{summary,trend});
   const [annualYear, setAnnualYear] = useState(String(new Date().getFullYear()));
   const [annual, setAnnual] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [annualBusy, setAnnualBusy] = useState(false);
 
-  const loadMonthly = () => enabled ? api.reports.summary(month).then(setSummary) : Promise.resolve(null);
+  const loadMonthly = () => enabled ? api.reports.summary(month).then(value=>{const prev=monthCache.current.get(month)||{};monthCache.current.set(month,{...prev,summary:value});setSummary(value);}) : Promise.resolve(null);
 
   useEffect(() => {
     if (!enabled) return;
-    const cachedSummary=api.peekCached(summaryPath);
-    const cachedTrend=api.peekCached(trendPath);
+    const local=monthCache.current.get(month)||{};
+    const cachedSummary=api.peekCached(summaryPath) || local.summary;
+    const cachedTrend=api.peekCached(trendPath) || local.trend;
     setSummary(cachedSummary || null);
     if(cachedTrend) setTrend(cachedTrend);
     Promise.all([
-      api.reports.summary(month).then(setSummary),
-      api.reports.trend(month).then(setTrend),
+      api.reports.summary(month).then(value=>{const prev=monthCache.current.get(month)||{};monthCache.current.set(month,{...prev,summary:value});setSummary(value)}),
+      api.reports.trend(month).then(value=>{const prev=monthCache.current.get(month)||{};monthCache.current.set(month,{...prev,trend:value});setTrend(value)}),
     ]).catch(() => {});
   }, [enabled, month]);
 
@@ -38,8 +41,8 @@ export function useReportsData(sharedMonth, onMonthChange, { enabled = true } = 
     );
     if (!relevant) return;
     Promise.all([
-      api.reports.summary(month).then(setSummary),
-      api.reports.trend(month).then(setTrend),
+      api.reports.summary(month).then(value=>{const prev=monthCache.current.get(month)||{};monthCache.current.set(month,{...prev,summary:value});setSummary(value)}),
+      api.reports.trend(month).then(value=>{const prev=monthCache.current.get(month)||{};monthCache.current.set(month,{...prev,trend:value});setTrend(value)}),
     ]).catch(() => {});
     if (annual || analytics) {
       Promise.all([

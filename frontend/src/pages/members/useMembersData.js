@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, onDataChangeDebounced } from "../../api";
 import { pageSlice } from "../../components/Pagination";
 
@@ -7,6 +7,8 @@ export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
   const summaryPath=`/api/reports/summary?month=${month}`;
   const [members, setMembers] = useState(()=>api.peekCached("/api/members")||[]);
   const [monthlySummary, setMonthlySummary] = useState(()=>api.peekCached(summaryPath));
+  const monthSummaryCache=useRef(new Map());
+  if(monthlySummary && !monthSummaryCache.current.has(month)) monthSummaryCache.current.set(month,monthlySummary);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [defaultMonthly, setDefaultMonthly] = useState(250);
@@ -18,7 +20,7 @@ export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
   };
 
   const loadMembers = () => api.members.list().then(setMembers).catch(() => {});
-  const loadSummary = () => api.reports.summary(month).then(setMonthlySummary).catch(() => {});
+  const loadSummary = () => api.reports.summary(month).then(value=>{monthSummaryCache.current.set(month,value);setMonthlySummary(value);}).catch(() => {});
   const load = () => Promise.all([loadMembers(), loadSummary()]);
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
 
   useEffect(() => {
     if (!isAdmin) return;
-    const cachedSummary=api.peekCached(summaryPath);
+    const cachedSummary=api.peekCached(summaryPath) || monthSummaryCache.current.get(month);
     setMonthlySummary(cachedSummary || null);
     loadSummary();
   }, [isAdmin, month]);

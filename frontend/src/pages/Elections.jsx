@@ -30,12 +30,9 @@ export default function Elections(){
   const [candidate,setCandidate]=useState({position_id:"",member_id:""});
   const {confirm,confirmationDialog}=useConfirmDialog();
 
-  const loadPrimary=()=>Promise.all([
-    api.elections.list().then(setRows),
-    api.members.list().then(setMembers),
-    api.elections.dashboard().then(setDashboard),
-  ]).catch(e=>setMessage(e.message));
+  const loadPrimary=()=>api.elections.list().then(setRows).catch(e=>setMessage(e.message));
   const loadSecondary=()=>Promise.all([
+    api.elections.dashboard().then(setDashboard),
     api.elections.currentExco().then(r=>setCurrentExco(r.roles||[])),
     api.elections.archive().then(r=>setArchive(r.archive||[])),
     api.elections.excoTerms().then(setExcoTerms),
@@ -51,7 +48,7 @@ export default function Elections(){
     let idleHandle=null;
     let timer=null;
     if(typeof window.requestIdleCallback==="function") idleHandle=window.requestIdleCallback(warmSecondary,{timeout:2200});
-    else timer=setTimeout(warmSecondary,900);
+    else timer=setTimeout(warmSecondary,1200);
     return()=>{
       cancelled=true;
       if(idleHandle!==null)window.cancelIdleCallback?.(idleHandle);
@@ -68,6 +65,15 @@ export default function Elections(){
     return ()=>{active=false};
   },[detail]);
   useEffect(()=>{
+    if(!detail?.id||detail.status!=="draft"||members.length)return;
+    let active=true;
+    const warm=()=>api.members.list().then(r=>{if(active)setMembers(r)}).catch(()=>{});
+    if(typeof window.requestIdleCallback==="function")window.requestIdleCallback(warm,{timeout:900});
+    else setTimeout(warm,120);
+    return()=>{active=false};
+  },[detail?.id,detail?.status,members.length]);
+
+  useEffect(()=>{
     if(!detail?.id||!detail.certified_at){setSummary(null);return;}
     let active=true;
     api.elections.summary(detail.id).then(r=>{if(active)setSummary(r)}).catch(e=>{if(active){setSummary(null);setMessage(e.message)}});
@@ -79,13 +85,21 @@ export default function Elections(){
   };
   useEffect(()=>{
     if(!detail?.id){setNotificationStatus(null);return;}
-    refreshNotificationStatus(detail.id);
+    let active=true;
+    const warm=()=>{if(active)refreshNotificationStatus(detail.id)};
+    let idleHandle=null,timer=null;
+    if(typeof window.requestIdleCallback==="function")idleHandle=window.requestIdleCallback(warm,{timeout:900});
+    else timer=setTimeout(warm,160);
+    return()=>{active=false;if(idleHandle!==null)window.cancelIdleCallback?.(idleHandle);if(timer!==null)clearTimeout(timer)};
   },[detail?.id,detail?.status,detail?.certified_at]);
   useEffect(()=>{
     if(!detail?.id){setTimeline(null);return;}
     let active=true;
-    api.elections.timeline(detail.id).then(r=>{if(active)setTimeline(r)}).catch(()=>{if(active)setTimeline(null)});
-    return ()=>{active=false};
+    const warm=()=>api.elections.timeline(detail.id).then(r=>{if(active)setTimeline(r)}).catch(()=>{if(active)setTimeline(null)});
+    let idleHandle=null,timer=null;
+    if(typeof window.requestIdleCallback==="function")idleHandle=window.requestIdleCallback(warm,{timeout:1200});
+    else timer=setTimeout(warm,220);
+    return ()=>{active=false;if(idleHandle!==null)window.cancelIdleCallback?.(idleHandle);if(timer!==null)clearTimeout(timer)};
   },[detail?.id,detail?.status,detail?.certified_at]);
 
   const deleteUnusedElection=async()=>{

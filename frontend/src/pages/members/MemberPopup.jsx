@@ -31,7 +31,7 @@ function formatMemberPopupDate(value){
 
 export default function MemberPopup({ member, month, canEdit = false, canRemind, onClose, onChanged }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
-  const [detail, setDetail] = useState(null);
+  const [detail, setDetail] = useState(()=>api.peekCached(`/api/members/${member.id}/statement`));
   const [editing, setEditing] = useState(false);
   const [reminding, setReminding] = useState(false);
   const [reminderNote, setReminderNote] = useState("");
@@ -44,7 +44,11 @@ export default function MemberPopup({ member, month, canEdit = false, canRemind,
   const [showExport, setShowExport] = useState(false);
   const [form, setForm] = useState({ name: member.name, phone: member.phone, monthly_amount: member.monthly_amount });
 
-  useEffect(() => { api.members.statement(member.id).then(setDetail).catch(() => {}); }, [member.id]);
+  useEffect(() => {
+    const cached=api.peekCached(`/api/members/${member.id}/statement`);
+    if(cached)setDetail(cached);
+    api.members.statement(member.id).then(setDetail).catch(() => {});
+  }, [member.id]);
   useEffect(() => () => {
     if (slipPreview?.url) URL.revokeObjectURL(slipPreview.url);
   }, [slipPreview]);

@@ -30,7 +30,7 @@ export default function Meetings({admin}){
   const { confirm, confirmationDialog } = useConfirmDialog();
 
   const load=()=>api.admin.meetings().then(setRows).catch(e=>setMessage(e.message));
-  useEffect(()=>{load();api.members.list().then(setMemberOptions).catch(()=>{});api.elections.currentExco().then(r=>setExcoOptions(r.roles||[])).catch(()=>{})},[]);
+  useEffect(()=>{load();},[]);
   useEffect(()=>onDataChangeDebounced(({paths=[]})=>{
     if(paths.some((path)=>
       path?.startsWith("/api/admin/meetings") ||
@@ -67,8 +67,19 @@ export default function Meetings({admin}){
   const openDetails=async(m)=>{
     setSelected(m);setDetails(null);setMinutesData(null);setEditing(false);setShowMeetingActions(false);setMessage("");
     try{
-      const [detail,minutes]=await Promise.all([api.admin.meeting(m.id),api.governance.meetingMinutes(m.id)]);
-      setDetails(detail);setMinutesData(minutes);setMinutesDraft({minutes:minutes?.minutes?.minutes||"",decisions:minutes?.minutes?.decisions||""});
+      // Show the core meeting detail as soon as it arrives; governance extras load after the sheet is visible.
+      const detail=await api.admin.meeting(m.id);
+      setDetails(detail);
+      const loadExtras=async()=>{
+        try{
+          const jobs=[api.governance.meetingMinutes(m.id).then(minutes=>{setMinutesData(minutes);setMinutesDraft({minutes:minutes?.minutes?.minutes||"",decisions:minutes?.minutes?.decisions||""});})];
+          if(canFinance && memberOptions.length===0)jobs.push(api.members.list().then(setMemberOptions));
+          if(canFinance && excoOptions.length===0)jobs.push(api.elections.currentExco().then(r=>setExcoOptions(r.roles||[])));
+          await Promise.allSettled(jobs);
+        }catch{}
+      };
+      if(typeof window.requestIdleCallback==="function") window.requestIdleCallback(loadExtras,{timeout:900});
+      else setTimeout(loadExtras,120);
     }catch(e){setMessage(e.message||"Could not load meeting details")}
   };
 

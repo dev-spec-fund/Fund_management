@@ -31,7 +31,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
     settingsSection,setSettingsSection,categories,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,
     customRoles,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,closeCheck,setCloseCheck,closeBusy,
     closeMonthValue,setCloseMonthValue,closurePage,setClosurePage,errorPage,setErrorPage,errorFilter,setErrorFilter,
-    auditPage,setAuditPage,settingsLoading,settingsError,load,
+    auditPage,setAuditPage,settingsLoading,settingsError,load,loadAdminSupport,
   }=data;
 
   const {saveSetting,reviewMonthClose,closeMonth,backup,monthLabel,shiftCloseMonth,monthClosed}=useSettingsActions({
@@ -68,7 +68,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   const sectionProps={
     settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,
     closeBusy,shiftCloseMonth:shiftSharedCloseMonth,closeMonthValue,setCloseMonthValue:(value)=>{setCloseMonthValue(value);onAdminMonthChange?.(value);},setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,
-    newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,
+    newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,loadAdminSupport,
     health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage
   };
 

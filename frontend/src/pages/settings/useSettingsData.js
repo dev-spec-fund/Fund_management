@@ -28,6 +28,7 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
   const [settingsLoading,setSettingsLoading]=useState(!deferCore && initialSection!=="audit");
   const [settingsError,setSettingsError]=useState("");
   const loadedSections=useRef(new Set());
+  const loadedAdminSupport=useRef(new Set());
 
   const loadCore=useCallback(async({showLoading=false}={})=>{
     if(showLoading) setSettingsLoading(true);
@@ -50,11 +51,9 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
     if(section==="categories") jobs.push(safe(api.expenses.categories(),setCategories));
     if(section==="financial") jobs.push(safe(api.governance.monthClosures(),setClosures));
     if(section==="admins") {
+      // Keep the first Admins & Roles paint light: only fetch the admin list.
+      // Member promotion options and custom-role details are loaded on interaction.
       jobs.push(safe(api.settings.admins(),setAdmins));
-      if(superAdmin){
-        jobs.push(safe(api.members.list(),setMembersForAdmin));
-        jobs.push(safe(api.settings.roles(),setCustomRoles));
-      }
     }
     if(section==="reminders" || section==="system") jobs.push(safe(api.admin.health(),setHealth));
     if(section==="system" && superAdmin) jobs.push(safe(api.admin.errors(),setErrors));
@@ -64,11 +63,31 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
     loadedSections.current.add(section);
   },[superAdmin,financeAdmin]);
 
+
+  const loadAdminSupport=useCallback(async(kind,{force=false}={})=>{
+    if(!superAdmin)return;
+    const key=kind==="members"?"members":"roles";
+    if(!force && loadedAdminSupport.current.has(key))return;
+    try{
+      if(key==="members") setMembersForAdmin(await api.members.list());
+      else setCustomRoles(await api.settings.roles());
+      loadedAdminSupport.current.add(key);
+    }catch(e){
+      setMessage(e?.message || "Unable to load admin options");
+    }
+  },[superAdmin]);
+
   const load=useCallback(async()=>{
     await loadCore();
     loadedSections.current.delete(settingsSection);
     await loadSection(settingsSection,{force:true});
-  },[loadCore,loadSection,settingsSection]);
+    if(settingsSection==="admins" && superAdmin){
+      const jobs=[];
+      if(loadedAdminSupport.current.has("roles")) jobs.push(loadAdminSupport("roles",{force:true}));
+      if(loadedAdminSupport.current.has("members")) jobs.push(loadAdminSupport("members",{force:true}));
+      if(jobs.length) await Promise.allSettled(jobs);
+    }
+  },[loadCore,loadSection,loadAdminSupport,settingsSection,superAdmin]);
 
   useEffect(()=>{
     // The Settings directory does not need to wait for every admin dataset.
@@ -87,7 +106,11 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
   useEffect(()=>onDataChange(({path})=>{
     if(path?.startsWith("/api/settings")){
       loadCore();
-      if(settingsSection==="admins") { loadedSections.current.delete("admins"); loadSection("admins",{force:true}); }
+      if(settingsSection==="admins") {
+        loadedSections.current.delete("admins");
+        loadedAdminSupport.current.clear();
+        loadSection("admins",{force:true});
+      }
       return;
     }
     if(path?.startsWith("/api/expenses/categories") && settingsSection==="categories") {
@@ -108,6 +131,6 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
     customRoles,setCustomRoles,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,
     closeCheck,setCloseCheck,closeBusy,setCloseBusy,closeMonthValue,setCloseMonthValue,
     closurePage,setClosurePage,errorPage,setErrorPage,errorFilter,setErrorFilter,auditPage,setAuditPage,
-    settingsLoading,settingsError,load,loadSection,
+    settingsLoading,settingsError,load,loadSection,loadAdminSupport,
   };
 }
