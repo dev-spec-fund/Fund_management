@@ -8,7 +8,7 @@ import DonationDetails from "./reports/DonationDetails";
 import { api, onDataChange } from "../api";
 import { fmt } from "../utils/format";
 
-export default function Reports({ setTab, admin, month: sharedMonth, onMonthChange }) {
+export default function Reports({ setTab, admin, month: sharedMonth, onMonthChange, view = "reports" }) {
   const [showExpense, setShowExpense] = useState(false);
   const [showDonation, setShowDonation] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -86,21 +86,27 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
   return <>
     <div className="reports-filter-sticky page-sticky-controls">
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>REPORTS</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>{view === "donations" ? "DONATIONS" : "REPORTS"}</div>
         <div className="report-header-actions">
-          <div className="report-action-menu-wrap">
+          {view === "reports" && <div className="report-action-menu-wrap">
             <button type="button" onClick={() => { setShowExport(!showExport); setShowAdd(false); }} className="report-header-action sans"><Download size={13} /> Export</button>
             {showExport && <div className="report-action-menu">
               <button type="button" onClick={async () => { setShowExport(false); try { const { exportFundPdf } = await import("../utils/exports"); await exportFundPdf({ month, monthLabel, summary }); } catch (e) { setError(e.message || "Could not export PDF"); } }} className="sans"><FileText size={14} /><span><b>PDF report</b><small>Formatted monthly report</small></span></button>
               <button type="button" onClick={async () => { setShowExport(false); try { await exportCsv(); } catch (e) { setError(e.message || "Could not export CSV"); } }} className="sans"><Table2 size={14} /><span><b>CSV data</b><small>Spreadsheet-friendly export</small></span></button>
             </div>}
-          </div>
+          </div>}
           <div className="report-action-menu-wrap">
-            <button type="button" onClick={() => { setShowAdd(!showAdd); setShowExport(false); }} className="report-header-action sans"><Plus size={13} /> Log</button>
-            {showAdd && <div className="report-action-menu compact">
-              <button type="button" onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans"><Plus size={14}/><span><b>Donation</b><small>Record incoming funds</small></span></button>
-              <button type="button" onClick={() => { setShowExpense(true); setShowAdd(false); }} className="sans danger"><Plus size={14}/><span><b>Expense</b><small>Record fund spending</small></span></button>
-            </div>}
+            {view === "donations" ? (
+              <button type="button" onClick={() => setShowDonation(true)} className="report-header-action sans"><Plus size={13} /> Add donation</button>
+            ) : (
+              <>
+                <button type="button" onClick={() => { setShowAdd(!showAdd); setShowExport(false); }} className="report-header-action sans"><Plus size={13} /> Log</button>
+                {showAdd && <div className="report-action-menu compact">
+                  <button type="button" onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans"><Plus size={14}/><span><b>Donation</b><small>Record incoming funds</small></span></button>
+                  <button type="button" onClick={() => { setShowExpense(true); setShowAdd(false); }} className="sans danger"><Plus size={14}/><span><b>Expense</b><small>Record fund spending</small></span></button>
+                </div>}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -112,9 +118,9 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
     </div>
 
     <MessageBanner tone="error">{error}</MessageBanner>
-    <MonthlyReportSections summary={summary} trend={trend} monthLabel={monthLabel} setTab={setTab} />
+    {view === "reports" && <MonthlyReportSections summary={summary} trend={trend} monthLabel={monthLabel} setTab={setTab} />}
 
-    <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>DONATIONS — {monthLabel.toUpperCase()}</div>
+    <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>{view === "donations" ? `DONATIONS · ${monthLabel.toUpperCase()}` : `DONATIONS — ${monthLabel.toUpperCase()}`}</div>
     <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "4px 12px", marginBottom: 16 }}>
       {donations.length === 0 ? <div className="sans" style={{ fontSize: 11, color: "var(--soft)", padding: "12px 2px" }}>No donations logged for this month.</div> : donations.map((donation) => <button key={donation.id} type="button" onClick={() => setSelectedDonation(donation)} className="sans" style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left", border: 0, borderTop: "1px solid var(--divider)", background: "transparent", color: "var(--text)", padding: "10px 2px", cursor: "pointer" }}>
         <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 11, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{donation.donor_name}</div><div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{donation.donation_date || String(donation.created_at || "").slice(0,10)} · {donation.txn_id}{donation.project_name ? ` · ${donation.project_code || ""} ${donation.project_name}` : " · General fund"}{Number(donation.document_count || 0) > 0 ? ` · ${donation.document_count} document${Number(donation.document_count) === 1 ? "" : "s"}` : ""}</div></div>
@@ -123,7 +129,7 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
       </button>)}
     </div>
 
-    <AnnualAnalyticsSection annualYear={annualYear} setAnnualYear={setAnnualYear} annual={annual} analytics={analytics} annualBusy={annualBusy} loadAnnual={loadAnnual} setError={setError} />
+    {view === "reports" && <AnnualAnalyticsSection annualYear={annualYear} setAnnualYear={setAnnualYear} annual={annual} analytics={analytics} annualBusy={annualBusy} loadAnnual={loadAnnual} setError={setError} />}
 
     {showExpense && <ExpenseModal onClose={() => setShowExpense(false)} onSaved={loadMonthly} />}
     {showDonation && <DonationModal onClose={() => setShowDonation(false)} onSaved={async (message) => { await donationSaved(message); setShowDonation(false); }} />}

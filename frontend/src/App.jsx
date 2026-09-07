@@ -6,8 +6,8 @@ import { adminCan } from "./utils/permissions";
 import { getAdminReportMonth, saveAdminReportMonth } from "./utils/adminReportMonth";
 import {
   Home, Clock3, Users, Activity as ActivityIcon, ReceiptText, FolderKanban,
-  BarChart3, CalendarDays, Settings as SettingsIcon, History,
-  WalletCards, ListChecks, UserRound
+  BarChart3, CalendarDays, Settings as SettingsIcon, History, WalletCards,
+  ListChecks, UserRound, Landmark, Scale, Grid2X2, HeartHandshake, ShieldCheck
 } from "lucide-react";
 
 
@@ -61,33 +61,43 @@ const MyActions = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m
 const MyProfile = lazy(() => pageLoaders.memberViews().then((m) => ({ default: m.MyProfile })));
 
 const loaderForTab = (tab, adminView = false) => {
-  // Activity is shared from MemberViews, but Meetings has separate Admin and
-  // Member implementations. Keep the preload target aligned with the screen
-  // that will actually render so the first Admin Meetings visit is warm too.
-  if (["history", "fund", "activity", "projects", "actions", "profile"].includes(tab)) return pageLoaders.memberViews;
+  // Grouped navigation still opens the existing leaf screens. Keep preloading
+  // aligned with those leaf screens so the redesign does not duplicate page logic.
+  if (["history", "fund", "activity", "actions", "profile"].includes(tab)) return pageLoaders.memberViews;
+  if (tab === "projects") return adminView ? pageLoaders.projects : pageLoaders.memberViews;
   if (tab === "elections") return adminView ? pageLoaders.elections : pageLoaders.memberViews;
   if (tab === "meetings") return adminView ? pageLoaders.meetings : pageLoaders.memberViews;
+  if (tab === "donations") return pageLoaders.reports;
+  if (tab === "audit") return pageLoaders.settings;
   return pageLoaders[tab] || null;
 };
 
 const NAV_ITEMS = {
   overview: { label: "Overview", icon: Home },
-  pending: { label: "Pending", icon: Clock3 },
+  home: { label: "Home", icon: Home },
   members: { label: "Members", icon: Users },
-  activity: { label: "Activity", icon: ActivityIcon },
+  finance: { label: "Finance", icon: Landmark },
+  governance: { label: "Governance", icon: Scale },
+  more: { label: "More", icon: Grid2X2 },
+  pending: { label: "Pending", icon: Clock3 },
   expenses: { label: "Expenses", icon: ReceiptText },
-  projects: { label: "Projects", icon: FolderKanban },
+  donations: { label: "Donations", icon: HeartHandshake },
   reports: { label: "Reports", icon: BarChart3 },
+  projects: { label: "Projects", icon: FolderKanban },
   meetings: { label: "Meetings", icon: CalendarDays },
   elections: { label: "Elections", icon: ListChecks },
   settings: { label: "Settings", icon: SettingsIcon },
-  history: { label: "History", icon: History },
-  fund: { label: "Fund", icon: WalletCards },
-  actions: { label: "Actions", icon: ListChecks },
+  audit: { label: "Audit Log", icon: ShieldCheck },
+  fundGroup: { label: "Fund", icon: WalletCards },
+  community: { label: "Community", icon: Users },
+  activity: { label: "Activity", icon: ActivityIcon },
   profile: { label: "Profile", icon: UserRound },
+  fund: { label: "Fund", icon: WalletCards },
+  history: { label: "My History", icon: History },
+  actions: { label: "My Actions", icon: ListChecks },
 };
 
-function NavItem({ name, active, labelVisible, onWarm, onOpen }) {
+function PrimaryNavItem({ name, active, onWarm, onOpen }) {
   const meta = NAV_ITEMS[name] || { label: name, icon: Home };
   const Icon = meta.icon;
   return (
@@ -100,9 +110,39 @@ function NavItem({ name, active, labelVisible, onWarm, onOpen }) {
       aria-label={meta.label}
       title={meta.label}
     >
-      <Icon size={16} strokeWidth={active ? 2.25 : 1.9} aria-hidden="true" />
-      <span className={`app-nav-label${labelVisible ? " visible" : ""}`}>{meta.label}</span>
+      <Icon size={19} strokeWidth={active ? 2.3 : 1.9} aria-hidden="true" />
+      <span className="app-nav-label">{meta.label}</span>
     </button>
+  );
+}
+
+function SectionNav({ title, sections, active, onWarm, onOpen }) {
+  if (!sections?.length) return null;
+  return (
+    <div className="app-section-nav-wrap">
+      <div className="sans app-section-title">{title}</div>
+      <div className="app-section-nav" role="tablist" aria-label={`${title} sections`}>
+        {sections.map((name) => {
+          const meta = NAV_ITEMS[name] || { label: name, icon: Home };
+          const Icon = meta.icon;
+          const selected = active === name;
+          return (
+            <button
+              key={name}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={`app-section-nav-item${selected ? " active" : ""}`}
+              onPointerDown={() => onWarm(name)}
+              onClick={() => onOpen(name)}
+            >
+              <Icon size={15} strokeWidth={selected ? 2.25 : 1.9} aria-hidden="true" />
+              <span>{meta.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -120,9 +160,12 @@ export default function App() {
   const [tab, setTab] = useState("overview");
   const [mode, setMode] = useState("member");
   const [mountedTabs, setMountedTabs] = useState(() => new Set(["overview"]));
+  const [lastSections, setLastSections] = useState({
+    admin: { finance: "pending", governance: "projects", more: "settings" },
+    member: { fundGroup: "fund", community: "projects" },
+  });
   const contentScrollRef = useRef(null);
   const lastWarmRef = useRef({ key: "", at: 0 });
-  const [navLabelTab, setNavLabelTab] = useState(tab);
   const bootStartedAt = useRef(typeof performance !== "undefined" ? performance.now() : 0);
 
   const isAdmin = !!me?.admin;
@@ -132,20 +175,44 @@ export default function App() {
   const canFinance = adminView && adminCan(me?.admin, "finance");
   const canManageAdmins = adminView && adminCan(me?.admin, "manage_admins");
   const memberProjectsEnabled = me?.member_features?.projects !== false;
+
+  const sections = useMemo(() => adminView ? {
+    finance: [...(canFinance ? ["pending", "expenses", "donations"] : []), "reports"],
+    governance: [...(canFinance ? ["projects"] : []), "meetings", ...(canManageAdmins ? ["elections"] : [])],
+    more: ["settings", ...(canFinance ? ["audit"] : [])],
+  } : {
+    fundGroup: ["fund", "history"],
+    community: [...(memberProjectsEnabled ? ["projects"] : []), "meetings", "elections", "actions"],
+  }, [adminView, canFinance, canManageAdmins, memberProjectsEnabled]);
+
+  const primaryTabs = useMemo(() => adminView
+    ? ["overview", "members", "finance", "governance", "more"]
+    : ["home", "fundGroup", "community", "activity", "profile"], [adminView]);
+
   const tabs = useMemo(() => adminView
-    ? (canFinance
-      ? ["overview", "pending", "members", "activity", "expenses", "projects", "reports", "meetings", ...(canManageAdmins ? ["elections"] : []), "settings"]
-      : ["overview", "members", "activity", "reports", "meetings", ...(canManageAdmins ? ["elections"] : []), "settings"])
-    : ["overview", "history", "fund", "activity", ...(memberProjectsEnabled ? ["projects"] : []), "meetings", "elections", "actions", "profile"], [adminView, canFinance, canManageAdmins, memberProjectsEnabled]);
+    ? ["overview", "members", "activity", ...sections.finance, ...sections.governance, ...sections.more]
+    : ["overview", "activity", "profile", ...sections.fundGroup, ...sections.community], [adminView, sections]);
 
+  const primaryForTab = (leaf) => {
+    if (adminView) {
+      if (leaf === "overview" || leaf === "activity") return "overview";
+      if (leaf === "members") return "members";
+      if (sections.finance.includes(leaf)) return "finance";
+      if (sections.governance.includes(leaf)) return "governance";
+      if (sections.more.includes(leaf)) return "more";
+      return "overview";
+    }
+    if (leaf === "overview") return "home";
+    if (sections.fundGroup.includes(leaf)) return "fundGroup";
+    if (sections.community.includes(leaf)) return "community";
+    if (leaf === "activity") return "activity";
+    if (leaf === "profile") return "profile";
+    return "home";
+  };
 
-  useEffect(() => {
-    // Hide the outgoing label immediately, then reveal the new label after the
-    // active pill has begun its slide. This prevents two labels overlapping.
-    setNavLabelTab("");
-    const timer = setTimeout(() => setNavLabelTab(tab), 105);
-    return () => clearTimeout(timer);
-  }, [tab]);
+  const activePrimary = primaryForTab(tab);
+  const activeSections = sections[activePrimary] || [];
+  const activeSectionTitle = NAV_ITEMS[activePrimary]?.label || "";
 
   useEffect(() => {
     const telegram = window.Telegram?.WebApp;
@@ -295,7 +362,17 @@ export default function App() {
   };
 
   const openTab = (nextTab) => {
+    if (!tabs.includes(nextTab)) return;
     warmTab(nextTab);
+
+    const primary = primaryForTab(nextTab);
+    if (sections[primary]?.includes(nextTab)) {
+      const modeKey = adminView ? "admin" : "member";
+      setLastSections((current) => ({
+        ...current,
+        [modeKey]: { ...current[modeKey], [primary]: nextTab },
+      }));
+    }
 
     // Keep a bounded warm-page window for smooth back-and-forth navigation.
     // Four recent screens preserve local UI state without returning to the old
@@ -307,6 +384,31 @@ export default function App() {
       return new Set(ordered);
     });
     setTab(nextTab);
+  };
+
+  const leafForPrimary = (primary) => {
+    if (adminView) {
+      if (primary === "overview") return "overview";
+      if (primary === "members") return "members";
+    } else {
+      if (primary === "home") return "overview";
+      if (primary === "activity") return "activity";
+      if (primary === "profile") return "profile";
+    }
+    const options = sections[primary] || [];
+    const modeKey = adminView ? "admin" : "member";
+    const remembered = lastSections[modeKey]?.[primary];
+    return options.includes(remembered) ? remembered : options[0];
+  };
+
+  const warmPrimary = (primary) => {
+    const leaf = leafForPrimary(primary);
+    if (leaf) warmTab(leaf);
+  };
+
+  const openPrimary = (primary) => {
+    const leaf = leafForPrimary(primary);
+    if (leaf) openTab(leaf);
   };
 
   const changeMode = (nextMode) => {
@@ -329,10 +431,12 @@ export default function App() {
     if (page === "profile" && memberView) return <MyProfile member={me.member} setTab={openTab} />;
     if (page === "expenses" && canFinance) return <Expenses admin={me.admin} />;
     if (page === "projects" && canFinance) return <Projects admin={me.admin} />;
-    if (page === "reports" && adminView) return <Reports setTab={openTab} admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} />;
+    if (page === "donations" && canFinance) return <Reports setTab={openTab} admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} view="donations" />;
+    if (page === "reports" && adminView) return <Reports setTab={openTab} admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} view="reports" />;
     if (page === "meetings" && adminView) return <Meetings admin={me.admin} />;
     if (page === "elections" && canManageAdmins) return <Elections />;
     if (page === "settings" && adminView) return <Settings admin={me.admin} adminMonth={adminMonth} onAdminMonthChange={setAdminMonth} />;
+    if (page === "audit" && canFinance) return <Settings admin={me.admin} adminMonth={adminMonth} onAdminMonthChange={setAdminMonth} initialSection="audit" sectionOnly />;
     return null;
   };
 
@@ -351,19 +455,25 @@ export default function App() {
           You are an admin but not yet linked to a member account. Send /start to the bot and choose “Register Myself as Member”.
         </div>
       )}
+      <SectionNav
+        title={activeSectionTitle}
+        sections={activeSections}
+        active={tab}
+        onWarm={warmTab}
+        onOpen={openTab}
+      />
       <nav
         className="sans admin-tab-strip app-icon-nav"
         aria-label={adminView ? "Admin navigation" : "My Account navigation"}
-        style={{ gridTemplateColumns: tabs.map((t) => t === tab ? "2.15fr" : "1fr").join(" ") }}
+        style={{ gridTemplateColumns: `repeat(${primaryTabs.length}, minmax(0, 1fr))` }}
       >
-        {tabs.map((t) => (
-          <NavItem
-            key={t}
-            name={t}
-            active={tab === t}
-            labelVisible={navLabelTab === t}
-            onWarm={() => warmTab(t)}
-            onOpen={() => openTab(t)}
+        {primaryTabs.map((name) => (
+          <PrimaryNavItem
+            key={name}
+            name={name}
+            active={activePrimary === name}
+            onWarm={() => warmPrimary(name)}
+            onOpen={() => openPrimary(name)}
           />
         ))}
       </nav>

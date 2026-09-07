@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, onDataChange } from "../../api";
 import { currentMonthValue } from "../../utils/date";
 
-export function useSettingsData({ admin, role, superAdmin, financeAdmin }) {
+export function useSettingsData({ admin, role, superAdmin, financeAdmin, initialSection = "general" }) {
   const [settings,setSettings]=useState(null);
   const [admins,setAdmins]=useState([]);
   const [audit,setAudit]=useState([]);
@@ -10,7 +10,7 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin }) {
   const [closures,setClosures]=useState([]);
   const [errors,setErrors]=useState([]);
   const [message,setMessage]=useState("");
-  const [settingsSection,setSettingsSection]=useState("general");
+  const [settingsSection,setSettingsSection]=useState(initialSection);
   const [categories,setCategories]=useState([]);
   const [membersForAdmin,setMembersForAdmin]=useState([]);
   const [promoteMemberId,setPromoteMemberId]=useState("");

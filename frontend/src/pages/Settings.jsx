@@ -8,7 +8,7 @@ import { GeneralSettingsSection, AdminSettingsSection, SystemSettingsSection, Au
 import { useSettingsData } from "./settings/useSettingsData";
 import { useSettingsActions } from "./settings/useSettingsActions";
 
-export default function Settings({ admin, adminMonth, onAdminMonthChange }) {
+export default function Settings({ admin, adminMonth, onAdminMonthChange, initialSection = "general", sectionOnly = false }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
   const superAdmin = adminCan(admin, "manage_admins");
@@ -17,7 +17,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange }) {
   const canBackup = adminCan(admin, "backup");
   const currentMonth = currentMonthValue();
 
-  const data=useSettingsData({admin,role,superAdmin,financeAdmin});
+  const data=useSettingsData({admin,role,superAdmin,financeAdmin,initialSection});
   useEffect(()=>{
     if(adminMonth && adminMonth!==data.closeMonthValue){
       data.setCloseMonthValue(adminMonth);
@@ -39,7 +39,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange }) {
   if(settingsLoading)return <LoadingState>Loading settings…</LoadingState>;
   if(settingsError && !Object.keys(settings||{}).length) return <ErrorState onRetry={load}>{settingsError}</ErrorState>;
 
-  const tabs=[["general","General"],["admins","Admins"],["system","System"],...(financeAdmin?[["audit","Audit"]]:[])];
+  const tabs=[["general","General"],["admins","Admins"],["system","System"]];
   const filteredErrors=errors.filter(e=>errorFilter==="all"?true:errorFilter==="resolved"?e.status==="resolved":e.status!=="resolved");
   const errorRows=pageSlice(filteredErrors,errorPage);
   const auditRows=pageSlice(audit,auditPage);
@@ -64,7 +64,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange }) {
   return <>
     <MessageBanner>{message}</MessageBanner>
 
-    <div className="settings-subnav-sticky page-sticky-controls">
+    {!sectionOnly && <div className="settings-subnav-sticky page-sticky-controls">
       <div className="settings-subnav-scroll">
         {tabs.map(([key,label])=>
           <button key={key} type="button" onClick={()=>setSettingsSection(key)} className="sans"
@@ -73,7 +73,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange }) {
           </button>
         )}
       </div>
-    </div>
+    </div>}
 
     {settingsSection==="general" && <GeneralSettingsSection {...sectionProps} />}
     {settingsSection==="admins" && <AdminSettingsSection {...sectionProps} />}
