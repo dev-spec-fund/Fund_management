@@ -1154,3 +1154,53 @@
 .member-history-allocation-row span{display:flex;flex-direction:column;gap:2px;}.member-history-allocation-row small{font-size:8px;color:var(--success);font-weight:800;}
 @media(max-width:350px){.member-history-hero{padding:15px 13px}.member-history-export-actions button{min-width:48px}.member-history-member-code{font-size:20px}.member-history-metric strong{font-size:14px}}
 @media(prefers-reduced-motion:reduce){.member-history-export-actions button{transition:none!important}}
+
+/* v86 — member UI consistency pass (visual only) */
+:where(.member-profile-card,.member-profile-summary-card,.member-project-card,.member-history-status-card,.member-governance-card){
+  border-radius:14px;
+}
+.member-profile-card{padding:13px;margin-bottom:9px}
+.member-profile-summary-card{padding:11px}
+.member-profile-row{min-height:38px;padding:8px 0;font-size:12px}
+.member-profile-row-label{font-size:11px}
+.member-profile-section-title{font-size:11px;letter-spacing:.45px}
+.member-profile-section-subtitle{font-size:11px}
+
+/* Buttons and export actions use the same 40px touch target. */
+:where(.member-profile-statement-button,.member-history-export-actions button){
+  min-height:40px;
+  border-radius:11px;
+  font-family:var(--sans,Inter,system-ui,sans-serif);
+  font-size:11px;
+  font-weight:750;
+}
+.member-history-export-actions button{height:40px;min-width:64px}
+:where(.member-profile-statement-button,.member-history-export-actions button) svg{width:15px;height:15px}
+
+/* Member hero cards remain distinctive without feeling oversized. */
+.member-profile-hero{border-radius:16px;padding:15px 16px;margin-bottom:9px}
+.member-profile-name{font-family:var(--sans,Inter,system-ui,sans-serif);font-size:21px;letter-spacing:-.3px}
+.member-contribution-hero{border-radius:15px;padding:15px 16px}
+.member-contribution-hero-amount{font-family:var(--sans,Inter,system-ui,sans-serif);font-size:27px}
+
+/* Consistent status chips and readable metadata. */
+:where(.member-profile-status,.member-project-status,.member-exco-badge,.member-profile-exco-badge){
+  font-family:var(--sans,Inter,system-ui,sans-serif);
+  font-size:10px;
+  line-height:1.1;
+  font-weight:750;
+}
+.member-profile-code,.member-profile-summary-label{font-size:10px}
+.member-profile-summary-value{font-size:14px}
+
+/* Lists: slightly tighter spacing, but never tiny text. */
+.member-project-card{margin-bottom:8px}
+.member-project-toggle{padding:12px 13px}
+.member-project-title-row strong{font-size:13px}
+.member-history-empty-inline,.member-project-empty{font-size:12px;line-height:1.45}
+
+@media(max-width:360px){
+  .member-profile-hero{padding:14px}
+  .member-profile-name{font-size:20px}
+  .member-contribution-hero{padding:14px}
+}

@@ -1509,3 +1509,96 @@ button:not(:disabled):active {
 
 /* Telegram already provides the Mini App chrome; keep our shell headerless. */
 .app-shell--telegram .app-mode-wrap{margin-top:12px}
+
+/* v86 — app-wide UI consistency pass (visual only) */
+:where(.finance-page-head,.settings-page-head,.members-page-head,.overview-page-head){
+  margin-bottom:12px;
+}
+:where(.finance-page-title,.settings-page-head h2,.members-page-title,.overview-page-title){
+  font-family:var(--sans,Inter,system-ui,sans-serif);
+  letter-spacing:-.25px;
+}
+:where(.finance-page-subtitle,.settings-page-head p,.overview-page-subtitle){
+  font-size:12px;
+  line-height:1.45;
+}
+
+/* One control rhythm across admin screens. */
+:where(.finance-primary-button,.expense-filter-toggle,.audit-open-filter,.audit-action-filter,.settings-back-button){
+  min-height:40px;
+  border-radius:11px;
+  font-family:var(--sans,Inter,system-ui,sans-serif);
+  font-size:11px;
+  font-weight:750;
+}
+:where(.finance-primary-button,.expense-filter-toggle,.audit-open-filter,.audit-action-filter,.settings-back-button) svg{
+  width:15px;
+  height:15px;
+  flex:0 0 auto;
+}
+
+/* Search fields should feel identical and stay readable inside Telegram. */
+:where(.expense-search,.audit-search,.members-search-wrap){
+  min-height:42px;
+  border-radius:12px;
+  border-color:var(--border-strong);
+  background:var(--card);
+  box-sizing:border-box;
+}
+:where(.expense-search input,.audit-search input,.members-search-input){
+  font-family:var(--sans,Inter,system-ui,sans-serif);
+  font-size:13px;
+  line-height:1.25;
+}
+
+/* Shared chips / badges: compact, but no micro-text. */
+:where(.expense-filter-chip,.audit-record-badge,.expense-status-badge,.member-status-badge){
+  font-family:var(--sans,Inter,system-ui,sans-serif);
+  font-size:10px;
+  line-height:1.1;
+  font-weight:750;
+}
+.expense-filter-chip{min-height:32px;padding:6px 11px}
+
+/* Card geometry and density. */
+:where(.expense-row,.report-detail-card,.admin-audit-row,.settings-empty-card,.members-month-card){
+  border-radius:14px;
+}
+.expense-row{padding:11px 12px;margin-bottom:8px}
+.expense-row-title{font-size:13px}
+.expense-row-meta,.expense-row-foot{font-size:10px}
+.expense-row-amount{font-size:13px}
+.report-detail-card{padding:13px;margin-bottom:11px}
+
+/* KPI system: same compact proportions as the refreshed overview/governance UI. */
+.finance-kpi-grid{gap:7px;margin-bottom:12px}
+.finance-kpi-card{min-height:58px;border-radius:13px;padding:9px 10px;gap:7px}
+.finance-kpi-card>span{width:27px;height:27px;border-radius:9px}
+.finance-kpi-card>span svg{width:15px;height:15px}
+.finance-kpi-card small{font-size:10px;line-height:1.15}
+.finance-kpi-card strong{font-size:13px;line-height:1.15}
+
+/* Navigation: clearer inactive states and reliable touch targets. */
+.app-mode-switch{border-radius:12px;padding:3px}
+.app-mode-switch>button{min-height:36px!important;border-radius:9px!important;font-size:11px!important}
+.app-section-nav-item{min-height:36px;border-radius:10px;font-size:11px}
+.app-nav-item{min-height:50px}
+.app-nav-label{font-size:10px;line-height:1.1;font-weight:650}
+.app-nav-item:not(.active){opacity:.74}
+.app-nav-item.active{opacity:1}
+
+/* Empty states stay compact and actionable instead of consuming a full screen. */
+:where(.settings-empty-card,.overview-empty){
+  min-height:92px;
+  padding:15px;
+  font-family:var(--sans,Inter,system-ui,sans-serif);
+  font-size:12px;
+  line-height:1.4;
+}
+
+@media(max-width:390px){
+  .finance-kpi-card{min-height:56px;padding:8px}
+  .finance-kpi-card strong{font-size:12px}
+  .expense-row{padding:10px 11px}
+  .app-nav-label{font-size:9.5px}
+}

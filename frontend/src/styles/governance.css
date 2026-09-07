@@ -1463,3 +1463,49 @@ textarea:focus {
   .governance-kpi{min-height:56px;padding:7px 8px;column-gap:6px}
   .governance-kpi strong{font-size:12px}
 }
+
+/* v86 — governance UI consistency pass (visual only) */
+.governance-page-head,.member-governance-hero{
+  border-radius:16px;
+  box-shadow:0 7px 22px rgba(20,29,43,.045);
+}
+.governance-title-row h2,.member-governance-hero h2{
+  font-family:var(--sans,Inter,system-ui,sans-serif);
+  letter-spacing:-.25px;
+}
+.governance-title-row p,.member-governance-hero p{font-size:12px;line-height:1.45}
+.governance-eyebrow,.member-governance-hero>span{font-size:10px;letter-spacing:.9px}
+
+/* Same primary action proportions used throughout Finance/Admin. */
+.governance-primary-action{
+  min-height:40px;
+  height:40px;
+  border-radius:11px;
+  padding:0 11px;
+  font-family:var(--sans,Inter,system-ui,sans-serif);
+  font-size:11px;
+  font-weight:750;
+}
+.governance-primary-action svg{width:15px;height:15px}
+
+/* Governance cards align with the common 14px card radius. */
+.governance-project-row,.governance-meeting-card,.member-governance-card{
+  border-radius:14px!important;
+}
+.governance-project-row{padding:12px!important;margin-bottom:8px!important}
+.governance-meeting-card{padding:12px 13px;margin-bottom:8px}
+
+/* KPI text remains legible at narrow Telegram widths. */
+.governance-kpi{border-radius:12px}
+.governance-kpi span{font-size:10px;line-height:1.1}
+.governance-kpi strong{font-size:13px;line-height:1.15}
+
+@media(max-width:560px){
+  .governance-page-head{padding:13px;margin-bottom:11px}
+  .governance-title-row h2,.member-governance-hero h2{font-size:20px}
+  .governance-kpi{min-height:56px;padding:8px 9px}
+}
+@media(max-width:360px){
+  .governance-kpi strong{font-size:12px}
+  .governance-primary-action{padding:0 9px;font-size:10px}
+}
