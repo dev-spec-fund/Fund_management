@@ -30,9 +30,9 @@ export function MemberMeetings() {
   const past = rows.filter((m) => ["cancelled","completed"].includes(String(m.status)));
 
   return <>
-    <div className="member-page-heading">
-      <div className="sans">Meetings</div>
-      <span className="sans">Invitations, RSVP, minutes and decisions</span>
+    <div className="member-governance-hero meeting-theme">
+      <span className="sans">COMMUNITY</span><div><CalendarDays size={20}/><h2>Meetings</h2></div><p className="sans">RSVP to upcoming meetings and review completed meeting decisions.</p>
+      <div className="member-governance-stats sans"><b>{upcoming.length}</b><span>upcoming</span><b>{past.length}</b><span>past</span></div>
     </div>
 
     {error && <div className="sans member-inline-error">{error}</div>}

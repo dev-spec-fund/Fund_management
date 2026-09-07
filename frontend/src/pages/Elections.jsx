@@ -1,4 +1,5 @@
-import React,{useEffect,useState} from "react";
+import React,{useEffect,useMemo,useState} from "react";
+import { Plus, Vote, ClipboardCheck, ShieldCheck, ChevronRight, CheckCircle2, LockKeyhole, AlertTriangle } from "lucide-react";
 import { api,onDataChangeDebounced } from "../api";
 import { Modal,Field,useConfirmDialog } from "../components/FormControls";
 import { LoadingState,EmptyState,MessageBanner,approveBtn,compactBtn,rejectBtn } from "../components/Shared";
@@ -210,11 +211,25 @@ export default function Elections(){
 
   const changeStatus=async(action)=>{if(!detail)return;if(!await confirm({title:`${action[0].toUpperCase()+action.slice(1)} election?`,message:action==="open"?"Eligible voters will be snapshotted, Telegram-linked members will be notified, and all election setup will become read-only.":`Are you sure you want to ${action} this election?`,confirmLabel:action[0].toUpperCase()+action.slice(1),tone:action==="cancel"?"danger":"primary"}))return;setBusy(true);try{const d=await api.elections[action](detail.id);setDetail(d);await load();await refreshNotificationStatus(detail.id);setMessage(action==="open"?"Election opened. Eligible voters were snapshotted.":action==="close"?"Election closed. Results are now available.":"Election cancelled.")}catch(e){setMessage(e.message)}finally{setBusy(false)}};
 
+  const electionStats=useMemo(()=>({
+    active:(rows||[]).filter(e=>!["closed","cancelled"].includes(String(e.status))).length,
+    pending:Number(dashboard?.totals?.pending_applications||0),
+    certified:(rows||[]).filter(e=>!!e.certified_at).length
+  }),[rows,dashboard]);
   if(rows===null)return <LoadingState>Loading elections…</LoadingState>;
   return <>
-    <div className="member-page-heading"><div className="sans">EXCO Elections</div><span className="sans">Secret-ballot executive committee elections</span></div>
+    <div className="governance-page-head election-theme">
+      <div className="governance-title-row">
+        <div><span className="governance-eyebrow sans">GOVERNANCE</span><h2>Elections</h2><p className="sans">Run transparent EXCO elections with secret ballots and certified results.</p></div>
+        <button type="button" className="governance-primary-action sans" onClick={()=>setShowCreate(true)}><Plus size={16}/> New election</button>
+      </div>
+      <div className="governance-kpi-grid">
+        <ElectionKpi icon={<Vote size={16}/>} label="Active" value={electionStats.active}/>
+        <ElectionKpi icon={<ClipboardCheck size={16}/>} label="Pending" value={electionStats.pending}/>
+        <ElectionKpi icon={<ShieldCheck size={16}/>} label="Certified" value={electionStats.certified}/>
+      </div>
+    </div>
     <MessageBanner>{message}</MessageBanner>
-    <button type="button" style={{...approveBtn,width:"100%",marginBottom:12}} onClick={()=>setShowCreate(true)}>+ Create election</button>
     {dashboard&&<section className="election-dashboard">
       <div className="sans election-dashboard-head">
         <span><b>ELECTION DASHBOARD</b><small>{dashboard.totals?.active_elections||0} active election{Number(dashboard.totals?.active_elections||0)===1?"":"s"}</small></span>
@@ -222,7 +237,7 @@ export default function Elections(){
       </div>
       {!!dashboard.warnings?.length&&<div className="election-dashboard-alerts">
         {dashboard.warnings.slice(0,5).map((w,i)=><button type="button" key={`${w.election_id}-${w.key}-${i}`} onClick={()=>{const row=rows?.find(x=>Number(x.id)===Number(w.election_id));if(row)open(row)}} className={`sans election-dashboard-alert ${w.level||"warning"}`}>
-          <span>{w.text}</span><small>{w.election_title} ›</small>
+          <span>{w.text}</span><small>{w.election_title} <ChevronRight size={12}/></small>
         </button>)}
       </div>}
       {!dashboard.items?.length?<div className="sans election-dashboard-empty">No active election requires attention.</div>:dashboard.items.map(item=><button type="button" key={item.id} onClick={()=>{const row=rows?.find(x=>Number(x.id)===Number(item.id))||item;open(row)}} className="election-dashboard-card">
@@ -236,7 +251,7 @@ export default function Elections(){
           <div><span>Turnout</span><b>{item.turnout.voted}/{item.turnout.eligible}</b><small>{item.turnout.remaining} remaining</small></div>
           <div><span>Notifications</span><b>{item.notifications.sent} sent</b><small className={item.notifications.failed?"fail":""}>{item.notifications.failed} failed</small></div>
         </div>
-        {item.status==="draft"&&item.readiness&&<div className={`sans election-dashboard-readiness ${item.readiness.ready?"ready":"blocked"}`}><span>{item.readiness.ready?"✓ Ready to Open Voting":"Pre-vote readiness"}</span><b>{item.readiness.passed}/{item.readiness.total}</b></div>}
+        {item.status==="draft"&&item.readiness&&<div className={`sans election-dashboard-readiness ${item.readiness.ready?"ready":"blocked"}`}><span>{item.readiness.ready?<><CheckCircle2 size={13}/> Ready to Open Voting</>:"Pre-vote readiness"}</span><b>{item.readiness.passed}/{item.readiness.total}</b></div>}
         {!!item.runoffs?.length&&<div className="sans election-dashboard-runoff">{item.runoffs.map(r=><span key={r.id}>Runoff · {r.position_title} · {r.voted}/{r.eligible} voted</span>)}</div>}
       </button>)}
     </section>}
@@ -257,7 +272,7 @@ export default function Elections(){
         <span><b>{item.label}</b>{item.completed_at&&<small>{item.completed_by_name||"Admin"} · {formatElectionDate(item.completed_at)}</small>}</span>
       </label>)}
       {handover.handover.status!=="completed"&&<button type="button" className="sans exco-handover-complete" disabled={busy||Number(handover.progress?.completed||0)!==Number(handover.progress?.total||0)} onClick={completeHandover}>Complete handover</button>}
-      {handover.handover.status==="completed"&&<div className="sans exco-handover-completed">✓ Handover completed {formatElectionDate(handover.handover.completed_at)}</div>}
+      {handover.handover.status==="completed"&&<div className="sans exco-handover-completed"><CheckCircle2 size={14}/> Handover completed {formatElectionDate(handover.handover.completed_at)}</div>}
     </section>}
     {workboard?.term&&<section className="exco-workboard-card">
       <div className="sans exco-workboard-head"><span><b>EXCO WORKBOARD</b><small>{workboard.term.term_label||workboard.term.election_title}</small></span><button type="button" onClick={()=>setShowResponsibility(true)}>+ Add</button></div>
@@ -269,7 +284,7 @@ export default function Elections(){
         <div className="exco-workboard-actions sans">
           {item.status==="todo"&&<button type="button" disabled={busy} onClick={()=>changeResponsibilityStatus(item,"in_progress")}>Start</button>}
           {item.status!=="completed"&&<button type="button" disabled={busy} onClick={()=>changeResponsibilityStatus(item,"completed")}>Complete</button>}
-          {item.status==="completed"&&<span>✓ Done</span>}
+          {item.status==="completed"&&<span><CheckCircle2 size={13}/> Done</span>}
         </div>
       </div>)}
       <div className="sans exco-permission-note">Responsibilities belong to the EXCO term and do not grant system permissions.</div>
@@ -363,7 +378,7 @@ export default function Elections(){
             const ready=activeCandidates>=Number(p.seats||1)&&pending===0;
             return <div key={p.id} className={`election-position-readiness ${ready?"ready":"attention"}`}>
               <div className="sans"><b>{p.title}</b><span>{p.seats} seat{Number(p.seats)===1?"":"s"} · {activeCandidates} active candidate{activeCandidates===1?"":"s"}</span></div>
-              <div className="sans election-position-counts"><span>{approved} approved</span><span>{pending} pending</span><span>{withdrawn} withdrawn</span><strong>{ready?"✓ Ready":"Needs review"}</strong></div>
+              <div className="sans election-position-counts"><span>{approved} approved</span><span>{pending} pending</span><span>{withdrawn} withdrawn</span><strong>{ready?<><CheckCircle2 size={13}/> Ready</>:"Needs review"}</strong></div>
             </div>
           })}
           <details className="election-admin-more election-setup-details" open={!detail.positions.length}>
@@ -390,12 +405,12 @@ export default function Elections(){
           <div className="sans member-section-title" style={{marginTop:16}}>PRE-VOTE CHECKLIST</div>
           {!readiness?<div className="sans election-readiness-loading">Checking election readiness…</div>:<>
             <div className={`sans election-readiness-summary ${readiness.ready?"ready":"blocked"}`}>
-              <b>{readiness.ready?"✓ Ready to Open Voting":"Voting Not Ready"}</b>
+              <b>{readiness.ready?<><CheckCircle2 size={14}/> Ready to Open Voting</>:"Voting Not Ready"}</b>
               <span>{readiness.passed}/{readiness.total} checks passed</span>
             </div>
             <div className="election-readiness-list">
               {readiness.checks.map(check=><div key={check.key} className={`sans election-readiness-check ${check.ok?"pass":"fail"}`}>
-                <div><strong>{check.ok?"✓":"!"}</strong><span><b>{check.label}</b><small>{check.detail}</small></span></div>
+                <div><strong>{check.ok?<CheckCircle2 size={14}/>:<AlertTriangle size={14}/>}</strong><span><b>{check.label}</b><small>{check.detail}</small></span></div>
                 {!check.ok&&check.repairable&&<button type="button" disabled={busy} onClick={repairApplicationSync} className="sans election-auto-repair-btn">Fix automatically</button>}
               </div>)}
             </div>
@@ -422,7 +437,7 @@ export default function Elections(){
         </>}
         {detail.status==="open"&&<>
           <div className="sans election-voting-lock-banner">
-            <b>🔒 Voting setup locked</b>
+            <b><LockKeyhole size={14}/> Voting setup locked</b>
             <span>The voter snapshot has been created. Positions, candidates, applications and election dates can no longer be changed.</span>
           </div>
           <div className="sans election-secret-note">Secret ballot active. Admins can see turnout, but not individual votes.</div>
@@ -432,7 +447,7 @@ export default function Elections(){
         </>}
         {detail.status==="closed"&&<>
           {!detail.certified_at&&<div className="sans election-certification pending">{detail.unresolved_ties?.length?`Runoff required · ${detail.unresolved_ties.length} unresolved position${detail.unresolved_ties.length===1?"":"s"}`:"Results calculated · Ready for certification"}</div>}
-          {detail.certified_at&&<div className="sans election-certification">✓ Certified by {detail.certified_by_name||"Super Admin"} · Results locked</div>}
+          {detail.certified_at&&<div className="sans election-certification"><ShieldCheck size={14}/> Certified by {detail.certified_by_name||"Super Admin"} · Results locked</div>}
           {detail.certified_at&&summary&&<>
             <ElectionSummary summary={summary} adminView/>
             <div className="election-export-actions sans">
@@ -467,7 +482,7 @@ function ElectionStageStrip({detail}){
   else if(detail.certified_at)current=4;
   const cancelled=detail.status==="cancelled";
   return <div className={`election-stage-strip sans ${cancelled?"cancelled":""}`}>
-    {stages.map((stage,index)=><div key={stage} className={`${index===current&&!cancelled?"current":""} ${index<current&&!cancelled?"done":""}`}><i>{index<current&&!cancelled?"✓":index+1}</i><span>{stage}</span></div>)}
+    {stages.map((stage,index)=><div key={stage} className={`${index===current&&!cancelled?"current":""} ${index<current&&!cancelled?"done":""}`}><i>{index<current&&!cancelled?<CheckCircle2 size={12}/>:index+1}</i><span>{stage}</span></div>)}
     {cancelled&&<b>Cancelled</b>}
   </div>;
 }
@@ -532,6 +547,8 @@ function ElectionResults({detail}){
   return <div><div className="sans member-section-title">RESULTS</div>{detail.positions.map(p=>{
     const ranked=p.candidates.map(c=>{const result=detail.results?.find(r=>Number(r.candidate_id)===Number(c.id));return {...c,votes:Number(result?.votes||0),outcome:result?.outcome||"not_elected"}}).sort((a,b)=>b.votes-a.votes);
     const hasTie=ranked.some(c=>c.outcome==="tie");
-    return <div key={p.id} className="election-result-block"><b className="sans">{p.title} · {p.seats} seat{Number(p.seats)===1?"":"s"}</b>{hasTie&&<div className="sans election-tie-note">⚠ Tie at the seat boundary — no automatic winner assigned for tied candidates.</div>}{ranked.map(c=><div key={c.id} className="sans election-result-row"><span>{c.display_name}{c.outcome==="elected"?" ✓ ELECTED":c.outcome==="tie"?" · TIE":c.outcome==="withdrawn"?" · WITHDRAWN":""}</span><strong>{c.votes}</strong></div>)}</div>
+    return <div key={p.id} className="election-result-block"><b className="sans">{p.title} · {p.seats} seat{Number(p.seats)===1?"":"s"}</b>{hasTie&&<div className="sans election-tie-note"><AlertTriangle size={13}/> Tie at the seat boundary — no automatic winner assigned for tied candidates.</div>}{ranked.map(c=><div key={c.id} className="sans election-result-row"><span>{c.display_name}{c.outcome==="elected"?" · ELECTED":c.outcome==="tie"?" · TIE":c.outcome==="withdrawn"?" · WITHDRAWN":""}</span><strong>{c.votes}</strong></div>)}</div>
   })}</div>
 }
+
+function ElectionKpi({icon,label,value}){return <div className="governance-kpi sans"><i>{icon}</i><span>{label}</span><strong>{value}</strong></div>}

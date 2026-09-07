@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api, onDataChangeDebounced } from "../api";
 import { Modal, Field, useConfirmDialog } from "../components/FormControls";
 import { LoadingState, EmptyState, MessageBanner, PageHeader, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
 import Pagination, { pageSlice } from "../components/Pagination";
 import { adminCan } from "../utils/permissions";
-import { MoreHorizontal, Bell, Pencil, XCircle } from "lucide-react";
+import { MoreHorizontal, Bell, Pencil, XCircle, Plus, CalendarDays, Users, CheckCircle2, Clock3, ChevronDown } from "lucide-react";
 
 export default function Meetings({admin}){
   const emptyForm={title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:"",audience:"all_members"};
@@ -41,6 +41,11 @@ export default function Meetings({admin}){
   },140),[]);
 
   const meetingPage=pageSlice(rows||[],page);
+  const meetingStats=useMemo(()=>({
+    upcoming:(rows||[]).filter(m=>!["cancelled","completed"].includes(String(m.status))).length,
+    completed:(rows||[]).filter(m=>m.status==="completed").length,
+    responses:(rows||[]).reduce((n,m)=>n+Number(m.going||0)+Number(m.maybe||0)+Number(m.declined||0),0)
+  }),[rows]);
 
   const fmtMeetingDateTime=(date,time)=>{
     if(!date)return "";
@@ -230,7 +235,7 @@ export default function Meetings({admin}){
       <button type="button" onClick={()=>setOpenGroups({...openGroups,[key]:!open})} className="sans"
         style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",border:0,background:"transparent",padding:"2px 0 6px",cursor:"pointer"}}>
         <span style={{fontSize:10,fontWeight:700,color,letterSpacing:.3}}>{label} · {list?.length||0}</span>
-        <span style={{fontSize:10,color:"var(--soft-2)"}}>{open?"▲":"▼"}</span>
+        <ChevronDown size={15} className={open?"governance-chevron open":"governance-chevron"}/>
       </button>
       {open&&((list||[]).length===0
         ? <div className="sans" style={{fontSize:10,color:"var(--soft-3)",paddingBottom:4}}>None</div>
@@ -245,11 +250,17 @@ export default function Meetings({admin}){
 
   return <>
     {confirmationDialog}
-    <PageHeader
-      title="Meetings"
-      subtitle="Invitations, RSVP and meeting schedule"
-      action={canFinance ? <button type="button" onClick={()=>{setForm(emptyForm);setShowCreate(true)}} style={{...approveBtn,padding:"9px 12px"}}>+ New meeting</button> : null}
-    />
+    <div className="governance-page-head meeting-theme">
+      <div className="governance-title-row">
+        <div><span className="governance-eyebrow sans">GOVERNANCE</span><h2>Meetings</h2><p className="sans">Invitations, RSVP, attendance, minutes and decisions.</p></div>
+        {canFinance&&<button type="button" className="governance-primary-action sans" onClick={()=>{setForm(emptyForm);setShowCreate(true)}}><Plus size={16}/> New meeting</button>}
+      </div>
+      <div className="governance-kpi-grid">
+        <GovMetric icon={<CalendarDays size={16}/>} label="Upcoming" value={meetingStats.upcoming}/>
+        <GovMetric icon={<CheckCircle2 size={16}/>} label="Completed" value={meetingStats.completed}/>
+        <GovMetric icon={<Users size={16}/>} label="Responses" value={meetingStats.responses}/>
+      </div>
+    </div>
 
     <MessageBanner>{message}</MessageBanner>
 
@@ -258,7 +269,7 @@ export default function Meetings({admin}){
       :meetingPage.rows.map(m=>{
         const answered=Number(m.going||0)+Number(m.maybe||0)+Number(m.declined||0);
         const status=meetingLifecycle(m);
-        return <div key={m.id} style={{background:"var(--card)",border:`1px solid ${status.label==="Cancelled"?"var(--danger-border-2)":"var(--border)"}`,borderRadius:12,padding:14,marginBottom:10,opacity:status.label==="Cancelled"?.78:1}}>
+        return <div key={m.id} className={`governance-meeting-card ${String(status.label).toLowerCase()}`} style={{opacity:status.label==="Cancelled"?.78:1}}>
           <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
             <div style={{minWidth:0}}>
               <div style={{fontWeight:700,fontSize:15}}>{m.title}</div>
@@ -356,7 +367,7 @@ export default function Meetings({admin}){
                 </select>
               </div>)}
               {canFinance&&details.status!=="completed"&&<button type="button" disabled={busy||(details.attendance?.unrecorded?.length||0)>0} onClick={completeMeeting} className="sans meeting-complete-btn">Mark meeting completed</button>}
-              {details.status==="completed"&&<div className="sans meeting-completed-note">✓ Meeting completed {details.completed_at?formatLocalDateTime(details.completed_at):""}</div>}
+              {details.status==="completed"&&<div className="sans meeting-completed-note"><CheckCircle2 size={14}/> Meeting completed {details.completed_at?formatLocalDateTime(details.completed_at):""}</div>}
             </div>
 
             <div className="sans" style={{fontSize:10,fontWeight:700,color:"var(--muted)",marginTop:16,marginBottom:6}}>MINUTES & ACTION ITEMS</div>
@@ -427,3 +438,5 @@ export default function Meetings({admin}){
 }
 
 /* ---------- Settings (admin) ---------- */
+
+function GovMetric({icon,label,value}){return <div className="governance-kpi sans"><i>{icon}</i><span>{label}</span><strong>{value}</strong></div>}

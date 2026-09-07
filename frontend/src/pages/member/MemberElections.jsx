@@ -1,3 +1,4 @@
+import { Vote, LockKeyhole, CheckCircle2, ChevronRight, ShieldCheck } from "lucide-react";
 import React,{useEffect,useState} from "react";
 import { api,onDataChange } from "../../api";
 import { Modal,useConfirmDialog } from "../../components/FormControls";
@@ -77,7 +78,7 @@ export function MemberElections(){
     {governanceArchive?.terms?.length>0&&<section className="member-governance-card">
       <button type="button" className="sans member-governance-head" onClick={()=>setArchiveOpen(v=>!v)}>
         <span><b>GOVERNANCE ARCHIVE</b><small>Certified elections, EXCO terms, resolutions and completed work</small></span>
-        <strong>{archiveOpen?"▲":"▼"}</strong>
+        <strong><ChevronRight size={15} className={archiveOpen?"member-archive-chevron open":"member-archive-chevron"}/></strong>
       </button>
       {archiveOpen&&<div className="member-governance-body">
         <div className="sans member-governance-privacy">Read-only member view · no private ballots, Admin notes, audit logs or system permissions.</div>
@@ -91,7 +92,7 @@ export function MemberElections(){
             <div className="sans member-section-title">EXCO</div>
             {term.roles.map((r,i)=><div key={`${r.role_title}-${i}`} className="sans member-governance-row"><span>{r.role_title}</span><b>{r.name}</b></div>)}
           </div>}
-          {term.handover?.status==="completed"&&<div className="sans member-governance-handover">✓ Handover completed {formatApplicationDate(term.handover.completed_at)}</div>}
+          {term.handover?.status==="completed"&&<div className="sans member-governance-handover"><CheckCircle2 size={14}/> Handover completed {formatApplicationDate(term.handover.completed_at)}</div>}
           {!!term.resolutions?.length&&<div className="member-governance-section">
             <div className="sans member-section-title">ADOPTED RESOLUTIONS</div>
             {term.resolutions.map(r=><div key={r.id} className="member-governance-resolution">
@@ -103,7 +104,7 @@ export function MemberElections(){
           </div>}
           {!!term.completed_responsibilities?.length&&<div className="member-governance-section">
             <div className="sans member-section-title">COMPLETED EXCO WORK</div>
-            {term.completed_responsibilities.map(r=><div key={r.id} className="sans member-governance-work"><span><b>{r.title}</b><small>{r.owner_role_title||"EXCO"}{r.owner_name?` · ${r.owner_name}`:""}{r.completed_at?` · Completed ${formatApplicationDate(r.completed_at)}`:""}</small></span><strong>✓</strong></div>)}
+            {term.completed_responsibilities.map(r=><div key={r.id} className="sans member-governance-work"><span><b>{r.title}</b><small>{r.owner_role_title||"EXCO"}{r.owner_name?` · ${r.owner_name}`:""}{r.completed_at?` · Completed ${formatApplicationDate(r.completed_at)}`:""}</small></span><strong><CheckCircle2 size={14}/></strong></div>)}
           </div>}
         </section>)}
       </div>}
@@ -117,12 +118,12 @@ export function MemberElections(){
     </section>}
     {!rows.length?<EmptyState>No elections available.</EmptyState>:rows.map(e=>{const stage=memberElectionStage(e);return <button key={e.id} type="button" onClick={()=>open(e)} className={`member-election-card stage-${stage.tone}`}>
       <div><b className="sans">{e.title}</b><span className="sans">{e.term||""}</span><small className="sans member-election-stage-pill">{stage.label}</small></div>
-      <div className="sans"><strong>{stage.action}</strong><span>{stage.note||`${e.turnout?.voted||0}/${e.turnout?.eligible||0} voted · ${Number(e.turnout?.percent||0).toFixed(1)}%`}</span></div>
+      <div className="sans"><strong>{stage.action} <ChevronRight size={13}/></strong><span>{stage.note||`${e.turnout?.voted||0}/${e.turnout?.eligible||0} voted · ${Number(e.turnout?.percent||0).toFixed(1)}%`}</span></div>
     </button>})}
     {selected&&<Modal title={selected.title} onClose={()=>{setSelected(null);setDetail(null);setSummary(null)}}>
       {!detail?<LoadingState>Loading ballot…</LoadingState>:<>
         <MemberElectionStageBanner detail={detail}/>
-        <div className="sans election-secret-note">🔒 Secret ballot. The system records that you voted, but ballot selections are stored without your member ID.</div>
+        <div className="sans election-secret-note"><LockKeyhole size={14}/> Secret ballot. The system records that you voted, but ballot selections are stored without your member ID.</div>
         {detail.status==="draft"&&<>
           <div className={`sans election-application-status ${detail.application_phase}`}>{detail.application_phase==="open"?"Candidate applications are open":detail.application_phase==="upcoming"?"Candidate applications have not opened yet":"Candidate applications are closed"}</div>
           {!!detail.applications?.length&&<div className="election-my-applications">{detail.applications.map(a=><div key={a.id} className={`sans election-my-application status-${a.status}`}>
@@ -147,13 +148,13 @@ export function MemberElections(){
         </>}
 
         {detail.status==="open"&&!detail.eligible&&<div className="sans member-inline-error">You are not eligible to vote in this election.</div>}
-        {detail.status==="open"&&detail.eligible&&detail.my_vote&&<div className="sans election-voted">✓ Your vote has been submitted.</div>}
+        {detail.status==="open"&&detail.eligible&&detail.my_vote&&<div className="sans election-voted"><CheckCircle2 size={14}/> Your vote has been submitted.</div>}
         {detail.status==="open"&&detail.eligible&&!detail.my_vote&&<>
           {detail.positions.map(p=><div key={p.id} className="election-ballot-position">
             <div className="sans"><b>{p.title}</b><span>{Number(p.min_selections||0)>0?`Select ${p.min_selections}${Number(p.max_selections)>Number(p.min_selections)?`–${p.max_selections}`:""}`:`Select up to ${p.max_selections}`}</span></div>
             {p.candidates.filter(c=>c.status==="active").map(c=>{
               const selected=(choices[String(p.id)]||[]).includes(c.id);
-              return <button key={c.id} type="button" onClick={()=>toggle(p,c.id)} className={`sans election-candidate${selected?" selected":""}`}><span>{c.display_name}</span><b>{selected?"✓":""}</b></button>
+              return <button key={c.id} type="button" onClick={()=>toggle(p,c.id)} className={`sans election-candidate${selected?" selected":""}`}><span>{c.display_name}</span><b>{selected?<CheckCircle2 size={14}/>:null}</b></button>
             })}
           </div>)}
           <button type="button" disabled={busy} onClick={submit} style={{...approveBtn,width:"100%",marginTop:12}}>{busy?"Submitting…":"Review & submit vote"}</button>
@@ -165,14 +166,14 @@ export function MemberElections(){
             const selected=runoffChoices[String(runoff.id)]||[];
             return <div key={runoff.id} className="election-runoff-ballot">
               <div className="sans election-runoff-title"><b>{runoff.position_title} · Runoff Round {runoff.round_no}</b><span>Select exactly {runoff.seats_to_fill}</span></div>
-              {mine?.voted?<div className="sans election-voted">✓ Your runoff vote has been submitted.</div>:mine?.eligible?<>
-                {runoff.candidates.map(c=><button key={c.id} type="button" onClick={()=>toggleRunoff(runoff,c.id)} className={`sans election-candidate${selected.includes(c.id)?" selected":""}`}><span>{c.display_name}</span><b>{selected.includes(c.id)?"✓":""}</b></button>)}
+              {mine?.voted?<div className="sans election-voted"><CheckCircle2 size={14}/> Your runoff vote has been submitted.</div>:mine?.eligible?<>
+                {runoff.candidates.map(c=><button key={c.id} type="button" onClick={()=>toggleRunoff(runoff,c.id)} className={`sans election-candidate${selected.includes(c.id)?" selected":""}`}><span>{c.display_name}</span><b>{selected.includes(c.id)?<CheckCircle2 size={14}/>:null}</b></button>)}
                 <button type="button" disabled={busy||selected.length!==Number(runoff.seats_to_fill)} onClick={()=>submitRunoff(runoff)} style={{...approveBtn,width:"100%",marginTop:8}}>Submit runoff vote</button>
               </>:<div className="sans election-secret-note">You are not eligible for this runoff.</div>}
             </div>
           })}
         </>}
-        {detail.status==="closed"&&detail.certified_at&&<><div className="sans election-certification">✓ Official results certified · EXCO roles assigned</div>{summary&&<MemberElectionSummary summary={summary}/>}<MemberResults detail={detail}/></>}
+        {detail.status==="closed"&&detail.certified_at&&<><div className="sans election-certification"><ShieldCheck size={14}/> Official results certified · EXCO roles assigned</div>{summary&&<MemberElectionSummary summary={summary}/>}<MemberResults detail={detail}/></>}
         {detail.status==="cancelled"&&<div className="sans election-voted">This election was cancelled.</div>}
       </>}
     </Modal>}
@@ -180,21 +181,21 @@ export function MemberElections(){
   </>;
 }
 function memberElectionStage(e){
-  if(e.certified_at)return {label:"Results Certified",action:"View official results ›",tone:"certified"};
-  if(Number(e.open_runoffs||0)>0)return {label:"Runoff Open",action:"Vote in runoff ›",tone:"active"};
+  if(e.certified_at)return {label:"Results Certified",action:"View official results",tone:"certified"};
+  if(Number(e.open_runoffs||0)>0)return {label:"Runoff Open",action:"Vote in runoff",tone:"active"};
   if(e.status==="open")return e.my_vote
-    ? {label:"You Have Voted",action:"Vote submitted ✓",tone:"done"}
-    : {label:"Voting Open",action:"Vote now ›",tone:"active"};
-  if(e.status==="closed")return {label:"Voting Closed",action:"View election status ›",tone:"waiting"};
-  if(e.status==="cancelled")return {label:"Cancelled",action:"View details ›",tone:"muted"};
-  if(e.my_application_status==="pending")return {label:"Pending Review",action:"View application ›",tone:"waiting"};
-  if(e.my_application_status==="approved")return {label:"Approved Candidate",action:"View candidacy ›",tone:"done"};
-  if(e.my_application_status==="rejected")return {label:"Application Rejected",action:"View details ›",tone:"muted"};
-  if(e.my_application_status==="withdrawn")return {label:"Application Withdrawn",action:"View details ›",tone:"muted"};
-  if(e.application_phase==="open")return {label:"Applications Open",action:"Apply for position ›",tone:"active"};
-  if(e.application_phase==="upcoming")return {label:"Applications Open Soon",action:"View schedule ›",tone:"waiting"};
-  if(e.application_phase==="closed")return {label:"Voting Opens Soon",action:"View candidates ›",tone:"waiting"};
-  return {label:"Election Draft",action:"View details ›",tone:"muted"};
+    ? {label:"You Have Voted",action:"Vote submitted",tone:"done"}
+    : {label:"Voting Open",action:"Vote now",tone:"active"};
+  if(e.status==="closed")return {label:"Voting Closed",action:"View election status",tone:"waiting"};
+  if(e.status==="cancelled")return {label:"Cancelled",action:"View details",tone:"muted"};
+  if(e.my_application_status==="pending")return {label:"Pending Review",action:"View application",tone:"waiting"};
+  if(e.my_application_status==="approved")return {label:"Approved Candidate",action:"View candidacy",tone:"done"};
+  if(e.my_application_status==="rejected")return {label:"Application Rejected",action:"View details",tone:"muted"};
+  if(e.my_application_status==="withdrawn")return {label:"Application Withdrawn",action:"View details",tone:"muted"};
+  if(e.application_phase==="open")return {label:"Applications Open",action:"Apply for position",tone:"active"};
+  if(e.application_phase==="upcoming")return {label:"Applications Open Soon",action:"View schedule",tone:"waiting"};
+  if(e.application_phase==="closed")return {label:"Voting Opens Soon",action:"View candidates",tone:"waiting"};
+  return {label:"Election Draft",action:"View details",tone:"muted"};
 }
 
 function MemberElectionStageBanner({detail}){

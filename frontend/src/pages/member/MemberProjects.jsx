@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Eye, FolderKanban } from "lucide-react";
+import { Eye, FolderKanban, ChevronDown, ArrowRight, CircleDollarSign } from "lucide-react";
 import { api, onDataChange } from "../../api";
 import { EmptyState, compactBtn } from "../../components/Shared";
 import { fmt } from "../../utils/format";
@@ -45,6 +45,9 @@ export function MemberProjects() {
   if (!projects.length) return <EmptyState>No active or completed projects yet.</EmptyState>;
 
   return <>
+    <div className="member-governance-hero project-theme">
+      <span className="sans">COMMUNITY</span><div><FolderKanban size={20}/><h2>Projects</h2></div><p className="sans">See where community funds are being used and how projects are progressing.</p>
+    </div>
     <div className="sans member-projects-notice">
       <Eye size={13}/> Project finances are read-only. Only approved expenses and active project donations are shown.
     </div>
@@ -72,7 +75,7 @@ export function MemberProjects() {
               </div>
               <div className="sans member-project-meta">{p.project_code}{p.responsible_member_name?` · ${p.responsible_member_name}`:""}</div>
             </div>
-            <span className={`member-project-chevron${open?" open":""}`} aria-hidden="true">⌄</span>
+            <ChevronDown size={18} className={`member-project-chevron${open?" open":""}`} aria-hidden="true"/>
           </div>
 
           <div className="member-project-metrics">
@@ -93,7 +96,7 @@ export function MemberProjects() {
 
           <div className="sans member-project-tap-hint">
             <span>{donations.length} donation{donations.length===1?"":"s"} · {expenses.length} expense{expenses.length===1?"":"s"}</span>
-            <strong>{open?"Hide details":"View details"} ›</strong>
+            <strong>{open?"Hide details":"View details"} <ArrowRight size={13}/></strong>
           </div>
         </button>
 
@@ -148,7 +151,7 @@ function ProjectSubsection({title,count,open,onToggle,children}) {
   return <div className="member-project-subsection">
     <button type="button" onClick={onToggle} className="member-project-subsection-toggle" aria-expanded={open}>
       <span className="sans">{title} <b>{count}</b></span>
-      <span className={`member-project-subsection-chevron${open?" open":""}`}>⌄</span>
+      <ChevronDown size={15} className={`member-project-subsection-chevron${open?" open":""}`}/>
     </button>
     <div className={`member-project-subsection-body${open?" open":""}`}>
       <div>{children}</div>

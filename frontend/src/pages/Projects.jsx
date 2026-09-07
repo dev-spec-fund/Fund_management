@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Pencil, CheckCircle2, RotateCcw, X, History, WalletCards, Paperclip, ChevronDown } from "lucide-react";
+import { Plus, Search, Pencil, CheckCircle2, RotateCcw, X, History, WalletCards, Paperclip, ChevronDown, FolderKanban, CircleDollarSign, HandCoins, Activity } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { LoadingState, EmptyState, MessageBanner, PrimaryButton, smallBtn } from "../components/Shared";
@@ -21,19 +21,27 @@ export default function Projects({ admin }) {
   useEffect(()=>{setPage(1);const t=setTimeout(load,220);return()=>clearTimeout(t);},[filter,query]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses")||path?.startsWith("/api/donations"))load();}),[filter,query]);
   const totalSpent=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.spent||0),0),[rows]);
+  const activeCount=useMemo(()=> (rows||[]).filter(r=>r.status==="active").length,[rows]);
+  const totalBudget=useMemo(()=> (rows||[]).reduce((s,r)=>s+(r.budget==null?0:Number(r.budget||0)),0),[rows]);
+  const donationCount=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.donation_count||0),0),[rows]);
   const projectPage=pageSlice(rows||[],page);
   const saved=async(text)=>{setSelected(null);setShowAdd(false);setMessage(text);await load();};
   return <>
-    <div className="page-sticky-controls">
-      <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:9}}>
-        <div><div style={{fontSize:13,fontWeight:700,color:"var(--primary-text)",letterSpacing:.4}}>PROJECTS</div><div style={{fontSize:10,color:"var(--soft)",marginTop:2}}>{rows?.length||0} projects · Spent MVR {fmt(totalSpent)}</div></div>
-        <button type="button" onClick={()=>setShowAdd(true)} style={{...smallBtn("var(--primary-text)"),padding:"8px 11px"}}><Plus size={14}/> New project</button>
+    <div className="governance-page-head project-theme">
+      <div className="governance-title-row">
+        <div><span className="governance-eyebrow sans">GOVERNANCE</span><h2>Projects</h2><p className="sans">Track community work, budgets and project activity.</p></div>
+        <button type="button" className="governance-primary-action sans" onClick={()=>setShowAdd(true)}><Plus size={16}/> New project</button>
       </div>
+      <div className="governance-kpi-grid">
+        <GovKpi icon={<Activity size={16}/>} label="Active" value={activeCount}/><GovKpi icon={<CircleDollarSign size={16}/>} label="Budget" value={`MVR ${fmt(totalBudget)}`}/><GovKpi icon={<WalletCards size={16}/>} label="Spent" value={`MVR ${fmt(totalSpent)}`}/><GovKpi icon={<HandCoins size={16}/>} label="Donations" value={donationCount}/>
+      </div>
+    </div>
+    <div className="page-sticky-controls governance-filters">
       <div className="expense-filter-row sans">{FILTERS.map(([v,l])=><button type="button" key={v} onClick={()=>setFilter(v)} className={filter===v?"expense-filter-chip active":"expense-filter-chip"}>{l}</button>)}</div>
       <div className="expense-search sans" style={{marginBottom:14}}><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search project name, code or responsible member"/>{query&&<button type="button" onClick={()=>setQuery("")}><X size={14}/></button>}</div>
     </div>
     <MessageBanner>{message}</MessageBanner><MessageBanner tone="error">{error}</MessageBanner>
-    {rows===null?<ProjectsSkeleton/>:rows.length===0?<EmptyState>No projects found.</EmptyState>:projectPage.rows.map(p=><button type="button" key={p.id} onClick={()=>setSelected(p)} className="expense-row" style={{alignItems:"flex-start"}}>
+    {rows===null?<ProjectsSkeleton/>:rows.length===0?<EmptyState>No projects found.</EmptyState>:projectPage.rows.map(p=><button type="button" key={p.id} onClick={()=>setSelected(p)} className="expense-row governance-project-row" style={{alignItems:"flex-start"}}>
       <div style={{minWidth:0,textAlign:"left",flex:1}}>
         <div className="sans" style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}><strong style={{fontSize:13}}>{p.name}</strong><span style={{fontSize:9,fontWeight:700,color:tone(p.status),textTransform:"uppercase"}}>{p.status}</span></div>
         <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:4}}>{p.project_code}{p.responsible_member_name?` · ${p.responsible_member_name}`:""}</div>
@@ -47,6 +55,8 @@ export default function Projects({ admin }) {
     {selected&&<ProjectDetails project={selected} admin={admin} onClose={()=>setSelected(null)} onSaved={saved}/>} 
   </>;
 }
+
+function GovKpi({icon,label,value}){return <div className="governance-kpi sans"><i>{icon}</i><span>{label}</span><strong>{value}</strong></div>}
 
 function ProjectsSkeleton(){
   return <div className="admin-project-skeleton" aria-label="Loading projects" aria-busy="true">
