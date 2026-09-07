@@ -1,5 +1,5 @@
-import React from "react";
-import { Bell } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Ban, Bell, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, Search, SlidersHorizontal, UserRound } from "lucide-react";
 import { api } from "../../api";
 import { SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../../components/Shared";
 import Pagination, { pageSlice } from "../../components/Pagination";
@@ -25,7 +25,6 @@ function AuditEntry({a}) {
 export function GeneralSettingsSection(ctx) {
   const {settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,closeBusy,shiftCloseMonth,closeMonthValue,setCloseMonthValue,setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage} = ctx;
   return <>
-
       <SectionTitle>ORGANIZATION</SectionTitle>
       <div style={cardStyle}>
         <div className="sans" style={{fontSize:12,color:"var(--muted)",marginBottom:5}}>Group Name</div>
@@ -35,6 +34,13 @@ export function GeneralSettingsSection(ctx) {
         <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:7}}>Used automatically in Telegram messages, reports, statements, backups and compact app branding.</div>
       </div>
 
+
+  </>;
+}
+
+export function ContributionSettingsSection(ctx) {
+  const {settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,closeBusy,shiftCloseMonth,closeMonthValue,setCloseMonthValue,setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage} = ctx;
+  return <>
       <SectionTitle>MEMBER CONTRIBUTIONS</SectionTitle>
       <div style={cardStyle}>
         <div className="sans" style={{fontSize:12,color:"var(--muted)",marginBottom:5}}>Default monthly contribution</div>
@@ -61,6 +67,13 @@ export function GeneralSettingsSection(ctx) {
         </div>
       </div>
 
+
+  </>;
+}
+
+export function ExpenseCategorySettingsSection(ctx) {
+  const {settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,closeBusy,shiftCloseMonth,closeMonthValue,setCloseMonthValue,setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage} = ctx;
+  return <>
       <SectionTitle>EXPENSE CATEGORIES</SectionTitle>
       <div style={cardStyle}>
         {categories.map(cat=><div key={cat.id} className="sans" style={{display:"flex",alignItems:"center",gap:7,padding:"8px 0",borderBottom:"1px solid var(--divider)",opacity:Number(cat.active)===0?.55:1}}>
@@ -72,6 +85,13 @@ export function GeneralSettingsSection(ctx) {
         {financeAdmin&&<button type="button" style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=prompt("New expense category name");if(!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}>+ Add category</button>}
       </div>
 
+
+  </>;
+}
+
+export function ReminderSettingsSection(ctx) {
+  const {settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,closeBusy,shiftCloseMonth,closeMonthValue,setCloseMonthValue,setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage} = ctx;
+  return <>
       <SectionTitle>PAYMENT REMINDERS</SectionTitle>
       <div style={cardStyle}>
         <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}}>
@@ -114,13 +134,20 @@ export function GeneralSettingsSection(ctx) {
         </button>}
       </div>
 
+
+  </>;
+}
+
+export function MonthManagementSettingsSection(ctx) {
+  const {settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,closeBusy,shiftCloseMonth,closeMonthValue,setCloseMonthValue,setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage} = ctx;
+  return <>
       <SectionTitle>MONTH MANAGEMENT</SectionTitle>
       <div style={cardStyle}>
         <div className="sans" style={{fontSize:11,color:"var(--muted)",marginBottom:7}}>Select the month to review or close</div>
         <div style={{display:"grid",gridTemplateColumns:"40px 1fr 40px",gap:8,alignItems:"center",marginBottom:10}}>
-          <button type="button" disabled={closeBusy} onClick={()=>shiftCloseMonth(-1)} className="sans" aria-label="Previous month" style={{...compactBtn,height:40,fontSize:18,padding:0}}>‹</button>
+          <button type="button" disabled={closeBusy} onClick={()=>shiftCloseMonth(-1)} className="sans" aria-label="Previous month" style={{...compactBtn,height:40,padding:0,display:"grid",placeItems:"center"}}><ChevronLeft size={18}/></button>
           <input type="month" max={currentMonth} value={closeMonthValue} onChange={e=>{ if(!e.target.value || e.target.value>currentMonth)return; setCloseMonthValue(e.target.value); setCloseCheck(null); }} className="sans native-date-time-control native-month-control" style={{width:"100%",boxSizing:"border-box",height:40,border:"1px solid var(--border-strong)",borderRadius:9,padding:"0 10px",fontSize:16,background:"var(--bg)",color:"var(--text)"}}/>
-          <button type="button" disabled={closeBusy || closeMonthValue>=currentMonth} onClick={()=>shiftCloseMonth(1)} className="sans" aria-label="Next month" style={{...compactBtn,height:40,fontSize:18,padding:0}}>›</button>
+          <button type="button" disabled={closeBusy || closeMonthValue>=currentMonth} onClick={()=>shiftCloseMonth(1)} className="sans" aria-label="Next month" style={{...compactBtn,height:40,padding:0,display:"grid",placeItems:"center"}}><ChevronRight size={18}/></button>
         </div>
         <div className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginBottom:10}}>
           <span style={{color:"var(--muted)"}}>Selected month</span>
@@ -130,7 +157,7 @@ export function GeneralSettingsSection(ctx) {
           <span style={{color:"var(--muted)"}}>Status</span>
           <span style={{fontWeight:700,color:monthClosed?"var(--danger)":"var(--success)"}}>{monthClosed?"Closed":"Open"}</span>
         </div>
-        {closeMonthValue<currentMonth && !monthClosed && <div className="sans" style={{fontSize:10,color:"var(--warning)",marginTop:9,lineHeight:1.4}}>⚠ {monthLabel(closeMonthValue)} is a past open month. You can review and close it now; the current month stays open.</div>}
+        {closeMonthValue<currentMonth && !monthClosed && <div className="sans settings-inline-alert warning"><AlertTriangle size={14}/><span>{monthLabel(closeMonthValue)} is a past open month. You can review and close it now; the current month stays open.</span></div>}
         {superAdmin && !monthClosed && <button type="button" disabled={closeBusy} onClick={reviewMonthClose} style={{...rejectBtn,marginTop:12}}>{closeBusy?"Checking…":"Review month closing"}</button>}
         {canCloseMonth && monthClosed && <button type="button" onClick={()=>api.governance.reopenMonth(closeMonthValue).then(()=>{setCloseCheck(null);return load()}).catch(e=>setMessage(e.message))} style={{...approveBtn,marginTop:12}}>Reopen {monthLabel(closeMonthValue)}</button>}
       </div>
@@ -144,8 +171,8 @@ export function GeneralSettingsSection(ctx) {
           <div><span style={{color:"var(--soft)"}}>Collected</span><br/><b>MVR {Number(closeCheck.total_collected||0).toLocaleString()} / {Number(closeCheck.total_due||0).toLocaleString()}</b></div>
           <div><span style={{color:"var(--soft)"}}>Collection rate</span><br/><b>{Math.round(Number(closeCheck.collection_rate||0))}%</b></div>
         </div>
-        {(closeCheck.blockers||[]).map((x,i)=><div key={`b-${i}`} className="sans" style={{fontSize:11,color:"var(--danger)",marginTop:4}}>⛔ {x}</div>)}
-        {(closeCheck.warnings||[]).map((x,i)=><div key={`w-${i}`} className="sans" style={{fontSize:11,color:"var(--warning)",marginTop:4}}>⚠ {x}</div>)}
+        {(closeCheck.blockers||[]).map((x,i)=><div key={`b-${i}`} className="sans settings-inline-alert danger"><Ban size={13}/><span>{x}</span></div>)}
+        {(closeCheck.warnings||[]).map((x,i)=><div key={`w-${i}`} className="sans settings-inline-alert warning"><AlertTriangle size={13}/><span>{x}</span></div>)}
         {canCloseMonth && (closeCheck.blockers||[]).length===0 && <button type="button" disabled={closeBusy} onClick={closeMonth} style={{...rejectBtn,width:"100%",marginTop:12}}>Create snapshot & close month</button>}
       </div>}
 
@@ -164,6 +191,7 @@ export function GeneralSettingsSection(ctx) {
           <Pagination page={pageSlice(closures,closurePage).page} total={closures.length} onChange={setClosurePage}/>
         </div>
       </>}
+
   </>;
 }
 
@@ -332,7 +360,7 @@ export function SystemSettingsSection(ctx) {
           ].map(([label,ok,yes,no])=>
             <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--divider)"}}>
               <span style={{color:"var(--muted)"}}>{label}</span>
-              <b style={{color:ok?"var(--success)":"var(--danger)"}}>{ok?"● ":"● "}{ok?yes:no}</b>
+              <b className="settings-health-status" style={{color:ok?"var(--success)":"var(--danger)"}}>{ok?<CircleCheck size={14}/>:<CircleX size={14}/>}<span>{ok?yes:no}</span></b>
             </div>
           )}
           <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0"}}>
@@ -385,14 +413,50 @@ export function SystemSettingsSection(ctx) {
 }
 
 export function AuditSettingsSection(ctx) {
-  const {settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,closeBusy,shiftCloseMonth,closeMonthValue,setCloseMonthValue,setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage} = ctx;
-  return <>
+  const {financeAdmin,audit,setAuditPage,auditPage} = ctx;
+  const [query,setQuery]=useState("");
+  const [action,setAction]=useState("all");
+  const [actor,setActor]=useState("all");
 
-      <SectionTitle>AUDIT LOG</SectionTitle>
-      <div style={cardStyle}>
-        {auditRows.rows.map(a=><AuditEntry key={a.id} a={a}/>)}
-        <Pagination page={auditRows.page} total={audit.length} onChange={setAuditPage}/>
-        {!audit.length&&<EmptyLine>No audit entries.</EmptyLine>}
+  const actions=useMemo(()=>[...new Set((audit||[]).map(a=>a.action).filter(Boolean))].sort(),[audit]);
+  const actors=useMemo(()=>[...new Set((audit||[]).map(a=>a.admin_name || "system"))].sort(),[audit]);
+  const filtered=useMemo(()=>{
+    const q=query.trim().toLowerCase();
+    return (audit||[]).filter(a=>{
+      if(action!=="all" && a.action!==action) return false;
+      if(actor!=="all" && (a.admin_name||"system")!==actor) return false;
+      if(!q) return true;
+      const hay=[a.action,a.admin_name,a.detail,formatLocalDateTime(a.created_at)].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  },[audit,query,action,actor]);
+  useEffect(()=>{ setAuditPage(1); },[query,action,actor,setAuditPage]);
+  const rows=pageSlice(filtered,auditPage);
+
+  if(!financeAdmin) return <div className="settings-empty-card sans">You do not have permission to view the audit log.</div>;
+  return <>
+    <div className="settings-page-head sans">
+      <div>
+        <div className="settings-eyebrow">System history</div>
+        <h2>Audit Log</h2>
+        <p>Track important financial, member, governance and administration changes.</p>
       </div>
+      <div className="settings-head-count">{filtered.length}</div>
+    </div>
+
+    <div className="audit-filter-card sans">
+      <label className="audit-search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search action, admin or detail"/></label>
+      <div className="audit-filter-grid">
+        <label><SlidersHorizontal size={14}/><select value={action} onChange={e=>setAction(e.target.value)}><option value="all">All actions</option>{actions.map(x=><option key={x} value={x}>{auditLabel(x)}</option>)}</select></label>
+        <label><UserRound size={14}/><select value={actor} onChange={e=>setActor(e.target.value)}><option value="all">All admins</option>{actors.map(x=><option key={x} value={x}>{x}</option>)}</select></label>
+      </div>
+    </div>
+
+    <div className="audit-timeline sans">
+      {rows.rows.map(a=><AuditEntry key={a.id} a={a}/>)}
+      {!filtered.length&&<div className="settings-empty-card"><Clock3 size={20}/><b>No audit entries found</b><span>Try changing the filters or search.</span></div>}
+    </div>
+    <Pagination page={rows.page} total={filtered.length} onChange={setAuditPage}/>
   </>;
 }
+

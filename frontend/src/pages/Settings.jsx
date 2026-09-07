@@ -4,7 +4,7 @@ import { LoadingState, ErrorState, MessageBanner } from "../components/Shared";
 import { currentMonthValue } from "../utils/date";
 import { pageSlice } from "../components/Pagination";
 import { adminCan } from "../utils/permissions";
-import { GeneralSettingsSection, AdminSettingsSection, SystemSettingsSection, AuditSettingsSection } from "./settings/SettingsSections";
+import { GeneralSettingsSection, ContributionSettingsSection, ExpenseCategorySettingsSection, ReminderSettingsSection, MonthManagementSettingsSection, AdminSettingsSection, SystemSettingsSection, AuditSettingsSection } from "./settings/SettingsSections";
 import { useSettingsData } from "./settings/useSettingsData";
 import { useSettingsActions } from "./settings/useSettingsActions";
 
@@ -39,7 +39,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   if(settingsLoading)return <LoadingState>Loading settings…</LoadingState>;
   if(settingsError && !Object.keys(settings||{}).length) return <ErrorState onRetry={load}>{settingsError}</ErrorState>;
 
-  const tabs=[["general","General"],["admins","Admins"],["system","System"]];
+  const tabs=[["general","General"],["contributions","Contributions"],["reminders","Reminders"],["categories","Categories"],["financial","Financial"],["admins","Admins & Roles"],["system","System"]];
   const filteredErrors=errors.filter(e=>errorFilter==="all"?true:errorFilter==="resolved"?e.status==="resolved":e.status!=="resolved");
   const errorRows=pageSlice(filteredErrors,errorPage);
   const auditRows=pageSlice(audit,auditPage);
@@ -67,8 +67,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
     {!sectionOnly && <div className="settings-subnav-sticky page-sticky-controls">
       <div className="settings-subnav-scroll">
         {tabs.map(([key,label])=>
-          <button key={key} type="button" onClick={()=>setSettingsSection(key)} className="sans"
-            style={{flex:"0 0 auto",border:`1px solid ${settingsSection===key?"var(--primary)":"var(--border-2)"}`,background:settingsSection===key?"var(--primary)":"var(--card)",color:settingsSection===key?"var(--on-primary)":"var(--muted)",borderRadius:20,padding:"7px 13px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+          <button key={key} type="button" onClick={()=>setSettingsSection(key)} className={`sans settings-section-chip ${settingsSection===key?"active":""}`}>
             {label}
           </button>
         )}
@@ -76,6 +75,10 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
     </div>}
 
     {settingsSection==="general" && <GeneralSettingsSection {...sectionProps} />}
+    {settingsSection==="contributions" && <ContributionSettingsSection {...sectionProps} />}
+    {settingsSection==="reminders" && <ReminderSettingsSection {...sectionProps} />}
+    {settingsSection==="categories" && <ExpenseCategorySettingsSection {...sectionProps} />}
+    {settingsSection==="financial" && <MonthManagementSettingsSection {...sectionProps} />}
     {settingsSection==="admins" && <AdminSettingsSection {...sectionProps} />}
     {settingsSection==="system" && <SystemSettingsSection {...sectionProps} />}
     {settingsSection==="audit" && <AuditSettingsSection {...sectionProps} />}

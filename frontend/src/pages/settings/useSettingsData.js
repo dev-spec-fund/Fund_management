@@ -56,9 +56,9 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
   useEffect(()=>{ load(); },[admin?.id,role,load]);
 
   useEffect(()=>{
-    if(settingsSection!=="system") return;
+    if(!["system","reminders"].includes(settingsSection)) return;
     api.admin.health().then(setHealth).catch(e=>setMessage(e.message));
-    if(superAdmin) api.admin.errors().then(setErrors).catch(e=>setMessage(e.message));
+    if(settingsSection==="system" && superAdmin) api.admin.errors().then(setErrors).catch(e=>setMessage(e.message));
   },[settingsSection,superAdmin,admin?.id]);
 
   useEffect(()=>{
