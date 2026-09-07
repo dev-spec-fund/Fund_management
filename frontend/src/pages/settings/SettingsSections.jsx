@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, AlertTriangle, Ban, Bell, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, Search, SlidersHorizontal, UserRound } from "lucide-react";
+import { Plus, AlertTriangle, Ban, Bell, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, Search, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { api } from "../../api";
 import { SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../../components/Shared";
 import Pagination, { pageSlice } from "../../components/Pagination";
@@ -12,13 +12,22 @@ function cleanAuditObject(v, depth=0) { if (!v || typeof v !== "object" || depth
 function auditSummary(detail) { let d=detail; if (typeof d === "string") { try { d=JSON.parse(d); } catch { return [{label:"Details",value:d.slice(0,140)}]; } } d=cleanAuditObject(d); if (!d || typeof d !== "object") return []; const after=d.after && typeof d.after==="object" ? d.after : {}; const before=d.before && typeof d.before==="object" ? d.before : {}; const preferred=["member_code","txn_id","donor_name","description","amount","expense_date","month","transaction_month","ref_number","status","role","name","note","reason"]; const rows=[]; if (d.entity) rows.push({label:"Record",value:`${auditLabel(String(d.entity))}${d.entity_id!=null?` #${d.entity_id}`:""}`}); for (const key of preferred) { const av=auditValue(after[key]), bv=auditValue(before[key]); if (av!=null && bv!=null && av!==bv) rows.push({label:auditLabel(key),value:`${bv} → ${av}`}); else if (av!=null) rows.push({label:auditLabel(key),value:av}); if (rows.length>=5) break; } return rows; }
 function AuditEntry({a}) {
   const rows=auditSummary(a.detail);
-  return <div className="sans admin-audit-row">
-    <div className="admin-audit-head">
-      <div className="admin-audit-action">{auditLabel(a.action)}</div>
-      <span>{formatLocalDateTime(a.created_at)}</span>
-    </div>
-    <div className="admin-audit-meta">by {a.admin_name || "system"}</div>
-    {rows.length>0&&<div className="admin-audit-details">{rows.map((r,i)=><div key={`${r.label}-${i}`}><span>{r.label}</span><strong>{r.value}</strong></div>)}</div>}
+  const [open,setOpen]=useState(false);
+  const actor=a.admin_name || "system";
+  const preview=rows[0]?.value;
+  return <div className={`sans admin-audit-row${open?" open":""}`}>
+    <button type="button" className="admin-audit-summary" onClick={()=>setOpen(v=>!v)} aria-expanded={open}>
+      <span className="admin-audit-dot" aria-hidden="true"/>
+      <span className="admin-audit-summary-main">
+        <span className="admin-audit-summary-line">
+          <b className="admin-audit-action">{auditLabel(a.action)}</b>
+          <time>{formatLocalDateTime(a.created_at)}</time>
+        </span>
+        <span className="admin-audit-meta">{preview?`${preview} · `:""}by {actor}</span>
+      </span>
+      <ChevronDown size={16} className="admin-audit-chevron" aria-hidden="true"/>
+    </button>
+    {open&&rows.length>0&&<div className="admin-audit-details">{rows.map((r,i)=><div key={`${r.label}-${i}`}><span>{r.label}</span><strong>{r.value}</strong></div>)}</div>}
   </div>;
 }
 
@@ -417,6 +426,9 @@ export function AuditSettingsSection(ctx) {
   const [query,setQuery]=useState("");
   const [action,setAction]=useState("all");
   const [actor,setActor]=useState("all");
+  const [dateFrom,setDateFrom]=useState("");
+  const [dateTo,setDateTo]=useState("");
+  const [showFilters,setShowFilters]=useState(false);
 
   const actions=useMemo(()=>[...new Set((audit||[]).map(a=>a.action).filter(Boolean))].sort(),[audit]);
   const actors=useMemo(()=>[...new Set((audit||[]).map(a=>a.admin_name || "system"))].sort(),[audit]);
@@ -425,32 +437,48 @@ export function AuditSettingsSection(ctx) {
     return (audit||[]).filter(a=>{
       if(action!=="all" && a.action!==action) return false;
       if(actor!=="all" && (a.admin_name||"system")!==actor) return false;
+      const created=a.created_at?new Date(a.created_at):null;
+      if(dateFrom && created && created < new Date(`${dateFrom}T00:00:00`)) return false;
+      if(dateTo && created && created > new Date(`${dateTo}T23:59:59.999`)) return false;
       if(!q) return true;
       const hay=[a.action,a.admin_name,a.detail,formatLocalDateTime(a.created_at)].filter(Boolean).join(" ").toLowerCase();
       return hay.includes(q);
     });
-  },[audit,query,action,actor]);
-  useEffect(()=>{ setAuditPage(1); },[query,action,actor,setAuditPage]);
+  },[audit,query,action,actor,dateFrom,dateTo]);
+  useEffect(()=>{ setAuditPage(1); },[query,action,actor,dateFrom,dateTo,setAuditPage]);
+  const activeFilters=(action!=="all"?1:0)+(actor!=="all"?1:0)+(dateFrom||dateTo?1:0);
   const rows=pageSlice(filtered,auditPage);
 
   if(!financeAdmin) return <div className="settings-empty-card sans">You do not have permission to view the audit log.</div>;
   return <>
-    <div className="settings-page-head sans">
+    <div className="settings-page-head audit-page-head sans">
       <div>
         <div className="settings-eyebrow">System history</div>
-        <h2>Audit Log</h2>
+        <div className="audit-title-line"><h2>Audit Log</h2><span className="audit-record-badge">{filtered.length} records</span></div>
         <p>Track important financial, member, governance and administration changes.</p>
       </div>
-      <div className="settings-head-count">{filtered.length}</div>
     </div>
 
     <div className="audit-filter-card sans">
-      <label className="audit-search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search action, admin or detail"/></label>
-      <div className="audit-filter-grid">
-        <label><SlidersHorizontal size={14}/><select value={action} onChange={e=>setAction(e.target.value)}><option value="all">All actions</option>{actions.map(x=><option key={x} value={x}>{auditLabel(x)}</option>)}</select></label>
-        <label><UserRound size={14}/><select value={actor} onChange={e=>setActor(e.target.value)}><option value="all">All admins</option>{actors.map(x=><option key={x} value={x}>{x}</option>)}</select></label>
+      <label className="audit-search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search action, admin or detail"/></label>
+      <div className="audit-filter-actions">
+        <button type="button" className="audit-action-filter" onClick={()=>setShowFilters(true)}><SlidersHorizontal size={15}/><span>{action==="all"?"All actions":auditLabel(action)}</span></button>
+        <button type="button" className={`audit-open-filter${activeFilters?" active":""}`} onClick={()=>setShowFilters(true)}><SlidersHorizontal size={15}/> Filter{activeFilters?` · ${activeFilters}`:""}</button>
       </div>
     </div>
+
+    {showFilters&&<div className="audit-filter-sheet-wrap" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setShowFilters(false)}}>
+      <div className="audit-filter-sheet sans" role="dialog" aria-modal="true" aria-label="Audit filters">
+        <div className="audit-filter-sheet-head"><div><b>Filter audit log</b><span>Narrow results by action or admin.</span></div><button type="button" onClick={()=>setShowFilters(false)} aria-label="Close filters"><X size={18}/></button></div>
+        <label className="audit-sheet-field"><span><SlidersHorizontal size={15}/> Action type</span><select value={action} onChange={e=>setAction(e.target.value)}><option value="all">All actions</option>{actions.map(x=><option key={x} value={x}>{auditLabel(x)}</option>)}</select></label>
+        <label className="audit-sheet-field"><span><UserRound size={15}/> Admin</span><select value={actor} onChange={e=>setActor(e.target.value)}><option value="all">All admins</option>{actors.map(x=><option key={x} value={x}>{x}</option>)}</select></label>
+        <div className="audit-date-grid">
+          <label className="audit-sheet-field"><span>From date</span><input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label>
+          <label className="audit-sheet-field"><span>To date</span><input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label>
+        </div>
+        <div className="audit-filter-sheet-actions"><button type="button" onClick={()=>{setAction("all");setActor("all");setDateFrom("");setDateTo("")}}>Reset</button><button type="button" className="primary" onClick={()=>setShowFilters(false)}>Apply</button></div>
+      </div>
+    </div>}
 
     <div className="audit-timeline sans">
       {rows.rows.map(a=><AuditEntry key={a.id} a={a}/>)}

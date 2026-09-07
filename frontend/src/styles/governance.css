@@ -1427,3 +1427,39 @@ textarea:focus {
   .governance-kpi span{font-size:10px}
   .governance-kpi strong{font-size:10px}
 }
+
+/* v85 mobile governance KPI correction: readable values without oversized hero cards */
+@media(max-width:560px){
+  .governance-kpi-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:7px;
+    margin-top:11px;
+  }
+  .governance-kpi{
+    min-height:58px;
+    padding:8px 10px;
+    grid-template-columns:20px minmax(0,1fr);
+    column-gap:7px;
+  }
+  .governance-kpi i svg{width:16px;height:16px}
+  .governance-kpi span{font-size:10px;line-height:1.1;letter-spacing:.25px}
+  .governance-kpi strong{
+    font-size:13px;
+    line-height:1.15;
+    margin-top:3px;
+    overflow:visible;
+    text-overflow:clip;
+    white-space:nowrap;
+  }
+  .governance-primary-action{
+    min-height:40px;
+    height:40px;
+    padding:0 11px;
+    font-size:11px;
+  }
+}
+@media(max-width:360px){
+  .governance-kpi-grid{gap:6px}
+  .governance-kpi{min-height:56px;padding:7px 8px;column-gap:6px}
+  .governance-kpi strong{font-size:12px}
+}
