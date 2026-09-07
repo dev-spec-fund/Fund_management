@@ -206,8 +206,19 @@ export function MonthManagementSettingsSection(ctx) {
 
 export function AdminSettingsSection(ctx) {
   const {superAdmin,confirm,load,setMessage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,loadAdminSupport} = ctx;
+  const [accessSheet,setAccessSheet]=useState(null);
   const permissionRows=[["read","Read access"],["finance","Finance access"],["manage_admins","Manage admins"],["close_month","Close / reopen month"],["backup","Database backup"]];
   const roleName=(a)=>a.custom_role_name || ((a.role==="owner"||a.role==="super_admin")?"Super Admin":a.role==="treasurer"?"Treasurer":"Viewer");
+  const openPromote=()=>{ loadAdminSupport?.("members"); loadAdminSupport?.("roles"); setAccessSheet("promote"); };
+  const openCreateRole=()=>{ loadAdminSupport?.("roles"); setAccessSheet("role"); };
+  useEffect(()=>{
+    if(!accessSheet)return undefined;
+    const previous=document.body.style.overflow;
+    document.body.style.overflow="hidden";
+    const onKey=e=>{if(e.key==="Escape")setAccessSheet(null)};
+    window.addEventListener("keydown",onKey);
+    return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)};
+  },[accessSheet]);
   return <>
     <SectionTitle>ADMINS & ROLES</SectionTitle>
     <div className="settings-access-summary sans">
@@ -218,29 +229,7 @@ export function AdminSettingsSection(ctx) {
     <div className="settings-access-section sans">
       <div className="settings-access-heading">
         <div><h3>Admins</h3><p>People with administrative access.</p></div>
-        {superAdmin&&<details className="settings-inline-action" onToggle={e=>{if(e.currentTarget.open){loadAdminSupport?.("members");loadAdminSupport?.("roles");}}}>
-          <summary><UserPlus size={17}/><span>Promote</span></summary>
-          <div className="settings-action-panel">
-            <strong>Promote member</strong>
-            <p>The member keeps their member account and contribution obligations. Telegram must be linked.</p>
-            <select value={promoteMemberId} onChange={e=>setPromoteMemberId(e.target.value)}>
-              <option value="">Select member…</option>{membersForAdmin.filter(m=>m.active!==0).map(m=><option key={m.id} value={m.id}>{m.name} · {m.member_code}{m.telegram_id?"":" · Telegram not linked"}</option>)}
-            </select>
-            <div className="settings-action-row">
-              <select value={promoteRole} onChange={e=>setPromoteRole(e.target.value)}>
-                <option value="super_admin">Super Admin</option><option value="treasurer">Treasurer</option><option value="viewer">Viewer</option>
-                {customRoles.map(r=><option key={r.id} value={`custom:${r.id}`}>{r.name}</option>)}
-              </select>
-              <button type="button" disabled={!promoteMemberId} style={approveBtn} onClick={async()=>{
-                const m=membersForAdmin.find(x=>String(x.id)===String(promoteMemberId));
-                const selected=promoteRole.startsWith("custom:")?customRoles.find(r=>String(r.id)===promoteRole.split(":")[1]):null;
-                const label=selected?.name || promoteRole.replace("_"," ");
-                if(!await confirm({title:"Promote member?",message:`Promote ${m?.name||"this member"} to ${label}?`,confirmLabel:"Promote",tone:"primary"}))return;
-                try{await api.settings.promoteMember(Number(promoteMemberId),selected?"viewer":promoteRole,selected?.id||null);setPromoteMemberId("");setMessage("Member promoted");load()}catch(e){setMessage(e.message)}
-              }}>Promote</button>
-            </div>
-          </div>
-        </details>}
+        {superAdmin&&<button type="button" className="settings-inline-action-button" onClick={openPromote}><UserPlus size={17}/><span>Promote</span></button>}
       </div>
       <div className="settings-access-list">
         {admins.map(a=>{
@@ -271,15 +260,7 @@ export function AdminSettingsSection(ctx) {
     <div className="settings-access-section sans">
       <div className="settings-access-heading">
         <div><h3>Roles</h3><p>Open a role only when you need to edit permissions.</p></div>
-        {superAdmin&&<details className="settings-inline-action" onToggle={e=>{if(e.currentTarget.open)loadAdminSupport?.("roles");}}>
-          <summary><Plus size={17}/><span>Create</span></summary>
-          <div className="settings-action-panel">
-            <strong>Create role</strong><p>Read access is always included.</p>
-            <input value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} placeholder="Role name, e.g. Secretary"/>
-            <div className="settings-permission-list">{permissionRows.map(([key,label])=><label key={key}><span><strong>{label}</strong>{key==="read"&&<small>Always enabled</small>}</span><input type="checkbox" checked={newRolePermissions.includes(key)} disabled={key==="read"} onChange={e=>setNewRolePermissions(p=>e.target.checked?[...new Set([...p,key])]:p.filter(x=>x!==key))}/></label>)}</div>
-            <button type="button" disabled={!newRoleName.trim()} style={{...approveBtn,width:"100%"}} onClick={async()=>{try{await api.settings.createRole({name:newRoleName.trim(),permissions:newRolePermissions});setNewRoleName("");setNewRolePermissions(["read"]);setMessage("Custom role created");load()}catch(e){setMessage(e.message)}}}>Create role</button>
-          </div>
-        </details>}
+        {superAdmin&&<button type="button" className="settings-inline-action-button" onClick={openCreateRole}><Plus size={17}/><span>Create</span></button>}
       </div>
       <div className="settings-access-list">
         <div className="settings-role-static"><span><strong>Super Admin</strong><small>Full system access</small></span><ShieldCheck size={18}/></div>
@@ -294,6 +275,41 @@ export function AdminSettingsSection(ctx) {
       </div>
       <p className="settings-access-note">Custom roles override Treasurer/Viewer permissions. At least one built-in Super Admin must remain active.</p>
     </div>
+
+    {accessSheet&&<div className="settings-access-sheet-layer" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setAccessSheet(null)}}>
+      <section className="settings-access-sheet sans" role="dialog" aria-modal="true" aria-labelledby={`settings-${accessSheet}-title`}>
+        <div className="settings-access-sheet-handle" aria-hidden="true"/>
+        <div className="settings-access-sheet-head">
+          <div>
+            <h3 id={`settings-${accessSheet}-title`}>{accessSheet==="promote"?"Promote member":"Create role"}</h3>
+            <p>{accessSheet==="promote"?"Give an existing member administrative access.":"Create a reusable role with only the permissions it needs."}</p>
+          </div>
+          <button type="button" className="settings-access-sheet-close" onClick={()=>setAccessSheet(null)} aria-label="Close"><X size={19}/></button>
+        </div>
+
+        {accessSheet==="promote"?<div className="settings-access-sheet-body">
+          <label className="settings-sheet-field"><span>Member</span><select value={promoteMemberId} onChange={e=>setPromoteMemberId(e.target.value)}>
+            <option value="">Select member…</option>{membersForAdmin.filter(m=>m.active!==0).map(m=><option key={m.id} value={m.id}>{m.name} · {m.member_code}{m.telegram_id?"":" · Telegram not linked"}</option>)}
+          </select></label>
+          <label className="settings-sheet-field"><span>Role</span><select value={promoteRole} onChange={e=>setPromoteRole(e.target.value)}>
+            <option value="super_admin">Super Admin</option><option value="treasurer">Treasurer</option><option value="viewer">Viewer</option>
+            {customRoles.map(r=><option key={r.id} value={`custom:${r.id}`}>{r.name}</option>)}
+          </select></label>
+          <p className="settings-sheet-note">The member keeps their member account and contribution obligations. Telegram must be linked.</p>
+          <button type="button" disabled={!promoteMemberId} className="settings-sheet-primary" onClick={async()=>{
+            const m=membersForAdmin.find(x=>String(x.id)===String(promoteMemberId));
+            const selected=promoteRole.startsWith("custom:")?customRoles.find(r=>String(r.id)===promoteRole.split(":")[1]):null;
+            const label=selected?.name || promoteRole.replace("_"," ");
+            if(!await confirm({title:"Promote member?",message:`Promote ${m?.name||"this member"} to ${label}?`,confirmLabel:"Promote",tone:"primary"}))return;
+            try{await api.settings.promoteMember(Number(promoteMemberId),selected?"viewer":promoteRole,selected?.id||null);setPromoteMemberId("");setMessage("Member promoted");setAccessSheet(null);load()}catch(e){setMessage(e.message)}
+          }}>Promote member</button>
+        </div>:<div className="settings-access-sheet-body">
+          <label className="settings-sheet-field"><span>Role name</span><input value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} placeholder="e.g. Secretary"/></label>
+          <div className="settings-permission-list settings-sheet-permissions">{permissionRows.map(([key,label])=><label key={key}><span><strong>{label}</strong>{key==="read"&&<small>Always enabled</small>}</span><input type="checkbox" checked={newRolePermissions.includes(key)} disabled={key==="read"} onChange={e=>setNewRolePermissions(p=>e.target.checked?[...new Set([...p,key])]:p.filter(x=>x!==key))}/></label>)}</div>
+          <button type="button" disabled={!newRoleName.trim()} className="settings-sheet-primary" onClick={async()=>{try{await api.settings.createRole({name:newRoleName.trim(),permissions:newRolePermissions});setNewRoleName("");setNewRolePermissions(["read"]);setMessage("Custom role created");setAccessSheet(null);load()}catch(e){setMessage(e.message)}}}>Create role</button>
+        </div>}
+      </section>
+    </div>}
   </>;
 }
 

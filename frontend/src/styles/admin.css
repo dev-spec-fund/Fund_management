@@ -1799,3 +1799,113 @@ button:not(:disabled):active {
 .settings-access-list{border:1px solid var(--border-strong);border-radius:15px;overflow:hidden;background:var(--card)}.settings-access-item{border-bottom:1px solid var(--divider)}.settings-access-item:last-child{border-bottom:0}.settings-access-item>summary{list-style:none;min-height:58px;padding:10px 12px;display:flex;align-items:center;gap:10px;cursor:pointer}.settings-access-icon{width:34px;height:34px;border-radius:10px;background:var(--primary-soft);color:var(--primary-text);display:grid;place-items:center;flex:none}.settings-access-main{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}.settings-access-main strong,.settings-role-static strong{font-size:12px}.settings-access-main small,.settings-role-static small{font-size:9.5px;color:var(--soft);white-space:normal}.settings-access-state{font-size:9px;font-weight:700;color:var(--success);padding:4px 7px;border:1px solid color-mix(in srgb,var(--success) 38%,transparent);border-radius:999px}.settings-access-state.inactive{color:var(--danger)}.settings-access-more{color:var(--soft);flex:none}.settings-access-detail{padding:0 12px 12px 56px}.settings-access-detail>label{display:flex;flex-direction:column;gap:5px;font-size:10px;color:var(--soft)}
 .settings-role-static{min-height:54px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--divider);color:var(--soft)}.settings-role-static span{display:flex;flex-direction:column;gap:2px}.settings-role-static strong{color:var(--text)}.settings-role-item>summary{padding-left:12px}.settings-role-item .settings-access-detail{padding-left:12px}.settings-permission-list{display:flex;flex-direction:column;gap:0;margin:9px 0}.settings-permission-list>label{min-height:44px;display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--divider);font-size:10px}.settings-permission-list>label span{display:flex;flex-direction:column;gap:1px}.settings-permission-list>label strong{font-size:11px;color:var(--text)}.settings-permission-list>label small{font-size:9px;color:var(--soft)}.settings-permission-list input[type="checkbox"]{width:19px;height:19px;accent-color:var(--primary);flex:none}.settings-danger-text{width:100%;min-height:40px;border:1px solid color-mix(in srgb,var(--danger) 45%,transparent);border-radius:10px;background:transparent;color:var(--danger);font-weight:700}.settings-danger-text:disabled{opacity:.45}.settings-access-note{font-size:9.5px;line-height:1.45;color:var(--soft);margin:8px 4px 0}
 @media(max-width:390px){.settings-access-heading p{max-width:210px}.settings-inline-action>summary span{display:none}.settings-access-detail{padding-left:12px}.settings-access-state{display:none}.settings-action-panel{min-width:calc(100vw - 28px)}}
+
+/* vNext — Admins & Roles actions use Telegram-friendly bottom sheets. */
+.settings-inline-action-button{
+  flex:none;
+  min-height:38px;
+  padding:0 11px;
+  border:1px solid var(--border-strong);
+  border-radius:11px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  font:inherit;
+  font-size:11px;
+  font-weight:700;
+  color:var(--primary-text);
+  background:var(--card);
+  cursor:pointer;
+}
+.settings-inline-action-button:active{background:var(--primary-soft)}
+.settings-access-sheet-layer{
+  position:fixed;
+  inset:0;
+  z-index:1200;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  padding:0;
+  background:rgba(0,0,0,.46);
+  backdrop-filter:blur(3px);
+  -webkit-backdrop-filter:blur(3px);
+}
+.settings-access-sheet{
+  width:min(100%,520px);
+  max-height:min(82dvh,720px);
+  overflow:auto;
+  overscroll-behavior:contain;
+  border:1px solid var(--border-strong);
+  border-bottom:0;
+  border-radius:22px 22px 0 0;
+  padding:8px 16px calc(18px + env(safe-area-inset-bottom));
+  background:var(--bg);
+  box-shadow:0 -18px 50px rgba(0,0,0,.28);
+  animation:settingsSheetIn .18s ease-out;
+}
+.settings-access-sheet-handle{
+  width:36px;
+  height:4px;
+  margin:0 auto 8px;
+  border-radius:999px;
+  background:var(--border-strong);
+}
+.settings-access-sheet-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  padding:4px 0 12px;
+  border-bottom:1px solid var(--divider);
+}
+.settings-access-sheet-head h3{margin:0;font-size:17px;line-height:1.25;color:var(--text)}
+.settings-access-sheet-head p{margin:3px 0 0;max-width:360px;font-size:10px;line-height:1.4;color:var(--soft)}
+.settings-access-sheet-close{
+  width:36px;
+  height:36px;
+  flex:none;
+  border:1px solid var(--border-strong);
+  border-radius:11px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  background:var(--card);
+  color:var(--text);
+}
+.settings-access-sheet-body{padding-top:13px}
+.settings-sheet-field{display:flex;flex-direction:column;gap:6px;margin-bottom:11px;font-size:10px;font-weight:700;color:var(--soft)}
+.settings-sheet-field input,.settings-sheet-field select{
+  width:100%;
+  min-height:46px;
+  box-sizing:border-box;
+  border:1px solid var(--border-strong);
+  border-radius:12px;
+  padding:9px 12px;
+  background:var(--card);
+  color:var(--text);
+  font:inherit;
+  font-size:13px;
+}
+.settings-sheet-note{margin:2px 1px 13px;font-size:10px;line-height:1.45;color:var(--soft)}
+.settings-sheet-permissions{margin:2px 0 14px;border-top:1px solid var(--divider)}
+.settings-sheet-permissions>label{min-height:48px}
+.settings-sheet-primary{
+  width:100%;
+  min-height:46px;
+  border:1px solid color-mix(in srgb,var(--primary) 55%,var(--border-strong));
+  border-radius:12px;
+  background:var(--primary-soft);
+  color:var(--primary-text);
+  font:inherit;
+  font-size:12px;
+  font-weight:800;
+}
+.settings-sheet-primary:disabled{opacity:.45}
+@keyframes settingsSheetIn{from{transform:translateY(16px);opacity:.72}to{transform:translateY(0);opacity:1}}
+@media(max-width:390px){
+  .settings-inline-action-button span{display:none}
+  .settings-inline-action-button{width:40px;padding:0}
+  .settings-access-sheet{padding-left:14px;padding-right:14px;border-radius:20px 20px 0 0}
+}
+@media(prefers-reduced-motion:reduce){.settings-access-sheet{animation:none}}
