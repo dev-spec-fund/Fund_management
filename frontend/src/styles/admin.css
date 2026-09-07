@@ -1370,3 +1370,42 @@ button:not(:disabled):active {
 .settings-empty-card b{font-size:13px;color:var(--text)}
 .settings-empty-card svg{color:var(--soft)}
 @media (max-width:430px){.audit-filter-grid{grid-template-columns:1fr}.settings-page-head h2{font-size:20px}.settings-section-chip{font-size:11px;padding-inline:12px}}
+
+/* Compact finance summary strip — mobile Telegram UI */
+.finance-kpi-grid {
+  gap:6px;
+  margin-bottom:11px;
+}
+.finance-kpi-card {
+  min-height:54px;
+  border-radius:12px;
+  padding:8px;
+  gap:6px;
+  align-items:center;
+}
+.finance-kpi-card > span {
+  width:25px;
+  height:25px;
+  border-radius:8px;
+}
+.finance-kpi-card > span svg {
+  width:14px;
+  height:14px;
+}
+.finance-kpi-card small {
+  font-size:10px;
+  line-height:1.1;
+  letter-spacing:.35px;
+}
+.finance-kpi-card strong {
+  margin-top:3px;
+  font-size:12px;
+  line-height:1.15;
+}
+@media(max-width:380px){
+  .finance-kpi-grid{gap:5px}
+  .finance-kpi-card{padding:7px 6px;gap:5px;min-height:51px}
+  .finance-kpi-card>span{width:23px;height:23px}
+  .finance-kpi-card small{font-size:10px;letter-spacing:.2px}
+  .finance-kpi-card strong{font-size:11px}
+}
