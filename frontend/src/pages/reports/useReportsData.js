@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, onDataChange } from "../../api";
+import { api, onDataChangeDebounced } from "../../api";
 import { shiftMonthValue } from "../../utils/date";
 
-export function useReportsData(sharedMonth, onMonthChange) {
+export function useReportsData(sharedMonth, onMonthChange, { enabled = true } = {}) {
   const month=sharedMonth;
   const summaryPath=`/api/reports/summary?month=${month}`;
   const trendPath=`/api/reports/trend?month=${month}`;
@@ -13,9 +13,10 @@ export function useReportsData(sharedMonth, onMonthChange) {
   const [analytics, setAnalytics] = useState(null);
   const [annualBusy, setAnnualBusy] = useState(false);
 
-  const loadMonthly = () => api.reports.summary(month).then(setSummary);
+  const loadMonthly = () => enabled ? api.reports.summary(month).then(setSummary) : Promise.resolve(null);
 
   useEffect(() => {
+    if (!enabled) return;
     const cachedSummary=api.peekCached(summaryPath);
     const cachedTrend=api.peekCached(trendPath);
     setSummary(cachedSummary || null);
@@ -24,9 +25,18 @@ export function useReportsData(sharedMonth, onMonthChange) {
       api.reports.summary(month).then(setSummary),
       api.reports.trend(month).then(setTrend),
     ]).catch(() => {});
-  }, [month]);
+  }, [enabled, month]);
 
-  useEffect(() => onDataChange(() => {
+  useEffect(() => onDataChangeDebounced(({ paths = [] }) => {
+    if (!enabled) return;
+    const relevant = paths.some((path) =>
+      path?.startsWith("/api/contributions") ||
+      path?.startsWith("/api/donations") ||
+      path?.startsWith("/api/expenses") ||
+      path?.startsWith("/api/projects") ||
+      path?.startsWith("/api/members")
+    );
+    if (!relevant) return;
     Promise.all([
       api.reports.summary(month).then(setSummary),
       api.reports.trend(month).then(setTrend),
@@ -37,9 +47,10 @@ export function useReportsData(sharedMonth, onMonthChange) {
         api.governance.analytics(annualYear).then(setAnalytics),
       ]).catch(() => {});
     }
-  }), [month, annualYear, Boolean(annual), Boolean(analytics)]);
+  }, 140), [enabled, month, annualYear, Boolean(annual), Boolean(analytics)]);
 
   const loadAnnual = async () => {
+    if (!enabled) return;
     setAnnualBusy(true);
     try {
       const [a, x] = await Promise.all([

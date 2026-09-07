@@ -29,28 +29,28 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
     shiftMonth,
     loadMonthly,
     loadAnnual,
-  } = useReportsData(sharedMonth, onMonthChange);
+  } = useReportsData(sharedMonth, onMonthChange, { enabled: view === "reports" });
 
   const loadDonations = () => api.donations.list({ month }).then(setDonations).catch((e) => setError(e.message || "Could not load donations"));
   useEffect(() => { loadDonations(); }, [month]);
   useEffect(() => onDataChange(({ path }) => { if (path?.startsWith("/api/donations")) loadDonations(); }), [month]);
 
   const donationSaved = async (message = "Donation updated") => {
-    await Promise.all([loadMonthly(), loadDonations()]);
+    await Promise.all([view === "reports" ? loadMonthly() : Promise.resolve(), loadDonations()]);
     setSelectedDonation(null);
     return message;
   };
 
-  if (!summary) return <LoadingState>Loading reports…</LoadingState>;
+  if (view === "reports" && !summary) return <LoadingState>Loading reports…</LoadingState>;
 
-  const allocatedContributions = Number(summary.allocatedContributions ?? summary.memberIncome ?? 0);
-  const advanceAllocated = Number(summary.advanceAllocated || 0);
-  const activeCategories = (summary.byCategory || []).filter((c) => Number(c.spent || 0) > 0);
-  const expenseDetails = summary.expenseDetails || [];
-  const projectExpenseGroups = (summary.byProject || []).map((project) => ({
+  const allocatedContributions = Number(summary?.allocatedContributions ?? summary?.memberIncome ?? 0);
+  const advanceAllocated = Number(summary?.advanceAllocated || 0);
+  const activeCategories = (summary?.byCategory || []).filter((c) => Number(c.spent || 0) > 0);
+  const expenseDetails = summary?.expenseDetails || [];
+  const projectExpenseGroups = (summary?.byProject || []).map((project) => ({
     ...project,
     expenses: expenseDetails.filter((e) => String(e.project_id || "") === String(project.project_id || "") || (!e.project_id && e.project_code && e.project_code === project.project_code)),
-    donations: (summary.projectDonations || []).filter((d) => String(d.project_id || "") === String(project.project_id || "")),
+    donations: (summary?.projectDonations || []).filter((d) => String(d.project_id || "") === String(project.project_id || "")),
   }));
 
   const exportCsv = async () => {

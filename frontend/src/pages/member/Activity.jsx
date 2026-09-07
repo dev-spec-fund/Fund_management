@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, onDataChange } from "../../api";
+import { api, onDataChangeDebounced } from "../../api";
 import { Modal, Field, useConfirmDialog } from "../../components/FormControls";
 import { LoadingState, approveBtn, rejectBtn } from "../../components/Shared";
 import { currentMonthValue, shiftMonthValue, todayValue } from "../../utils/date";
@@ -9,7 +9,7 @@ import { ActivityRow, activityDayLabel } from "../../components/ActivityRow";
 
 export function Activity({ isAdmin, canFinance = false }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(() => api.peekCached("/api/reports/activity") || null);
   const [filter, setFilter] = useState("all");
   const [datePreset, setDatePreset] = useState("all");
   const [customFrom, setCustomFrom] = useState("");
@@ -63,8 +63,14 @@ export function Activity({ isAdmin, canFinance = false }) {
     }
   };
   useEffect(() => { loadActivity(appliedRange); }, [appliedRange.from, appliedRange.to]);
-  useEffect(() => onDataChange(() => loadActivity(appliedRange, { silent: true })), [appliedRange.from, appliedRange.to]);
-  useEffect(() => { if (canFinance) api.expenses.categories().then(setExpenseCategories).catch(() => {}); }, [canFinance]);
+  useEffect(() => onDataChangeDebounced(({ paths = [] }) => {
+    const relevant = paths.some((path) =>
+      path?.startsWith("/api/contributions") ||
+      path?.startsWith("/api/donations") ||
+      path?.startsWith("/api/expenses")
+    );
+    if (relevant) loadActivity(appliedRange, { silent: true });
+  }, 140), [appliedRange.from, appliedRange.to]);
 
   const changeDatePreset = (value) => {
     setDatePreset(value);
@@ -91,6 +97,7 @@ export function Activity({ isAdmin, canFinance = false }) {
 
   const openExpense = (row) => {
     if (!canFinance || row.kind !== "expense") return;
+    if (!expenseCategories.length) api.expenses.categories().then(setExpenseCategories).catch(() => {});
     setExpenseError("");
     setEditingExpense({
       ...row,

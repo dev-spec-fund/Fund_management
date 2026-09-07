@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, onDataChange } from "../../api";
+import { api, onDataChangeDebounced } from "../../api";
 import { pageSlice } from "../../components/Pagination";
 
 export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
@@ -17,28 +17,44 @@ export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
     onMonthChange?.(value);
   };
 
-  const load = () => Promise.all([
-    api.members.list().then(setMembers),
-    api.reports.summary(month).then(setMonthlySummary),
-  ]).catch(() => {});
+  const loadMembers = () => api.members.list().then(setMembers).catch(() => {});
+  const loadSummary = () => api.reports.summary(month).then(setMonthlySummary).catch(() => {});
+  const load = () => Promise.all([loadMembers(), loadSummary()]);
 
   useEffect(() => {
     if (!isAdmin) return;
     const cachedMembers=api.peekCached("/api/members");
-    const cachedSummary=api.peekCached(summaryPath);
     if(cachedMembers) setMembers(cachedMembers);
-    setMonthlySummary(cachedSummary || null);
-    load();
-  }, [isAdmin, month]);
-  useEffect(() => onDataChange(() => { if (isAdmin) load(); }), [isAdmin, month]);
+    loadMembers();
+  }, [isAdmin]);
+
   useEffect(() => {
     if (!isAdmin) return;
-    api.settings.get().then((settings) => {
-      const value = Number(settings.default_monthly_amount) || 250;
-      setDefaultMonthly(value);
-      setForm((current) => ({ ...current, monthly_amount: current.monthly_amount === "" ? String(value) : current.monthly_amount }));
-    }).catch(() => {});
-  }, [isAdmin]);
+    const cachedSummary=api.peekCached(summaryPath);
+    setMonthlySummary(cachedSummary || null);
+    loadSummary();
+  }, [isAdmin, month]);
+
+  useEffect(() => onDataChangeDebounced(({ paths = [] }) => {
+    if (!isAdmin) return;
+    const membersChanged = paths.some((path) => path?.startsWith("/api/members"));
+    const financeChanged = paths.some((path) =>
+      path?.startsWith("/api/contributions") ||
+      path?.startsWith("/api/donations") ||
+      path?.startsWith("/api/expenses")
+    );
+    if (membersChanged) loadMembers();
+    if (membersChanged || financeChanged) loadSummary();
+  }, 120), [isAdmin, month]);
+
+  const ensureDefaultMonthly = async () => {
+    const cached = api.peekCached("/api/settings");
+    const settings = cached || await api.settings.get();
+    const value = Number(settings?.default_monthly_amount) || 250;
+    setDefaultMonthly(value);
+    setForm((current) => ({ ...current, monthly_amount: current.monthly_amount === "" ? String(value) : current.monthly_amount }));
+    return value;
+  };
 
   const outstandingByMember = new Map((monthlySummary?.member_statuses || monthlySummary?.outstanding?.members || []).map((member) => [Number(member.id), member]));
   const activeMembers = members.filter((member) => member.active);
@@ -87,6 +103,7 @@ export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
     page,
     setPage,
     load,
+    ensureDefaultMonthly,
     outstandingByMember,
     activeMembers,
     memberStatus,

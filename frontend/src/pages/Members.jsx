@@ -19,7 +19,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
   const { confirm, confirmationDialog } = useConfirmDialog();
   const {
     month, setMonth, search, setSearch, filter, setFilter, defaultMonthly, form, setForm,
-    page, setPage, load, outstandingByMember, activeMembers, memberStatus, counts, expected,
+    page, setPage, load, ensureDefaultMonthly, outstandingByMember, activeMembers, memberStatus, counts, expected,
     collected, percent, filtered, memberPage, shiftMonth, monthLabel,
   } = useMembersData(isAdmin, sharedMonth, onMonthChange);
   const [selected, setSelected] = useState(null);
@@ -64,7 +64,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
           <div className="sans members-page-title">Members</div>
           <div className="sans members-page-subtitle">{activeMembers.length} active members · contribution overview</div>
         </div>
-        {financeAdmin && <button type="button" onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={primaryBtn}>
+        {financeAdmin && <button type="button" onClick={async () => { const amount = await ensureDefaultMonthly(); setForm({name:"",phone:"",monthly_amount:String(amount)}); setShowAdd(true); }} className="sans" style={primaryBtn}>
           <Plus size={15} /> Add
         </button>}
       </div>
