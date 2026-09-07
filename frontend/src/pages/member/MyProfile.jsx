@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { CalendarDays, Download, FileText, Phone, UserRound } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronRight, Download, FileText, Phone, UserRound, WalletCards } from "lucide-react";
 import { api, onDataChange } from "../../api";
 import { ErrorState, smallBtn } from "../../components/Shared";
 import { fmt } from "../../utils/format";
@@ -58,13 +58,13 @@ export function MyProfile({ member, setTab }) {
         {dashboard.current_exco?.role_title && <div className="sans member-profile-exco-badge">{dashboard.current_exco.role_title}</div>}
       </div>
       <div className="sans member-profile-status" style={{color:statusColor}}>
-        {status==="paid"?"✓ ":""}{statusLabel}
+        {status==="paid" && <CheckCircle2 size={14}/>}<span>{statusLabel}</span>
       </div>
     </section>
 
     <section className="member-profile-summary-grid">
-      <SummaryCard label="MONTHLY CONTRIBUTION" value={`MVR ${fmt(c.monthly_amount||m.monthly_amount||0)}`}/>
-      <SummaryCard label="PAID THIS MONTH" value={`MVR ${fmt(c.paid||0)}`} tone={Number(c.paid||0)>0?"success":""}/>
+      <SummaryCard icon={<WalletCards size={15}/>} label="MONTHLY CONTRIBUTION" value={`MVR ${fmt(c.monthly_amount||m.monthly_amount||0)}`}/>
+      <SummaryCard icon={<CheckCircle2 size={15}/>} label="PAID THIS MONTH" value={`MVR ${fmt(c.paid||0)}`} tone={Number(c.paid||0)>0?"success":""}/>
       <SummaryCard label="TOTAL CONTRIBUTED" value={`MVR ${fmt(totalContributed)}`} tone="success"/>
       <SummaryCard label="OUTSTANDING" value={`MVR ${fmt(outstanding)}`} tone={outstanding>0?"danger":"success"}/>
     </section>
@@ -105,7 +105,7 @@ export function MyProfile({ member, setTab }) {
         <FileText size={18} style={{color:"var(--primary)"}}/>
       </div>
       <button type="button" onClick={()=>setTab?.("history")} className="member-profile-statement-button">
-        <span>View my statement</span><strong>›</strong>
+        <span>View my statement</span><ChevronRight size={18}/>
       </button>
       <div className="member-profile-export-row">
         <button type="button" onClick={exportPdf} style={{...smallBtn,flex:1}}><Download size={13}/> PDF</button>
@@ -124,10 +124,10 @@ export function MyProfile({ member, setTab }) {
   </>;
 }
 
-function SummaryCard({label,value,tone=""}){
+function SummaryCard({icon,label,value,tone=""}){
   const color=tone==="success"?"var(--success)":tone==="danger"?"var(--danger)":"var(--text)";
   return <div className="member-profile-summary-card">
-    <div className="sans member-profile-summary-label">{label}</div>
+    <div className="sans member-profile-summary-label">{icon}<span>{label}</span></div>
     <div className="sans member-profile-summary-value" style={{color}}>{value}</div>
   </div>;
 }

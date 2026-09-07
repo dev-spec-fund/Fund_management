@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Bell, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Plus, Bell, ChevronLeft, ChevronRight, Search, UserRound, WalletCards } from "lucide-react";
 import { api } from "../api";
 import { Modal, Field, useConfirmDialog } from "../components/FormControls";
 import { Center, PrimaryButton, monthNavBtn, primaryBtn, approveBtn } from "../components/Shared";
@@ -59,17 +59,17 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
   return (
     <>
       {confirmationDialog}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      <div className="members-page-head">
         <div>
-          <div className="sans" style={{ fontSize: 15, fontWeight: 700, color: "var(--primary-text)" }}>Members</div>
-          <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 2 }}>{activeMembers.length} active members</div>
+          <div className="sans members-page-title">Members</div>
+          <div className="sans members-page-subtitle">{activeMembers.length} active members · contribution overview</div>
         </div>
         {financeAdmin && <button type="button" onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={primaryBtn}>
           <Plus size={15} /> Add
         </button>}
       </div>
 
-      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 12, marginBottom: 10 }}>
+      <section className="members-month-card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 11 }}>
           <button type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
           <label className="sans" style={{ position: "relative", fontSize: 14, fontWeight: 700, color: "var(--primary-text)", cursor: "pointer" }}>
@@ -90,7 +90,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
           <div><b style={{ display: "block", fontSize: 14, color: "var(--neutral-text)" }}>{counts.exempt}</b>Exempt</div>
           <div><b style={{ display: "block", fontSize: 14, color: "var(--soft)" }}>{counts.not_applicable||0}</b>Not due</div>
         </div>
-      </div>
+      </section>
 
       {financeAdmin && (counts.partial + counts.unpaid) > 0 && (
         <button type="button" onClick={sendOutstandingReminders} disabled={reminderBusy}
@@ -101,15 +101,15 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
       )}
       {reminderMessage && <div className="sans" style={{fontSize:10,color:reminderMessage.startsWith("Sent")?"var(--success)":"var(--danger)",margin:"0 2px 10px"}}>{reminderMessage}</div>}
 
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 3, marginBottom: 10 }}>
+      <div className="members-filter-row">
         {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt'],['not_applicable','Not due']].map(([key,label]) => (
           <button type="button" key={key} onClick={() => setFilter(key)} className={filter === key ? "expense-filter-chip active sans" : "expense-filter-chip sans"}>{label}</button>
         ))}
       </div>
 
-      <div style={{ position: "relative", marginBottom: 10 }}>
+      <div className="members-search-wrap">
         <Search size={16} color="var(--soft)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, ID or phone…" className="sans" style={{ width: "100%", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px 10px 36px", fontSize: 13, boxSizing: "border-box", background: "var(--card)" }} />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, ID or phone…" className="sans members-search-input" />
       </div>
 
       {memberPage.rows.map((m) => {
@@ -121,14 +121,14 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
         const due = noContributionDue ? 0 : Math.max(0, required - paid);
         const memberPercent = required > 0 ? Math.min(100, Math.round((paid / required) * 100)) : 0;
         return (
-          <div key={m.id} onClick={() => setSelected(m)} style={{ background: m.active ? "var(--card)" : "var(--button-soft)", opacity: m.active ? 1 : 0.65, border: "1px solid var(--border)", borderRadius: 12, padding: "11px 12px", marginBottom: 7, cursor: "pointer" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="sans" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-strong)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" }}>
+          <div key={m.id} onClick={() => setSelected(m)} className={`member-list-card${m.active ? "" : " is-inactive"}`}>
+            <div className="member-list-card-head">
+              <div className="member-list-identity">
+                <div className="sans member-list-name">
                   <span>{m.name} <span style={{ fontSize: 11, color: "var(--soft-4)", fontWeight: 500 }}>{m.member_code}</span></span>
                   {m.exco_role && <span className="member-exco-badge">{m.exco_role}</span>}
                 </div>
-                <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginTop: 2 }}>{m.phone ? m.phone : "Phone not added"} · MVR {fmt(m.monthly_amount)}/mo</div>
+                <div className="sans member-list-contact"><UserRound size={12}/><span>{m.phone ? m.phone : "Phone not added"}</span><span className="member-list-dot">·</span><WalletCards size={12}/><span>MVR {fmt(m.monthly_amount)}/mo</span></div>
                 <div className="sans member-list-meta">Joined {formatMemberDate(m.joined_at||m.created_at)} · Role: <b>{m.exco_role||"Member"}</b></div>
               </div>
               <StatusBadge status={status} />

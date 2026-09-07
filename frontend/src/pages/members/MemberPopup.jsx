@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Bell, ChevronDown, Download, Eye, Paperclip, Pencil, Send } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, ChevronDown, Download, Eye, Paperclip, Pencil, Send } from "lucide-react";
 import { api } from "../../api";
 import { Modal, Field, useConfirmDialog } from "../../components/FormControls";
 import { PreviewLoadState, PrimaryButton, smallBtn, approveBtn, rejectBtn } from "../../components/Shared";
@@ -168,7 +168,7 @@ export default function MemberPopup({ member, month, canEdit = false, canRemind,
 
         {expanded && <div style={{borderTop:"1px solid var(--border)",padding:"9px 11px 11px",background:"var(--bg)"}}>
           <div className="sans" style={{fontSize:10,color:refValid?"var(--muted)":"var(--warning-3)"}}>
-            {refValid ? <>Bank ref: <b style={{color:"var(--primary-text)"}}>{h.ref_number}</b></> : <>⚠ Reference needs review: <b>{h.ref_number || "not detected"}</b></>}
+            {refValid ? <>Bank ref: <b style={{color:"var(--primary-text)"}}>{h.ref_number}</b></> : <><AlertTriangle size={12} style={{verticalAlign:"-2px",marginRight:4}}/>Reference needs review: <b>{h.ref_number || "not detected"}</b></>}
           </div>
 
           {Boolean(h.has_slip) && canRemind && <div className="sans" style={{display:"flex",alignItems:"center",gap:7,background:"var(--card)",border:"1px solid var(--border)",borderRadius:9,padding:"7px 8px",marginTop:8}}>
@@ -250,7 +250,7 @@ export default function MemberPopup({ member, month, canEdit = false, canRemind,
           </div>
 
           {detail?.reconciliation&&<div className={`sans member-reconciliation-card ${detail.reconciliation.ok?"ok":"error"}`}>
-            <div className="member-reconciliation-head"><span><b>ALLOCATION RECONCILIATION</b><small>{detail.reconciliation.ok?"Approved cash and monthly ledger reconcile":"Allocation mismatch needs review"}</small></span><strong>{detail.reconciliation.ok?"✓ OK":"!"}</strong></div>
+            <div className="member-reconciliation-head"><span><b>ALLOCATION RECONCILIATION</b><small>{detail.reconciliation.ok?"Approved cash and monthly ledger reconcile":"Allocation mismatch needs review"}</small></span><strong>{detail.reconciliation.ok?<><CheckCircle2 size={14}/> OK</>:<><AlertTriangle size={14}/> Review</>}</strong></div>
             <div className="member-reconciliation-grid">
               <span>Approved<b>MVR {fmt(detail.reconciliation.approved_total)}</b></span>
               <span>Effective allocated<b>MVR {fmt(detail.reconciliation.effective_allocated_total)}</b></span>
@@ -271,7 +271,7 @@ export default function MemberPopup({ member, month, canEdit = false, canRemind,
             <>
               <button type="button" onClick={()=>setShowRejected(!showRejected)} className="sans"
                 style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",border:0,background:"transparent",padding:"10px 2px",color:"var(--soft)",fontSize:10,fontWeight:700,cursor:"pointer"}}>
-                <span>REJECTED / VOIDED · {rejected.length}</span><span>{showRejected?"▲":"▼"}</span>
+                <span>REJECTED / VOIDED · {rejected.length}</span><ChevronDown size={15} style={{transform:showRejected?"rotate(180deg)":"none",transition:"transform .18s ease"}}/>
               </button>
               {showRejected && rejected.map(contributionCard)}
             </>
@@ -298,7 +298,7 @@ export default function MemberPopup({ member, month, canEdit = false, canRemind,
 
           {member.active && canRemind && currentDue <= 0 && (
             <div className="sans" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:"var(--surface-cool)",color:"var(--muted)",border:"1px solid var(--surface-neutral-2)",borderRadius:10,padding:10,fontSize:11,fontWeight:600,marginTop:10}}>
-              ✓ Paid — no reminder needed
+              <><CheckCircle2 size={14}/> Paid — no reminder needed</>
             </div>
           )}
 
