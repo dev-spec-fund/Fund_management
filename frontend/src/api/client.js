@@ -117,6 +117,20 @@ function invalidateAfterMutation(path) {
     return;
   }
 
+  if(p.startsWith("/api/me/meetings")){
+    // A member RSVP should refresh only meeting/profile data. Falling through to
+    // the conservative unknown-write path would evict the whole member app.
+    invalidateCacheMatching(["/api/me/meetings","/api/me/dashboard"]);
+    return;
+  }
+
+  if(p.startsWith("/api/me/actions")){
+    // Completing a personal action item does not affect fund, project or
+    // election data, so keep those warm caches intact.
+    invalidateCacheMatching(["/api/me/actions","/api/me/dashboard"]);
+    return;
+  }
+
   if(p.startsWith("/api/contributions") || p.startsWith("/api/donations") || p.startsWith("/api/expenses")){
     invalidateCacheMatching([
       "/api/reports/",
@@ -332,7 +346,7 @@ export async function prefetchTabData({ tab, adminView = false, canFinance = fal
     else if (tab === "activity") paths = ["/api/reports/activity"];
     else if (tab === "projects") paths = ["/api/me/projects"];
     else if (tab === "meetings") paths = ["/api/me/meetings"];
-    else if (tab === "elections") paths = ["/api/elections","/api/me/governance-archive"];
+    else if (tab === "elections") paths = ["/api/elections"];
     else if (tab === "actions") paths = ["/api/me/actions"];
     else if (tab === "profile") paths = ["/api/me/dashboard"];
   }

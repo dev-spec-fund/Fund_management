@@ -1,6 +1,6 @@
 import { Vote, LockKeyhole, CheckCircle2, ChevronRight, ShieldCheck } from "lucide-react";
 import React,{useEffect,useState} from "react";
-import { api,onDataChange } from "../../api";
+import { api,onDataChangeDebounced } from "../../api";
 import { Modal,useConfirmDialog } from "../../components/FormControls";
 import { LoadingState,EmptyState,MessageBanner,approveBtn } from "../../components/Shared";
 
@@ -21,16 +21,50 @@ export function MemberElections(){
   const [archiveOpen,setArchiveOpen]=useState(false);
   const [runoffChoices,setRunoffChoices]=useState({});
   const {confirm,confirmationDialog}=useConfirmDialog();
-  const load=()=>Promise.all([
-    api.elections.list().then(setRows),
+  const scheduleIdle=(fn)=>{
+    if(typeof window!=="undefined"&&"requestIdleCallback" in window){
+      const id=window.requestIdleCallback(fn,{timeout:700});
+      return ()=>window.cancelIdleCallback?.(id);
+    }
+    const id=setTimeout(fn,90);
+    return ()=>clearTimeout(id);
+  };
+  const loadPrimary=({silent=false}={})=>{
+    if(!silent)setMessage("");
+    return api.elections.list().then(setRows).catch(e=>{if(!silent)setMessage(e?.message||"Could not load elections.");});
+  };
+  const loadSecondary=()=>Promise.allSettled([
     api.elections.currentExco().then(r=>setCurrentExco(r.roles||[])),
     api.elections.archive().then(r=>setArchive(r.archive||[])),
-    api.elections.excoTerms().then(setExcoTerms),
-    api.myGovernanceArchive().then(setGovernanceArchive)
-  ]).catch(e=>setMessage(e.message));
-  useEffect(()=>{load()},[]);
-  useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/elections"))load()}),[]);
-  const open=async(e)=>{setSelected(e);setChoices({});setSummary(null);setMessage("");try{const d=await api.refreshCached(`/api/elections/${e.id}`);setDetail(d);if(d?.certified_at)setSummary(await api.elections.summary(e.id))}catch(err){setMessage(err.message)}};
+    api.elections.excoTerms().then(setExcoTerms)
+  ]);
+  const loadGovernanceArchive=()=>{
+    if(governanceArchive)return Promise.resolve(governanceArchive);
+    return api.myGovernanceArchive().then((next)=>{setGovernanceArchive(next);return next;}).catch(()=>null);
+  };
+  useEffect(()=>{
+    let cancelIdle=()=>{};
+    loadPrimary().finally(()=>{cancelIdle=scheduleIdle(()=>loadSecondary());});
+    return ()=>cancelIdle();
+  },[]);
+  useEffect(()=>onDataChangeDebounced(({paths=[]})=>{
+    if(!paths.some((path)=>path?.startsWith("/api/elections")))return;
+    loadPrimary({silent:true});
+    scheduleIdle(()=>loadSecondary());
+    if(selected?.id){
+      api.elections.get(selected.id).then((next)=>setDetail(next)).catch(()=>{});
+    }
+  },140),[selected?.id]);
+  const toggleArchive=()=>{
+    const next=!archiveOpen;
+    setArchiveOpen(next);
+    if(next&&!governanceArchive)loadGovernanceArchive();
+  };
+  const refreshElectionShell=async()=>{
+    await loadPrimary({silent:true});
+    scheduleIdle(()=>loadSecondary());
+  };
+  const open=async(e)=>{setSelected(e);setDetail(null);setChoices({});setSummary(null);setMessage("");try{const d=await api.refreshCached(`/api/elections/${e.id}`);setDetail(d);if(d?.certified_at)setSummary(await api.elections.summary(e.id))}catch(err){setMessage(err.message)}};
   const toggle=(position,candidateId)=>{
     const key=String(position.id),current=choices[key]||[];
     if(current.includes(candidateId))return setChoices({...choices,[key]:current.filter(x=>x!==candidateId)});
@@ -39,7 +73,7 @@ export function MemberElections(){
   };
   const apply=async()=>{
     if(!detail||!applyPosition)return setMessage("Choose a position to apply for.");
-    setBusy(true);try{await api.elections.apply(detail.id,{position_id:Number(applyPosition),statement:applyStatement});setMessage("Candidate application submitted for review.");setDetail(await api.elections.get(detail.id));setApplyPosition("");setApplyStatement("");await load()}catch(e){setMessage(e.message)}finally{setBusy(false)}
+    setBusy(true);try{await api.elections.apply(detail.id,{position_id:Number(applyPosition),statement:applyStatement});setMessage("Candidate application submitted for review.");setDetail(await api.elections.get(detail.id));setApplyPosition("");setApplyStatement("");await refreshElectionShell()}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const withdrawApplication=async(a)=>{
     if(!await confirm({title:"Withdraw application?",message:"You can apply again only if the application period is still open.",confirmLabel:"Withdraw",tone:"danger"}))return;
@@ -55,15 +89,14 @@ export function MemberElections(){
     const selected=runoffChoices[String(runoff.id)]||[],need=Number(runoff.seats_to_fill||1);
     if(selected.length!==need)return setMessage(`Select exactly ${need} candidate${need===1?"":"s"} for this runoff.`);
     if(!await confirm({title:"Submit runoff ballot?",message:"Your runoff vote is secret and cannot be changed after submission.",confirmLabel:"Submit runoff vote",tone:"primary"}))return;
-    setBusy(true);try{await api.elections.voteRunoff(detail.id,runoff.id,selected);setMessage("Runoff vote submitted successfully.");setDetail(await api.elections.get(detail.id));await load()}catch(e){setMessage(e.message)}finally{setBusy(false)}
+    setBusy(true);try{await api.elections.voteRunoff(detail.id,runoff.id,selected);setMessage("Runoff vote submitted successfully.");setDetail(await api.elections.get(detail.id));await refreshElectionShell()}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
 
   const submit=async()=>{
     if(!detail||detail.my_vote)return;
     if(!await confirm({title:"Submit secret ballot?",message:"Your vote cannot be changed after submission. Your selections are stored separately from your member identity.",confirmLabel:"Submit vote",tone:"primary"}))return;
-    setBusy(true);try{await api.elections.vote(detail.id,choices);setMessage("Vote submitted successfully.");setDetail(await api.elections.get(detail.id));await load()}catch(e){setMessage(e.message);if(e?.status===409){try{setDetail(await api.elections.get(detail.id));await load()}catch{}}}finally{setBusy(false)}
+    setBusy(true);try{await api.elections.vote(detail.id,choices);setMessage("Vote submitted successfully.");setDetail(await api.elections.get(detail.id));await refreshElectionShell()}catch(e){setMessage(e.message);if(e?.status===409){try{setDetail(await api.elections.get(detail.id));await refreshElectionShell()}catch{}}}finally{setBusy(false)}
   };
-  if(rows===null)return <LoadingState>Loading elections…</LoadingState>;
   return <>
     <div className="member-page-heading"><div className="sans">Elections</div><span className="sans">EXCO nominations, voting and results</span></div>
     <MessageBanner>{message}</MessageBanner>
@@ -76,7 +109,7 @@ export function MemberElections(){
       {excoTerms.previous&&<div className="sans exco-term-previous"><span>Previous term</span><b>{excoTerms.previous.term_label||excoTerms.previous.election_title}</b><small>{formatApplicationDate(excoTerms.previous.started_at)} → {formatApplicationDate(excoTerms.previous.ended_at)}</small></div>}
     </section>}
     {governanceArchive?.terms?.length>0&&<section className="member-governance-card">
-      <button type="button" className="sans member-governance-head" onClick={()=>setArchiveOpen(v=>!v)}>
+      <button type="button" className="sans member-governance-head" onClick={toggleArchive}>
         <span><b>GOVERNANCE ARCHIVE</b><small>Certified elections, EXCO terms, resolutions and completed work</small></span>
         <strong><ChevronRight size={15} className={archiveOpen?"member-archive-chevron open":"member-archive-chevron"}/></strong>
       </button>
@@ -116,7 +149,7 @@ export function MemberElections(){
         <strong>{Number(e.turnout?.percent||0).toFixed(1)}%<small>turnout</small></strong>
       </button>)}
     </section>}
-    {!rows.length?<EmptyState>No elections available.</EmptyState>:rows.map(e=>{const stage=memberElectionStage(e);return <button key={e.id} type="button" onClick={()=>open(e)} className={`member-election-card stage-${stage.tone}`}>
+    {rows===null?<LoadingState compact>Loading elections…</LoadingState>:!rows.length?<EmptyState>No elections available.</EmptyState>:rows.map(e=>{const stage=memberElectionStage(e);return <button key={e.id} type="button" onClick={()=>open(e)} className={`member-election-card stage-${stage.tone}`}>
       <div><b className="sans">{e.title}</b><span className="sans">{e.term||""}</span><small className="sans member-election-stage-pill">{stage.label}</small></div>
       <div className="sans"><strong>{stage.action} <ChevronRight size={13}/></strong><span>{stage.note||`${e.turnout?.voted||0}/${e.turnout?.eligible||0} voted · ${Number(e.turnout?.percent||0).toFixed(1)}%`}</span></div>
     </button>})}

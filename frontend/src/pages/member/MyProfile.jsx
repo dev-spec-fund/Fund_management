@@ -1,30 +1,52 @@
 import React, { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, ChevronRight, Download, FileText, Phone, UserRound, WalletCards } from "lucide-react";
-import { api, onDataChange } from "../../api";
+import { api, onDataChangeDebounced } from "../../api";
 import { ErrorState, smallBtn } from "../../components/Shared";
 import { fmt } from "../../utils/format";
 import { approvedContributionSummary } from "../../utils/contributions";
 
 export function MyProfile({ member, setTab }) {
-  const [dashboard, setDashboard] = useState(null);
-  const [statement, setStatement] = useState(null);
+  const [dashboard, setDashboard] = useState(()=>api.peekCached("/api/me/dashboard"));
+  const [statement, setStatement] = useState(()=>member?.id ? api.peekCached(`/api/members/${member.id}/statement`) : null);
   const [error, setError] = useState("");
 
-  const load=({silent=false}={})=>{
-    if(!silent){setDashboard(null);setStatement(null);setError("");}
-    return Promise.all([
-      api.myDashboard(),
-      member?.id ? api.members.statement(member.id) : Promise.resolve(null),
-    ]).then(([nextDashboard,nextStatement])=>{
-      setDashboard(nextDashboard);
-      setStatement(nextStatement);
-    }).catch(e=>{if(!silent)setError(e?.message||"Could not load membership details");});
+  const loadDashboard=({silent=false}={})=>{
+    if(!silent){setDashboard((current)=>current||api.peekCached("/api/me/dashboard"));setError("");}
+    return api.myDashboard().then(setDashboard).catch(e=>{if(!silent)setError(e?.message||"Could not load membership details");});
+  };
+  const loadStatement=()=>{
+    if(!member?.id)return Promise.resolve();
+    return api.members.statement(member.id).then(setStatement).catch(()=>{});
   };
 
-  useEffect(()=>{load();},[member?.id]);
-  useEffect(()=>onDataChange(()=>load({silent:true})),[member?.id]);
+  useEffect(()=>{
+    loadDashboard();
+    // Statement totals are secondary to the membership shell. Load them without
+    // delaying the profile's first useful paint.
+    const timer=setTimeout(()=>loadStatement(),60);
+    return ()=>clearTimeout(timer);
+  },[member?.id]);
+  useEffect(()=>onDataChangeDebounced(({paths=[]})=>{
+    const dashboardRelevant=paths.some((path)=>
+      path?.startsWith("/api/contributions") ||
+      path?.startsWith("/api/admin/pending") ||
+      path?.startsWith("/api/members") ||
+      path?.startsWith("/api/admin/meetings") ||
+      path?.startsWith("/api/governance/meetings") ||
+      path?.startsWith("/api/elections") ||
+      path?.startsWith("/api/settings")
+    );
+    const statementRelevant=paths.some((path)=>
+      path?.startsWith("/api/contributions") ||
+      path?.startsWith("/api/admin/pending") ||
+      path?.startsWith("/api/members") ||
+      path?.startsWith("/api/settings")
+    );
+    if(dashboardRelevant)loadDashboard({silent:true});
+    if(statementRelevant)loadStatement();
+  },140),[member?.id]);
 
-  if(error && !dashboard) return <ErrorState onRetry={()=>load()}>{error}</ErrorState>;
+  if(error && !dashboard) return <ErrorState onRetry={()=>loadDashboard()}>{error}</ErrorState>;
   if(!dashboard) return <MembershipSkeleton/>;
 
   const m=dashboard.member || statement?.member || member || {};
@@ -35,7 +57,7 @@ export function MyProfile({ member, setTab }) {
   const outstanding=statuses.reduce((sum,row)=>sum+Number(row.due||0),0);
   const pendingCount=dashboard.pending_payments?.length || 0;
   const status=String(c.status||"unpaid").toLowerCase();
-  const statusLabel=status==="paid"?"Paid":status==="partial"?"Partial":status==="exempt"?"Exempt":status==="not_applicable"?"Not due":"Unpaid";
+  const statusLabel=status==="paid"?"Paid":status==="partial"?"Partial":status==="exempt"?"Exempt":status==="not_applicable"?"N/A":"Unpaid";
   const statusColor=status==="paid"?"var(--success)":status==="partial"?"var(--warning)":status==="exempt"||status==="not_applicable"?"var(--muted)":"var(--danger)";
   const joined=formatJoinedDate(m.joined_at||m.created_at);
 
@@ -65,8 +87,8 @@ export function MyProfile({ member, setTab }) {
     <section className="member-profile-summary-grid">
       <SummaryCard icon={<WalletCards size={15}/>} label="MONTHLY CONTRIBUTION" value={`MVR ${fmt(c.monthly_amount||m.monthly_amount||0)}`}/>
       <SummaryCard icon={<CheckCircle2 size={15}/>} label="PAID THIS MONTH" value={`MVR ${fmt(c.paid||0)}`} tone={Number(c.paid||0)>0?"success":""}/>
-      <SummaryCard label="TOTAL CONTRIBUTED" value={`MVR ${fmt(totalContributed)}`} tone="success"/>
-      <SummaryCard label="OUTSTANDING" value={`MVR ${fmt(outstanding)}`} tone={outstanding>0?"danger":"success"}/>
+      <SummaryCard label="TOTAL CONTRIBUTED" value={statement?`MVR ${fmt(totalContributed)}`:"—"} tone={statement?"success":""}/>
+      <SummaryCard label="OUTSTANDING" value={statement?`MVR ${fmt(outstanding)}`:"—"} tone={statement?(outstanding>0?"danger":"success"):""}/>
     </section>
 
     {pendingCount>0 && <div className="sans member-profile-pending">
@@ -93,7 +115,7 @@ export function MyProfile({ member, setTab }) {
       <ProfileRow icon={<CalendarDays size={14}/>} label="Joined" value={joined}/>
       <ProfileRow label="Current month" value={dashboard.month||"—"}/>
       <ProfileRow label="Remaining this month" value={`MVR ${fmt(c.due||0)}`}/>
-      <ProfileRow label="Approved payments" value={String(approved.length)} last/>
+      <ProfileRow label="Approved payments" value={statement?String(approved.length):"—"} last/>
     </section>
 
     <section className="member-profile-card">

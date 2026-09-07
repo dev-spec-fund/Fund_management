@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { CheckCircle2, Clock3 } from "lucide-react";
-import { api, onDataChange } from "../../api";
+import { api, onDataChangeDebounced } from "../../api";
 import { EmptyState, ErrorState } from "../../components/Shared";
 
 export function MyActions() {
@@ -14,11 +14,22 @@ export function MyActions() {
   };
 
   useEffect(()=>{ load(); },[]);
-  useEffect(()=>onDataChange(()=>load({silent:true})),[]);
+  useEffect(()=>onDataChangeDebounced(({paths=[]})=>{
+    const relevant=paths.some((path)=>
+      path?.startsWith("/api/me/actions") ||
+      path?.startsWith("/api/admin/meetings") ||
+      path?.startsWith("/api/governance/meetings") ||
+      path?.startsWith("/api/governance/meeting-")
+    );
+    if(relevant)load({silent:true});
+  },140),[]);
 
   const done = async (id) => {
     setBusyId(id); setError("");
-    try { await api.completeMyAction(id); await load({silent:true}); }
+    try {
+      await api.completeMyAction(id);
+      setRows((current)=>current?.map((action)=>Number(action.id)===Number(id)?{...action,status:"completed"}:action)||current);
+    }
     catch(e){ setError(e?.message || "Could not complete action item"); }
     finally { setBusyId(null); }
   };

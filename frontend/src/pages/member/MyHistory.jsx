@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { api, onDataChange } from "../../api";
+import { api, onDataChangeDebounced } from "../../api";
 import { EmptyState, ErrorState, compactBtn } from "../../components/Shared";
 import { fmt } from "../../utils/format";
 import { approvedContributionSummary } from "../../utils/contributions";
@@ -18,10 +18,16 @@ export function MyHistory({ member }) {
     api.members.statement(member.id).then(setStatement).catch((e) => setError(e?.message || "Could not load your statement"));
   }, [member?.id]);
 
-  useEffect(() => onDataChange(() => {
+  useEffect(() => onDataChangeDebounced(({paths=[]}) => {
     if (!member?.id) return;
-    api.members.statement(member.id).then(setStatement).catch(() => {});
-  }), [member?.id]);
+    const relevant=paths.some((path)=>
+      path?.startsWith("/api/contributions") ||
+      path?.startsWith("/api/admin/pending") ||
+      path?.startsWith("/api/members") ||
+      path?.startsWith("/api/settings")
+    );
+    if (relevant) api.members.statement(member.id).then(setStatement).catch(() => {});
+  },140), [member?.id]);
 
   const statuses=statement?.monthly_status||[];
   const statusMonths=useMemo(()=>statuses.map(x=>String(x.month||"")).filter(Boolean),[statuses]);
@@ -35,7 +41,7 @@ export function MyHistory({ member }) {
     setSelectedMonth(statusMonths.includes(current)?current:(nearestCurrent||statusMonths.at(-1)||""));
   },[statusMonths,selectedMonth]);
 
-  if (error) return <ErrorState>{error}</ErrorState>;
+  if (error && !statement) return <ErrorState>{error}</ErrorState>;
   if (!statement) return <HistorySkeleton/>;
 
   const rows=statement.contributions||[];

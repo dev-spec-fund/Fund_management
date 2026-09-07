@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { CalendarDays, Check, Clock3, MapPin } from "lucide-react";
-import { api, onDataChange } from "../../api";
+import { api, onDataChangeDebounced } from "../../api";
 import { EmptyState, ErrorState, primaryBtn, secondaryBtn } from "../../components/Shared";
 
 export function MemberMeetings() {
@@ -14,11 +14,22 @@ export function MemberMeetings() {
   };
 
   useEffect(() => { load(); }, []);
-  useEffect(() => onDataChange(() => load({ silent: true })), []);
+  useEffect(() => onDataChangeDebounced(({ paths = [] }) => {
+    const relevant = paths.some((path) =>
+      path?.startsWith("/api/me/meetings") ||
+      path?.startsWith("/api/admin/meetings") ||
+      path?.startsWith("/api/governance/meetings") ||
+      path?.startsWith("/api/governance/meeting-")
+    );
+    if (relevant) load({ silent: true });
+  }, 140), []);
 
   const rsvp = async (id, response) => {
     setBusyId(id); setError("");
-    try { await api.rsvpMeeting(id, response); await load({ silent: true }); }
+    try {
+      await api.rsvpMeeting(id, response);
+      setRows((current) => current?.map((meeting) => Number(meeting.id) === Number(id) ? { ...meeting, rsvp: response } : meeting) || current);
+    }
     catch (e) { setError(e?.message || "Could not save RSVP"); }
     finally { setBusyId(null); }
   };

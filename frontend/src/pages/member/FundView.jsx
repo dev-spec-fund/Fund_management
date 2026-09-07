@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
-import { api, onDataChange } from "../../api";
+import { api, onDataChangeDebounced } from "../../api";
 import { Modal } from "../../components/FormControls";
 import { EmptyState, ErrorState, LoadingState, compactBtn } from "../../components/Shared";
 import { currentMonthValue, formatLocalDateTime } from "../../utils/date";
@@ -29,9 +29,16 @@ export function FundView() {
     loadSummary();
     setExpenseDetail(null);
   }, [month]);
-  useEffect(() => onDataChange(() => {
-    api.reports.publicSummary(month).then(setSummary).catch(() => {});
-  }), [month]);
+  useEffect(() => onDataChangeDebounced(({ paths = [] }) => {
+    const relevant = paths.some((path) =>
+      path?.startsWith("/api/contributions") ||
+      path?.startsWith("/api/donations") ||
+      path?.startsWith("/api/expenses") ||
+      path?.startsWith("/api/settings") ||
+      path?.startsWith("/api/admin/pending")
+    );
+    if (relevant) api.reports.publicSummary(month).then(setSummary).catch(() => {});
+  }, 140), [month]);
 
   const openExpenseCategory = async (category) => {
     if (!category) return;
