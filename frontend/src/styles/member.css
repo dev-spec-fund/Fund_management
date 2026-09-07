@@ -1069,3 +1069,27 @@
 }
 
 
+
+/* v-navigation-home: modern Member Home. */
+.member-home-contribution { width:100%; display:block; text-align:left; border:1px solid var(--border-strong); border-radius:18px; background:var(--card); color:var(--text); padding:15px; margin-bottom:10px; cursor:pointer; -webkit-tap-highlight-color:transparent; transition:transform 110ms ease-out,border-color 160ms ease-out; }
+.member-home-contribution:active { transform:scale(.99); }
+.member-home-contribution:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+.member-home-contribution-head { display:flex; align-items:center; gap:10px; }
+.member-home-contribution-icon { width:40px; height:40px; flex:0 0 40px; display:flex; align-items:center; justify-content:center; border-radius:12px; }
+.member-home-contribution.tone-success .member-home-contribution-icon { background:var(--success-bg); color:var(--success); }
+.member-home-contribution.tone-warning .member-home-contribution-icon { background:var(--warning-bg); color:var(--warning); }
+.member-home-contribution.tone-danger .member-home-contribution-icon { background:var(--danger-bg); color:var(--danger); }
+.member-home-contribution.tone-neutral .member-home-contribution-icon { background:var(--surface-2); color:var(--muted); }
+.member-home-contribution-heading { min-width:0; flex:1; display:flex; flex-direction:column; gap:3px; }
+.member-home-contribution-heading span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; letter-spacing:.55px; font-weight:750; color:var(--muted); }
+.member-home-contribution-heading strong { font-family:var(--sans); font-size:13px; }
+.member-home-contribution.tone-success .member-home-contribution-heading strong { color:var(--success); }
+.member-home-contribution.tone-warning .member-home-contribution-heading strong { color:var(--warning); }
+.member-home-contribution.tone-danger .member-home-contribution-heading strong { color:var(--danger); }
+.member-home-chevron { flex:0 0 auto; color:var(--soft); }
+.member-home-contribution-amount { margin-top:14px; font-family:var(--sans); font-size:28px; line-height:1.05; font-weight:780; letter-spacing:-.65px; }
+.member-home-contribution-amount span { font-size:14px; font-weight:650; color:var(--soft-2); }
+.member-home-contribution-note { margin-top:7px; font-size:11px; color:var(--muted); }
+.member-overview-election--modern { border-radius:16px; border:1px solid color-mix(in srgb,#7654c7 28%,var(--border)); background:linear-gradient(140deg,color-mix(in srgb,#7654c7 8%,var(--card)),var(--card)); }
+.member-overview-election--modern .member-overview-election-action { display:flex; align-items:center; gap:3px; }
+@media (prefers-reduced-motion:reduce) { .member-home-contribution { transition:none!important; } }
