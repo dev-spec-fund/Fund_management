@@ -414,7 +414,7 @@ input:focus, textarea:focus, select:focus {
   display: block;
   min-width: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
 }
 .activity-custom-range label > span {
@@ -457,12 +457,12 @@ input:focus, textarea:focus, select:focus {
   padding: 7px 9px;
   background: var(--danger-bg);
   color: var(--danger);
-  font-size: 10px;
+  font-size: 11px;
 }
 .activity-filter-loading {
   margin-top: 7px;
   color: var(--soft);
-  font-size: 10px;
+  font-size: 11px;
 }
 @media (max-width: 390px) {
   .activity-custom-range {

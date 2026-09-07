@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Eye } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { api, onDataChange } from "../../api";
 import { Modal } from "../../components/FormControls";
 import { EmptyState, ErrorState, LoadingState, compactBtn } from "../../components/Shared";
@@ -84,20 +84,20 @@ export function FundView() {
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:18}}>
         <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:13}}>
-          <div className="sans" style={{fontSize:10,color:"var(--soft)"}}>TOTAL RECEIVED</div>
+          <div className="sans" style={{fontSize:11,color:"var(--soft)"}}>TOTAL RECEIVED</div>
           <div className="sans" style={{fontSize:15,fontWeight:700,color:"var(--success)",marginTop:3}}>MVR {fmt(totalReceived)}</div>
         </div>
         <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:13}}>
-          <div className="sans" style={{fontSize:10,color:"var(--soft)"}}>TOTAL SPENT</div>
+          <div className="sans" style={{fontSize:11,color:"var(--soft)"}}>TOTAL SPENT</div>
           <div className="sans" style={{fontSize:15,fontWeight:700,color:"var(--danger)",marginTop:3}}>MVR {fmt(totalSpent)}</div>
         </div>
       </div>
 
       <div className="sans" style={{fontSize:13,color:"var(--muted)",marginBottom:8,fontWeight:700}}>SPENDING</div>
       <div style={{display:"grid",gridTemplateColumns:"42px 1fr 42px",alignItems:"center",gap:8,marginBottom:10}}>
-        <button type="button" onClick={()=>shiftMonth(-1)} style={{...compactBtn,padding:8}}>‹</button>
+        <button type="button" onClick={()=>shiftMonth(-1)} style={{...compactBtn,padding:8}} aria-label="Previous month"><ChevronLeft size={18}/></button>
         <div className="sans" style={{textAlign:"center",background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,padding:10,fontWeight:600}}>{monthLabel}</div>
-        <button type="button" onClick={()=>shiftMonth(1)} style={{...compactBtn,padding:8}}>›</button>
+        <button type="button" onClick={()=>shiftMonth(1)} style={{...compactBtn,padding:8}} aria-label="Next month"><ChevronRight size={18}/></button>
       </div>
 
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"11px 14px",marginBottom:9,display:"flex",justifyContent:"space-between"}}>
@@ -111,7 +111,7 @@ export function FundView() {
         return <button type="button" key={i} onClick={()=>openExpenseCategory(c)} className="member-fund-category">
           <div className="member-fund-category-head">
             <span className="sans">{c.category}</span>
-            <span className="sans"><strong>MVR {fmt(spent)}</strong><b>›</b></span>
+            <span className="sans"><strong>MVR {fmt(spent)}</strong><ChevronRight size={16} aria-hidden="true"/></span>
           </div>
           <div className="member-fund-category-progress"><div style={{width:`${pct}%`}}/></div>
           <div className="sans member-fund-category-meta">{spent>0?`${pct}% of this month's expenses · Tap for details`:"No expenses · Tap for details"}</div>
@@ -132,7 +132,7 @@ export function FundView() {
         return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:"11px 13px",marginBottom:7}}>
           <div style={{minWidth:0}}>
             <div className="sans" style={{fontSize:12,fontWeight:600}}>{a.label}</div>
-            <div className="sans" style={{fontSize:10,color:"var(--soft-2)",marginTop:2}}>{a.event_at ? formatLocalDateTime(a.event_at) : ""}</div>
+            <div className="sans" style={{fontSize:11,color:"var(--soft-2)",marginTop:2}}>{a.event_at ? formatLocalDateTime(a.event_at) : ""}</div>
           </div>
           <div className="sans" style={{fontSize:13,fontWeight:700,color:incoming?"var(--success)":"var(--danger)",whiteSpace:"nowrap"}}>
             {incoming ? "+" : "−"} MVR {fmt(a.amount)}
@@ -143,7 +143,7 @@ export function FundView() {
 
       {expenseDetail && <Modal title={expenseDetail.category?.name || "Expense details"} closeDisabled={expenseLoading} onClose={()=>!expenseLoading&&setExpenseDetail(null)}>
         <div className="sans" style={{background:"var(--bg)",borderRadius:11,padding:12,marginBottom:12}}>
-          <div style={{fontSize:10,color:"var(--soft)"}}>{monthLabel.toUpperCase()}</div>
+          <div style={{fontSize:11,color:"var(--soft)"}}>{monthLabel.toUpperCase()}</div>
           <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"end",marginTop:4}}>
             <div style={{fontSize:14,fontWeight:700}}>{expenseDetail.category?.name}</div>
             <div style={{fontSize:16,fontWeight:700,color:"var(--danger)"}}>MVR {fmt(expenseDetail.total || 0)}</div>
@@ -162,7 +162,7 @@ export function FundView() {
             </div>
             <div className="sans" style={{fontSize:14,fontWeight:700,color:"var(--danger)",whiteSpace:"nowrap"}}>MVR {fmt(e.amount)}</div>
           </div>
-          <div className="sans" style={{display:"grid",gridTemplateColumns:"1fr auto",gap:"5px 10px",fontSize:10,marginTop:10,paddingTop:9,borderTop:"1px solid var(--divider)"}}>
+          <div className="sans" style={{display:"grid",gridTemplateColumns:"1fr auto",gap:"5px 10px",fontSize:11,marginTop:10,paddingTop:9,borderTop:"1px solid var(--divider)"}}>
             <span style={{color:"var(--soft)"}}>Category</span><span>{e.category}</span>
             <span style={{color:"var(--soft)"}}>Expense month</span><span>{e.transaction_month || month}</span>
             <span style={{color:"var(--soft)"}}>Logged</span><span>{e.created_at ? formatLocalDateTime(e.created_at) : "—"}</span>

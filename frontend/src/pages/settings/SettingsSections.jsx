@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Ban, Bell, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, Search, SlidersHorizontal, UserRound } from "lucide-react";
+import { Plus, AlertTriangle, Ban, Bell, ChevronLeft, ChevronRight, CircleCheck, CircleX, Clock3, Search, SlidersHorizontal, UserRound } from "lucide-react";
 import { api } from "../../api";
 import { SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../../components/Shared";
 import Pagination, { pageSlice } from "../../components/Pagination";
@@ -82,7 +82,7 @@ export function ExpenseCategorySettingsSection(ctx) {
           <button type="button" style={compactBtn} onClick={async()=>{try{await api.expenses.updateCategory(cat.id,{active:Number(cat.active)===0});load()}catch(e){setMessage(e.message)}}}>{Number(cat.active)===0?"Activate":"Deactivate"}</button>
           <button type="button" style={{...compactBtn,color:"var(--danger)"}} onClick={async()=>{if(!await confirm({title:"Delete expense category?",message:`Delete ${cat.name}? If it has historical expenses it will be deactivated instead.`,confirmLabel:"Delete"}))return;try{await api.expenses.removeCategory(cat.id);load()}catch(e){setMessage(e.message)}}}>Delete</button></>}
         </div>)}
-        {financeAdmin&&<button type="button" style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=prompt("New expense category name");if(!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}>+ Add category</button>}
+        {financeAdmin&&<button type="button" style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=prompt("New expense category name");if(!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}><Plus size={15}/> Add category</button>}
       </div>
 
 

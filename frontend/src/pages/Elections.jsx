@@ -221,7 +221,7 @@ export default function Elections(){
     <div className="governance-page-head election-theme">
       <div className="governance-title-row">
         <div><span className="governance-eyebrow sans">GOVERNANCE</span><h2>Elections</h2><p className="sans">Run transparent EXCO elections with secret ballots and certified results.</p></div>
-        <button type="button" className="governance-primary-action sans" onClick={()=>setShowCreate(true)}><Plus size={16}/> New election</button>
+        <button type="button" className="governance-primary-action sans" onClick={()=>setShowCreate(true)}><Plus size={16}/> Create election</button>
       </div>
       <div className="governance-kpi-grid">
         <ElectionKpi icon={<Vote size={16}/>} label="Active" value={electionStats.active}/>
@@ -275,7 +275,7 @@ export default function Elections(){
       {handover.handover.status==="completed"&&<div className="sans exco-handover-completed"><CheckCircle2 size={14}/> Handover completed {formatElectionDate(handover.handover.completed_at)}</div>}
     </section>}
     {workboard?.term&&<section className="exco-workboard-card">
-      <div className="sans exco-workboard-head"><span><b>EXCO WORKBOARD</b><small>{workboard.term.term_label||workboard.term.election_title}</small></span><button type="button" onClick={()=>setShowResponsibility(true)}>+ Add</button></div>
+      <div className="sans exco-workboard-head"><span><b>EXCO WORKBOARD</b><small>{workboard.term.term_label||workboard.term.election_title}</small></span><button type="button" onClick={()=>setShowResponsibility(true)}><Plus size={14}/> Add</button></div>
       <div className="sans exco-workboard-summary">
         <span><b>{workboard.summary?.overdue||0}</b> overdue</span><span><b>{workboard.summary?.in_progress||0}</b> in progress</span><span><b>{workboard.summary?.upcoming||0}</b> upcoming</span><span><b>{workboard.summary?.completed||0}</b> completed</span>
       </div>

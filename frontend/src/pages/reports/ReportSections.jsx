@@ -72,7 +72,7 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
         </div>}
       </div>
     </div>
-    <div className="sans" style={{ fontSize: 10, color: "var(--soft)", lineHeight: 1.45, margin: "-4px 2px 12px" }}>
+    <div className="sans" style={{ fontSize: 11, color: "var(--soft)", lineHeight: 1.45, margin: "-4px 2px 12px" }}>
       Advance allocations count toward collection only. The cash was already added to the fund when it was originally received, so it is not counted again here.
     </div>
 
@@ -85,7 +85,7 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
 
     <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>
       <span>CASH INCOME VS EXPENSES — 6 MONTHS</span>
-      <span style={{ display: "flex", gap: 8, fontSize: 10, fontWeight: 500 }}><span>● Income</span><span style={{ color: "var(--danger)" }}>● Expenses</span></span>
+      <span style={{ display: "flex", gap: 8, fontSize: 11, fontWeight: 500 }}><span>● Income</span><span style={{ color: "var(--danger)" }}>● Expenses</span></span>
     </div>
     <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 12px", marginBottom: 16 }}>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 7, height: 112 }}>
@@ -96,7 +96,7 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
               <div style={{ flex: 1, minHeight: Number(d.income) > 0 ? 2 : 0, height: `${(Number(d.income || 0) / maxVal) * 100}%`, background: "var(--success)", borderRadius: "3px 3px 0 0" }} />
               <div style={{ flex: 1, minHeight: Number(d.expense) > 0 ? 2 : 0, height: `${(Number(d.expense || 0) / maxVal) * 100}%`, background: "var(--danger)", borderRadius: "3px 3px 0 0" }} />
             </div>
-            <div className="sans" style={{ fontSize: 10, color: "var(--soft)" }}>{label}</div>
+            <div className="sans" style={{ fontSize: 11, color: "var(--soft)" }}>{label}</div>
           </div>;
         })}
       </div>
@@ -112,17 +112,17 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
     {projectExpenseGroups.length > 0 && <>
       <div className="sans" style={{ fontSize: 12, color: "var(--muted)", margin: "20px 0 7px", fontWeight: 700 }}>PROJECT ACTIVITY</div>
       {projectExpenseGroups.map((p) => <div key={p.project_id} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", marginBottom: 9 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}><div className="sans" style={{ minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700 }}>{p.project_name}</div><div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{p.project_code}{p.budget == null ? " · Open-cost project" : ` · Budget MVR ${fmt(p.budget)}`}</div></div><div className="sans" style={{ textAlign: "right", whiteSpace: "nowrap" }}><div style={{ fontSize: 9, color: "var(--soft)", textTransform: "uppercase" }}>Donations / Spent</div><strong style={{ fontSize: 11, color: "var(--success)" }}>+ MVR {fmt(p.donations_received || 0)}</strong><div style={{ fontSize: 11, fontWeight: 700, color: "var(--danger)" }}>- MVR {fmt(p.spent)}</div></div></div>
-        {p.donations.length > 0 && <><div className="sans" style={{ fontSize: 9, fontWeight: 700, color: "var(--muted)", marginTop: 10, marginBottom: 2 }}>DONATIONS RECEIVED</div>{p.donations.map((d) => <div key={`d-${d.id}`} style={{ display: "flex", justifyContent: "space-between", gap: 10, borderTop: "1px solid var(--divider)", padding: "7px 0" }}><div className="sans" style={{ fontSize: 10, minWidth: 0 }}><b>{d.donor_name}</b><div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{String(d.created_at || "").slice(0, 10)} · {d.txn_id}{d.note ? ` · ${d.note}` : ""}</div></div><b className="sans" style={{ fontSize: 10, whiteSpace: "nowrap", color: "var(--success)" }}>+ MVR {fmt(d.amount)}</b></div>)}</>}
-        <div className="sans" style={{ fontSize: 9, fontWeight: 700, color: "var(--muted)", marginTop: 10, marginBottom: 2 }}>EXPENSES</div>
-        {p.expenses.length ? p.expenses.map((e) => <div key={e.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, borderTop: "1px solid var(--divider)", padding: "7px 0" }}><div className="sans" style={{ fontSize: 10, minWidth: 0 }}><b>{e.description}</b><div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{String(e.expense_date || e.created_at || "").slice(0, 10)} · {e.txn_id} · {e.category || "Uncategorised"}</div></div><b className="sans" style={{ fontSize: 10, whiteSpace: "nowrap", color: "var(--danger)" }}>MVR {fmt(e.amount)}</b></div>) : <div className="sans" style={{ fontSize: 10, color: "var(--soft)", paddingTop: 5 }}>No expenses in this month.</div>}
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}><div className="sans" style={{ minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700 }}>{p.project_name}</div><div style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{p.project_code}{p.budget == null ? " · Open-cost project" : ` · Budget MVR ${fmt(p.budget)}`}</div></div><div className="sans" style={{ textAlign: "right", whiteSpace: "nowrap" }}><div style={{ fontSize: 11, color: "var(--soft)", textTransform: "uppercase" }}>Donations / Spent</div><strong style={{ fontSize: 11, color: "var(--success)" }}>+ MVR {fmt(p.donations_received || 0)}</strong><div style={{ fontSize: 11, fontWeight: 700, color: "var(--danger)" }}>- MVR {fmt(p.spent)}</div></div></div>
+        {p.donations.length > 0 && <><div className="sans" style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: 10, marginBottom: 2 }}>DONATIONS RECEIVED</div>{p.donations.map((d) => <div key={`d-${d.id}`} style={{ display: "flex", justifyContent: "space-between", gap: 10, borderTop: "1px solid var(--divider)", padding: "7px 0" }}><div className="sans" style={{ fontSize: 11, minWidth: 0 }}><b>{d.donor_name}</b><div style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{String(d.created_at || "").slice(0, 10)} · {d.txn_id}{d.note ? ` · ${d.note}` : ""}</div></div><b className="sans" style={{ fontSize: 11, whiteSpace: "nowrap", color: "var(--success)" }}>+ MVR {fmt(d.amount)}</b></div>)}</>}
+        <div className="sans" style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: 10, marginBottom: 2 }}>EXPENSES</div>
+        {p.expenses.length ? p.expenses.map((e) => <div key={e.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, borderTop: "1px solid var(--divider)", padding: "7px 0" }}><div className="sans" style={{ fontSize: 11, minWidth: 0 }}><b>{e.description}</b><div style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{String(e.expense_date || e.created_at || "").slice(0, 10)} · {e.txn_id} · {e.category || "Uncategorised"}</div></div><b className="sans" style={{ fontSize: 11, whiteSpace: "nowrap", color: "var(--danger)" }}>MVR {fmt(e.amount)}</b></div>) : <div className="sans" style={{ fontSize: 11, color: "var(--soft)", paddingTop: 5 }}>No expenses in this month.</div>}
       </div>)}
     </>}
 
     {generalExpenses.length > 0 && <>
       <div className="sans" style={{ fontSize: 12, color: "var(--muted)", margin: "20px 0 7px", fontWeight: 700 }}>GENERAL EXPENSES</div>
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "4px 14px", marginBottom: 10 }}>
-        {generalExpenses.map((e) => <div key={e.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, borderTop: "1px solid var(--divider)", padding: "8px 0" }}><div className="sans" style={{ fontSize: 10, minWidth: 0 }}><b>{e.description}</b><div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{String(e.expense_date || e.created_at || "").slice(0, 10)} · {e.txn_id} · {e.category || "Uncategorised"}</div></div><b className="sans" style={{ fontSize: 10, whiteSpace: "nowrap", color: "var(--danger)" }}>MVR {fmt(e.amount)}</b></div>)}
+        {generalExpenses.map((e) => <div key={e.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, borderTop: "1px solid var(--divider)", padding: "8px 0" }}><div className="sans" style={{ fontSize: 11, minWidth: 0 }}><b>{e.description}</b><div style={{ fontSize: 11, color: "var(--soft)", marginTop: 2 }}>{String(e.expense_date || e.created_at || "").slice(0, 10)} · {e.txn_id} · {e.category || "Uncategorised"}</div></div><b className="sans" style={{ fontSize: 11, whiteSpace: "nowrap", color: "var(--danger)" }}>MVR {fmt(e.amount)}</b></div>)}
       </div>
     </>}
   </>;
@@ -139,17 +139,17 @@ export function AnnualAnalyticsSection({ annualYear, setAnnualYear, annual, anal
       </div>
       {annual && <>
         <div className="annual-report-totals">
-          {[["Contributions", annual.totals?.contributions, "var(--success)"], ["Donations", annual.totals?.donations, "var(--success)"], ["Expenses", annual.totals?.expenses, "var(--danger)"], ["Closing balance", annual.totals?.closing_balance, "var(--text)"]].map(([l, v, c]) => <div key={l} style={{ background: "var(--bg)", borderRadius: 9, padding: 10 }}><div style={{ fontSize: 9, color: "var(--soft)", textTransform: "uppercase" }}>{l}</div><b style={{ fontSize: 13, color: c }}>MVR {fmt(v)}</b></div>)}
+          {[["Contributions", annual.totals?.contributions, "var(--success)"], ["Donations", annual.totals?.donations, "var(--success)"], ["Expenses", annual.totals?.expenses, "var(--danger)"], ["Closing balance", annual.totals?.closing_balance, "var(--text)"]].map(([l, v, c]) => <div key={l} style={{ background: "var(--bg)", borderRadius: 9, padding: 10 }}><div style={{ fontSize: 11, color: "var(--soft)", textTransform: "uppercase" }}>{l}</div><b style={{ fontSize: 13, color: c }}>MVR {fmt(v)}</b></div>)}
         </div>
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--divider)", display: "flex", justifyContent: "space-between", fontSize: 12 }}><span>Annual collection rate</span><b style={{ color: "var(--success)" }}>{Number(annual.totals?.due || 0) > 0 ? `${Number(annual.totals?.collection_rate || 0).toFixed(1)}%` : "N/A"}</b></div>
       </>}
       {analytics && <>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", marginTop: 16, marginBottom: 7 }}>12-MONTH COLLECTION PERFORMANCE</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: 16, marginBottom: 7 }}>12-MONTH COLLECTION PERFORMANCE</div>
         <div className="annual-collection-chart">{(annual?.months || []).map((m) => { const hasDue = Number(m.total_due || 0) > 0; const rate = hasDue ? Math.max(0, Math.min(100, Number(m.collection_rate || 0))) : 0; return <div key={m.month} title={`${m.month} · ${hasDue ? `${rate.toFixed(0)}%` : "N/A"}`} style={{ flex: 1, height: hasDue ? `${Math.max(3, rate)}%` : "0%", background: "var(--success)", borderRadius: "3px 3px 0 0", opacity: .85 }} />; })}</div>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "var(--soft)", marginTop: 4 }}><span>Jan</span><span>Dec</span></div>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", marginTop: 14, marginBottom: 6 }}>TOP MEMBER COLLECTION</div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--soft)", marginTop: 4 }}><span>Jan</span><span>Dec</span></div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: 14, marginBottom: 6 }}>TOP MEMBER COLLECTION</div>
         {(analytics.member_performance || []).slice(0, 5).map((m) => <div key={m.id} className="annual-top-member"><span><b>{m.member_code}</b><small>{m.name}</small></span><strong>{Number(m.annual_target || 0) > 0 ? `${Number(m.rate || 0).toFixed(0)}%` : "N/A"}<small>MVR {fmt(m.collected)}</small></strong></div>)}
-        <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 10 }}>Reversals this year: {analytics.reversals?.count || 0} · Meetings: {analytics.meetings || 0}</div>
+        <div style={{ fontSize: 11, color: "var(--soft)", marginTop: 10 }}>Reversals this year: {analytics.reversals?.count || 0} · Meetings: {analytics.meetings || 0}</div>
       </>}
     </div>
   </>;
