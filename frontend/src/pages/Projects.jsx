@@ -4,9 +4,10 @@ import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { LoadingState, EmptyState, MessageBanner, PrimaryButton, smallBtn } from "../components/Shared";
 import { fmt } from "../utils/format";
-import { todayValue } from "../utils/date";
+import { formatLocalDateTime, todayValue } from "../utils/date";
 import Pagination, { pageSlice } from "../components/Pagination";
 import DonationDetails from "./reports/DonationDetails";
+import ExpenseDetails from "./expenses/ExpenseDetails";
 
 const FILTERS = [["all","All"],["active","Active"],["planned","Planned"],["completed","Completed"],["cancelled","Cancelled"]];
 const isSuper = (admin) => ["owner","super_admin"].includes(admin?.role);
@@ -46,7 +47,7 @@ export default function Projects({ admin }) {
         <div className="sans" style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}><strong style={{fontSize:13}}>{p.name}</strong><span style={{fontSize:9,fontWeight:700,color:tone(p.status),textTransform:"uppercase"}}>{p.status}</span></div>
         <div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:4}}>{p.project_code}{p.responsible_member_name?` · ${p.responsible_member_name}`:""}</div>
         {p.budget!=null?<><div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5}}>Budget MVR {fmt(p.budget)} · {Math.max(0,Number(p.budget_used_pct||0)).toFixed(0)}% used</div><Progress value={Number(p.budget_used_pct||0)}/></>:<div className="sans" style={{fontSize:10,color:"var(--muted)",marginTop:5}}>Open-cost project</div>}
-        <div className="sans" style={{fontSize:9,color:"var(--primary-text)",marginTop:6,fontWeight:600}}>{Number(p.expense_count||0)} expense{Number(p.expense_count||0)===1?"":"s"} · {Number(p.donation_count||0)} donation{Number(p.donation_count||0)===1?"":"s"} · Tap to view</div>
+        <div className="sans" style={{fontSize:9,color:"var(--primary-text)",marginTop:6,fontWeight:600}}>{Number(p.expense_count||0)} expense{Number(p.expense_count||0)===1?"":"s"} · {Number(p.donation_count||0)} donation{Number(p.donation_count||0)===1?"":"s"}</div>
       </div>
       <div className="sans" style={{textAlign:"right",whiteSpace:"nowrap"}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>Spent</div><strong style={{fontSize:13}}>MVR {fmt(p.spent)}</strong>{p.budget!=null&&<div style={{fontSize:9,color:Number(p.remaining_budget)<0?"var(--danger)":"var(--soft)",marginTop:3}}>{Number(p.remaining_budget)<0?`Over MVR ${fmt(Math.abs(p.remaining_budget))}`:`MVR ${fmt(p.remaining_budget)} left`}</div>}</div>
     </button>)}
@@ -88,8 +89,8 @@ function projectStatusOptions(current){
 }
 
 function ProjectDetails({project,admin,onClose,onSaved}){
-  const [data,setData]=useState(()=>api.peekCached(`/api/projects/${project.id}`)),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[selectedDonation,setSelectedDonation]=useState(null);
-  const [showDonations,setShowDonations]=useState(true),[showExpenses,setShowExpenses]=useState(true),[showAdjustments,setShowAdjustments]=useState(false),[showHistory,setShowHistory]=useState(false);
+  const [data,setData]=useState(()=>api.peekCached(`/api/projects/${project.id}`)),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[selectedDonation,setSelectedDonation]=useState(null),[selectedExpense,setSelectedExpense]=useState(null);
+  const [showDonations,setShowDonations]=useState(false),[showExpenses,setShowExpenses]=useState(false),[showAdjustments,setShowAdjustments]=useState(false),[showHistory,setShowHistory]=useState(false);
   const load=()=>api.projects.get(project.id).then(setData).catch(e=>setError(e.message));
   useEffect(()=>{load();},[project.id]);
   useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses")||path?.startsWith("/api/donations"))load();}),[project.id]);
@@ -123,7 +124,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
           </>}
 
       <div className="project-detail-meta">
-        <Detail label="Start" value={p.start_date||"—"}/><Detail label="Target end" value={p.target_end_date||"—"}/>
+        <Detail label="Start" value={formatProjectDate(p.start_date)}/><Detail label="Target end" value={formatProjectDate(p.target_end_date)}/>
       </div>
       {p.cancel_reason&&<Detail label="Cancellation reason" value={p.cancel_reason}/>}
       {p.description&&<div className="sans project-description">{p.description}</div>}
@@ -138,7 +139,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
     />
     {showDonations&&(donations.length===0
       ? <div className="sans project-section-empty">No project donations yet.</div>
-      : donations.map(d=><button type="button" key={d.id} className="project-transaction-row" onClick={()=>setSelectedDonation(d)} style={{width:"100%",border:0,borderBottom:"1px solid var(--divider)",background:"transparent",color:"var(--text)",textAlign:"left",cursor:"pointer"}}><div className="sans project-transaction-main"><b>{d.donor_name}</b><div>{d.donation_date||d.transaction_month} · {d.txn_id}{d.note?` · ${d.note}`:""} · Tap to view</div></div><b className="sans project-transaction-amount success">+ MVR {fmt(d.amount)}</b></button>))}
+      : donations.map(d=><button type="button" key={d.id} className="project-transaction-row project-transaction-button" onClick={()=>setSelectedDonation(d)}><div className="sans project-transaction-main"><b>{d.donor_name}</b><div>{formatProjectDate(d.donation_date||d.transaction_month)} · {d.txn_id}{d.note?` · ${d.note}`:""}</div></div><b className="sans project-transaction-amount success">+ MVR {fmt(d.amount)}</b></button>))}
 
     <ProjectSectionHeader
       label="Expenses"
@@ -147,28 +148,37 @@ function ProjectDetails({project,admin,onClose,onSaved}){
       open={showExpenses}
       onClick={()=>setShowExpenses(v=>!v)}
     />
-    {showExpenses&&<ExpenseSection rows={currentExpenses} empty="No project expenses yet."/>}
+    {showExpenses&&<ExpenseSection rows={currentExpenses} empty="No project expenses yet." onOpen={setSelectedExpense}/>} 
 
     {adjustments.length>0&&<>
       <ProjectSectionHeader label="Reversed / voided" count={adjustments.length} open={showAdjustments} onClick={()=>setShowAdjustments(v=>!v)}/>
-      {showAdjustments&&<ExpenseSection rows={adjustments} empty="" adjustment/>}
+      {showAdjustments&&<ExpenseSection rows={adjustments} empty="" adjustment onOpen={setSelectedExpense}/>} 
     </>}
 
     {(p.audit_history||[]).length>0&&<>
       <ProjectSectionHeader icon={<History size={13}/>} label="Project history" count={p.audit_history.length} open={showHistory} onClick={()=>setShowHistory(v=>!v)}/>
-      {showHistory&&p.audit_history.map(a=><div key={a.id} className="project-history-row"><div className="sans">{auditLabel(a.action)}</div><div className="sans">{String(a.created_at||"").replace("T"," ").slice(0,16)} · {a.admin_name}{a.before_status&&a.after_status&&a.before_status!==a.after_status?` · ${a.before_status} → ${a.after_status}`:""}</div></div>)}
+      {showHistory&&p.audit_history.map(a=><div key={a.id} className="project-history-row"><div className="sans">{auditLabel(a.action)}</div><div className="sans">{formatLocalDateTime(a.created_at)} · {a.admin_name}{a.before_status&&a.after_status&&a.before_status!==a.after_status?` · ${a.before_status} → ${a.after_status}`:""}</div></div>)}
     </>}
 
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14}}>{canEdit&&<button type="button" disabled={busy} onClick={()=>setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13}/> Edit</button>}{["planned"].includes(p.status)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Activate</button>}{p.status==="active"&&<button type="button" disabled={busy} onClick={()=>changeStatus("completed")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Complete</button>}{!["cancelled"].includes(p.status)&&p.status!=="completed"&&<button type="button" disabled={busy} onClick={()=>changeStatus("cancelled")} style={smallBtn("var(--danger)")}><X size={13}/> Cancel</button>}{["completed","cancelled"].includes(p.status)&&isSuper(admin)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--primary-text)")}><RotateCcw size={13}/> Reopen</button>}</div>
+    <div className="project-detail-actions">{canEdit&&<button type="button" disabled={busy} onClick={()=>setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13}/> Edit</button>}{["planned"].includes(p.status)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Activate</button>}{p.status==="active"&&<button type="button" disabled={busy} onClick={()=>changeStatus("completed")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Complete</button>}{!["cancelled"].includes(p.status)&&p.status!=="completed"&&<button type="button" disabled={busy} onClick={()=>changeStatus("cancelled")} style={smallBtn("var(--danger)")}><X size={13}/> Cancel</button>}{["completed","cancelled"].includes(p.status)&&isSuper(admin)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--primary-text)")}><RotateCcw size={13}/> Reopen</button>}</div>
     {!canEdit&&<div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:10,textAlign:"center"}}>Completed/cancelled projects are read-only. Super Admin can reopen them.</div>}
     {selectedDonation&&<DonationDetails admin={admin} row={selectedDonation} onClose={()=>setSelectedDonation(null)} onSaved={async(message)=>{setSelectedDonation(null);await load();await onSaved(message||"Donation updated");}}/>}
+    {selectedExpense&&<ExpenseDetails admin={admin} row={selectedExpense} onClose={()=>setSelectedExpense(null)} onSaved={async()=>{setSelectedExpense(null);await load();}}/>}
   </Modal>;
 }
 
 function ProjectSectionHeader({label,count,total,open,onClick,icon=null}){return <button type="button" className="project-section-header sans" onClick={onClick}><span className="project-section-label">{icon}{label} <small>{count}</small></span><span className="project-section-right">{total&&<strong>{total}</strong>}<ChevronDown size={15} className={open?"open":""}/></span></button>}
-function ExpenseSection({rows,empty,adjustment=false}){return <>{rows.length===0?<div className="sans project-section-empty">{empty}</div>:rows.map(e=><div key={e.id} className="project-transaction-row"><div className="sans project-transaction-main"><b>{e.description}</b><div>{e.expense_date||e.transaction_month} · {e.category}{Number(e.document_count||0) > 0 && <> · <Paperclip size={9} style={{verticalAlign:"-1px"}}/> {e.document_count}</>}</div>{adjustment&&e.void_reason&&<div>Reason: {e.void_reason}</div>}{e.fund_override&&<div className="warning">Fund override recorded</div>}{e.budget_override_reason&&<div className="warning">Budget override recorded</div>}</div><b className={`sans project-transaction-amount${adjustment?" muted":" danger"}`}>MVR {fmt(e.amount)}</b></div>)}</>}
+function ExpenseSection({rows,empty,adjustment=false,onOpen}){return <>{rows.length===0?<div className="sans project-section-empty">{empty}</div>:rows.map(e=><button type="button" key={e.id} className="project-transaction-row project-transaction-button" onClick={()=>onOpen?.(e)}><div className="sans project-transaction-main"><b>{e.description}</b><div>{formatProjectDate(e.expense_date||e.transaction_month)} · {e.category_name||e.category||"Uncategorised"}{Number(e.document_count||0) > 0 && <> · <Paperclip size={11} style={{verticalAlign:"-2px"}}/> {e.document_count}</>}</div>{adjustment&&e.void_reason&&<div>Reason: {e.void_reason}</div>}{Number(e.fund_override||0)===1&&<div className="warning">Fund override recorded</div>}{e.budget_override_reason&&<div className="warning">Budget override recorded</div>}</div><b className={`sans project-transaction-amount${adjustment?" muted":" danger"}`}>MVR {fmt(e.amount)}</b></button>)}</>}
 function ProjectFinanceMetric({label,value,tone=""}){return <div className={`sans project-finance-metric ${tone}`}><span>{label}</span><strong>{value}</strong></div>}
 function Progress({value,large=false}){const pct=Math.max(0,Math.min(100,Number(value||0)));const over=Number(value||0)>100;return <div style={{height:large?7:4,borderRadius:99,background:"var(--divider)",overflow:"hidden",marginTop:large?7:5,marginBottom:large?10:0}}><div style={{height:"100%",width:`${pct}%`,background:over?"var(--danger)":pct>=90?"var(--warning)":"var(--success-strong)",borderRadius:99}}/></div>}
+function formatProjectDate(value){
+  if(!value)return "—";
+  const raw=String(value);
+  const match=raw.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  if(!match)return raw;
+  if(!match[3])return new Intl.DateTimeFormat("en",{month:"short",year:"numeric"}).format(new Date(Number(match[1]),Number(match[2])-1,1));
+  return new Intl.DateTimeFormat("en",{day:"2-digit",month:"short",year:"numeric"}).format(new Date(Number(match[1]),Number(match[2])-1,Number(match[3])));
+}
 function auditLabel(action){return ({project_created:"Project created",project_updated:"Project details updated",project_completed:"Project completed",project_cancelled:"Project cancelled",project_reopened:"Project reopened"}[action]||String(action||"").replaceAll("_"," "))}
 function Detail({label,value}){return <div className="sans" style={{display:"flex",justifyContent:"space-between",gap:12,padding:"6px 0",borderBottom:"1px solid var(--divider)",fontSize:12}}><span style={{color:"var(--muted)"}}>{label}</span><strong style={{textAlign:"right"}}>{value}</strong></div>}
 const inputStyle={width:"100%",border:"1px solid var(--border-strong)",borderRadius:10,padding:"10px 12px",fontSize:14,marginBottom:12,background:"var(--card)",color:"var(--text)",boxSizing:"border-box"};
