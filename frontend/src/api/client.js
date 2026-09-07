@@ -34,6 +34,7 @@ function cacheTtlFor(path) {
   if (path === "/api/elections" || path.startsWith("/api/elections/")) return 20_000;
   if (path === "/api/admin/meetings" || path === "/api/me/meetings") return 20_000;
   if (path === "/api/me/governance-archive") return 60_000;
+  if (path === "/api/admin/pending/counts") return 8_000;
   if (path.startsWith("/api/admin/pending")) return 8_000;
   return DEFAULT_GET_CACHE_TTL_MS;
 }
@@ -232,7 +233,10 @@ export async function request(path, options = {}) {
       throw error;
     }
     const data = await res.json();
-    if (startedAt) recordPerf(`${method} ${path}`, startedAt, "network");
+    if (startedAt) {
+      const serverMs = Number(res.headers.get("X-Fund-Response-Time"));
+      recordPerf(`${method} ${path}`, startedAt, Number.isFinite(serverMs) ? `network · server=${serverMs}ms` : "network");
+    }
     if (isGet) {
       if (requestGeneration === cacheGeneration) {
         storeGetCache(key, path, data);

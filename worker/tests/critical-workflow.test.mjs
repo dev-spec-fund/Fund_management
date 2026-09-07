@@ -407,7 +407,7 @@ test('admin monthly-status endpoint treats zero-due months as not applicable', (
 test('admin member cards do not show a due amount for not-applicable months', () => {
   const members = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Members.jsx'),'utf8');
   assert.match(members,/status === "not_applicable"/);
-  assert.match(members,/No contribution due for \{monthLabel\}/);
+  assert.match(members,/N\/A · Contribution not applicable for \${monthLabel}/);
   assert.match(members,/monthly\?\.monthly_amount/);
 });
 
@@ -469,7 +469,7 @@ test('shared admin month is the single React source for overview members reports
   assert.match(app,/adminMonth=\{adminMonth\}/);
   assert.match(app,/<Members[^>]*month=\{adminMonth\}[^>]*onMonthChange=\{setAdminMonth\}/);
   assert.match(app,/<Reports[^>]*month=\{adminMonth\}[^>]*onMonthChange=\{setAdminMonth\}/);
-  assert.match(overview,/api\.reports\.summary\(adminMonth \|\| undefined\)/);
+  assert.match(overview,/api\.reports\.overview\(adminMonth \|\| undefined\)/);
   assert.match(members,/sharedMonth/);
   assert.match(reports,/sharedMonth/);
   assert.match(settings,/onAdminMonthChange/);
@@ -609,7 +609,8 @@ test('EXCO election UI supports admin setup, member voting, turnout and closed r
   const api=frontendApiSource();
 
   assert.match(app,/elections/);
-  assert.match(admin,/Create election/);
+  assert.match(admin,/New election/);
+  assert.match(admin,/Create EXCO election/);
   assert.match(admin,/Open Voting/);
   assert.match(admin,/Close voting & calculate results/);
   assert.match(admin,/Secret ballot active/);
@@ -1572,7 +1573,7 @@ test('v69 keeps a bounded four-tab warm window and idle-prefetches only one like
   const app=fs.readFileSync(path.resolve(root,'../frontend/src/App.jsx'),'utf8');
   assert.match(app,/while \(ordered\.length > 4\)/);
   assert.match(app,/requestIdleCallback/);
-  assert.match(app,/const next=likelyNext\.find/);
+  assert.match(app,/const first = likelyNext\.find/);
   assert.match(app,/api\.prefetchTabData/);
   assert.match(app,/cancelIdleCallback/);
 });

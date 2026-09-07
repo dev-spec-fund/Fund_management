@@ -2,6 +2,7 @@ import { request } from "./client";
 
 export const adminApi = {
   pending: () => request("/api/admin/pending"),
+  pendingCounts: () => request("/api/admin/pending/counts"),
   pendingRegistrationReview: (id) => request(`/api/admin/pending/registrations/${id}/review`),
   pendingContributionReview: (id) => request(`/api/admin/pending/contributions/${id}/review`),
   sendPaymentReminders: (data = {}) => request("/api/admin/payment-reminders", { method: "POST", body: JSON.stringify(data) }),

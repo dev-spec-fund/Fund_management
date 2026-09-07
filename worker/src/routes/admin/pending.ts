@@ -10,6 +10,19 @@ import { syncContributionReviewMessages } from "../../contributionReviewMessages
 import { money, validDate, validMonth, boundedText } from "../../validation";
 
 export function registerPendingAdminRoutes(route: Hono<AppEnv>) {
+route.get('/pending/counts', requireFinance, async c => {
+  // Overview only needs a badge count. Avoid downloading every pending row
+  // (including OCR/slip metadata) just to render that number.
+  const row=await c.env.DB.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM member_registration_requests WHERE status='pending') registrations,
+      (SELECT COUNT(*) FROM contributions WHERE status='pending') contributions
+  `).first<any>();
+  const registrations=Number(row?.registrations||0);
+  const contributions=Number(row?.contributions||0);
+  return c.json({registrations,contributions,total:registrations+contributions});
+});
+
 route.get('/pending', requireFinance, async c => {
   // Keep the approvals landing page cheap. Duplicate-member matching and
   // contribution allocation previews are review-only data and are fetched

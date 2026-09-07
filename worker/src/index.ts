@@ -23,6 +23,7 @@ app.use("/api/*", cors({
   origin: ["https://fund-management.pages.dev", "http://localhost:5173", "http://127.0.0.1:5173"],
   allowHeaders: ["Content-Type", "X-Telegram-Init-Data"],
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  exposeHeaders: ["Server-Timing", "X-Fund-Response-Time"],
   maxAge: 86400,
 }));
 
@@ -67,6 +68,19 @@ app.post("/telegram/webhook", async (c) => {
 });
 
 // Mini App API — all routes require verified Telegram initData
+// Add request timing without writing anything to D1. The headers make the
+// production bottleneck visible in browser/Telegram WebView network tools,
+// while only genuinely slow requests are logged to the Worker console.
+app.use("/api/*", async (c, next) => {
+  const started = Date.now();
+  await next();
+  const elapsed = Math.max(0, Date.now() - started);
+  c.header("Server-Timing", `app;dur=${elapsed}`);
+  c.header("X-Fund-Response-Time", String(elapsed));
+  if (elapsed >= 750) {
+    console.warn(`[fund-api-slow] ${c.req.method} ${c.req.path} ${elapsed}ms`);
+  }
+});
 app.use("/api/*", telegramAuth);
 app.use("/api/*", async (c, next) => {
   // Reads are intentionally not backed by a D1 write. Mutations retain a

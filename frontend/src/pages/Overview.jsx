@@ -38,13 +38,9 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       setActivity(normalizeRecentActivity(data?.recentActivity));
     }).catch(() => {});
     if (canFinance) {
-      api.admin.pending().then((p) => {
-        const count =
-          (p?.registrations?.length || 0) +
-          (p?.contributions?.length || 0) +
-          (p?.expenses?.length || 0);
-        setPendingCount(count);
-      }).catch(() => setPendingCount(null));
+      api.admin.pendingCounts()
+        .then((p) => setPendingCount(Number(p?.total || 0)))
+        .catch(() => setPendingCount(null));
     }
   };
 
