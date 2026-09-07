@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Download, ChevronLeft, ChevronRight, FileText, Table2, Paperclip, HeartHandshake, CircleDollarSign, ArrowRight, ReceiptText } from "lucide-react";
+import { Plus, Download, ChevronLeft, ChevronRight, FileText, Table2, Paperclip } from "lucide-react";
 import { LoadingState, MessageBanner, monthNavBtn } from "../components/Shared";
 import { useReportsData } from "./reports/useReportsData";
 import { MonthlyReportSections, AnnualAnalyticsSection } from "./reports/ReportSections";
@@ -83,16 +83,10 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
     await sendExportToTelegram(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename, `${monthLabel} · Fund report CSV`);
   };
 
-  const donationTotal = donations.filter((d)=>d.status === "active").reduce((sum,d)=>sum+Number(d.amount||0),0);
-
   return <>
     <div className="reports-filter-sticky page-sticky-controls">
-      <div className="finance-page-head sans finance-page-head-compact">
-        <div>
-          <div className="finance-page-kicker">FINANCE</div>
-          <div className="finance-page-title">{view === "donations" ? "Donations" : "Reports"}</div>
-          <div className="finance-page-subtitle">{view === "donations" ? "Record and review incoming donations to the general fund and projects." : "Understand monthly cash flow, collection performance and annual trends."}</div>
-        </div>
+      <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>{view === "donations" ? "DONATIONS" : "REPORTS"}</div>
         <div className="report-header-actions">
           {view === "reports" && <div className="report-action-menu-wrap">
             <button type="button" onClick={() => { setShowExport(!showExport); setShowAdd(false); }} className="report-header-action sans"><Download size={13} /> Export</button>
@@ -101,34 +95,11 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
               <button type="button" onClick={async () => { setShowExport(false); try { await exportCsv(); } catch (e) { setError(e.message || "Could not export CSV"); } }} className="sans"><Table2 size={14} /><span><b>CSV data</b><small>Spreadsheet-friendly export</small></span></button>
             </div>}
           </div>}
-          <div className="report-action-menu-wrap">
-            {view === "donations" ? (
-              <button type="button" onClick={() => setShowDonation(true)} className="report-header-action sans"><Plus size={13} /> Add donation</button>
-            ) : (
-              <>
-                <button type="button" onClick={() => { setShowAdd(!showAdd); setShowExport(false); }} className="report-header-action sans"><Plus size={13} /> Log</button>
-                {showAdd && <div className="report-action-menu compact">
-                  <button type="button" onClick={() => { setShowDonation(true); setShowAdd(false); }} className="sans"><Plus size={14}/><span><b>Donation</b><small>Record incoming funds</small></span></button>
-                  <button type="button" onClick={() => { setShowExpense(true); setShowAdd(false); }} className="sans danger"><Plus size={14}/><span><b>Expense</b><small>Record fund spending</small></span></button>
-                </div>}
-              </>
-            )}
-          </div>
+          {view === "donations" && <div className="report-action-menu-wrap">
+            <button type="button" onClick={() => setShowDonation(true)} className="report-header-action sans"><Plus size={13} /> Add donation</button>
+          </div>}
         </div>
       </div>
-      {view === "donations" ? (
-        <div className="finance-kpi-grid finance-kpi-grid-3 sans">
-          <div className="finance-kpi-card tone-teal"><span><HeartHandshake size={16}/></span><div><small>Received</small><strong>MVR {fmt(donationTotal)}</strong></div></div>
-          <div className="finance-kpi-card tone-blue"><span><ReceiptText size={16}/></span><div><small>Entries</small><strong>{donations.length}</strong></div></div>
-          <div className="finance-kpi-card tone-green"><span><CircleDollarSign size={16}/></span><div><small>Month</small><strong>{monthLabel.split(" ")[0]}</strong></div></div>
-        </div>
-      ) : (
-        <div className="finance-kpi-grid finance-kpi-grid-3 sans">
-          <div className="finance-kpi-card tone-green"><span><CircleDollarSign size={16}/></span><div><small>Income</small><strong>MVR {fmt(Number(summary.memberIncome||0)+Number(summary.donationIncome||0))}</strong></div></div>
-          <div className="finance-kpi-card tone-red"><span><ReceiptText size={16}/></span><div><small>Expenses</small><strong>MVR {fmt(summary.expenses)}</strong></div></div>
-          <div className={`finance-kpi-card ${Number(summary.net||0)>=0?"tone-blue":"tone-amber"}`}><span><FileText size={16}/></span><div><small>Net change</small><strong>{Number(summary.net||0)>=0?"+":"−"} MVR {fmt(Math.abs(Number(summary.net||0)))}</strong></div></div>
-        </div>
-      )}
       <div className="reports-month-selector">
         <button type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month" style={monthNavBtn()}><ChevronLeft size={18} /></button>
         <div className="sans" style={{ textAlign: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 10px", fontSize: 14, fontWeight: 600 }}>{monthLabel}</div>
@@ -139,12 +110,12 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
     <MessageBanner tone="error">{error}</MessageBanner>
     {view === "reports" && <MonthlyReportSections summary={summary} trend={trend} monthLabel={monthLabel} setTab={setTab} />}
 
-    <div className="finance-section-title sans">{view === "donations" ? `DONATIONS · ${monthLabel.toUpperCase()}` : `DONATIONS · ${monthLabel.toUpperCase()}`}</div>
-    <div className="finance-transaction-list">
-      {donations.length === 0 ? <div className="sans" style={{ fontSize: 11, color: "var(--soft)", padding: "12px 2px" }}>No donations logged for this month.</div> : donations.map((donation) => <button key={donation.id} type="button" onClick={() => setSelectedDonation(donation)} className="sans finance-transaction-row">
+    <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>{view === "donations" ? `DONATIONS · ${monthLabel.toUpperCase()}` : `DONATIONS — ${monthLabel.toUpperCase()}`}</div>
+    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "4px 12px", marginBottom: 16 }}>
+      {donations.length === 0 ? <div className="sans" style={{ fontSize: 11, color: "var(--soft)", padding: "12px 2px" }}>No donations logged for this month.</div> : donations.map((donation) => <button key={donation.id} type="button" onClick={() => setSelectedDonation(donation)} className="sans" style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left", border: 0, borderTop: "1px solid var(--divider)", background: "transparent", color: "var(--text)", padding: "10px 2px", cursor: "pointer" }}>
         <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 11, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{donation.donor_name}</div><div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{donation.donation_date || String(donation.created_at || "").slice(0,10)} · {donation.txn_id}{donation.project_name ? ` · ${donation.project_code || ""} ${donation.project_name}` : " · General fund"}{Number(donation.document_count || 0) > 0 ? ` · ${donation.document_count} document${Number(donation.document_count) === 1 ? "" : "s"}` : ""}</div></div>
         {Number(donation.document_count || 0) > 0 && <Paperclip size={12} style={{ color: "var(--muted)", flex: "0 0 auto" }} />}
-        <div className="finance-transaction-side"><b className={donation.status === "active" ? "positive" : "muted"}>{donation.status === "active" ? "+ " : ""}MVR {fmt(donation.amount)}</b><div>{donation.status} · {donation.status === "active" ? "Edit" : "View"} <ArrowRight size={11}/></div></div>
+        <div style={{ textAlign: "right", flex: "0 0 auto" }}><b style={{ fontSize: 11, color: donation.status === "active" ? "var(--success)" : "var(--muted)" }}>{donation.status === "active" ? "+ " : ""}MVR {fmt(donation.amount)}</b><div style={{ fontSize: 8, color: "var(--soft)", marginTop: 2, textTransform: "uppercase" }}>{donation.status} · {donation.status === "active" ? "Edit" : "View"} ›</div></div>
       </button>)}
     </div>
 
