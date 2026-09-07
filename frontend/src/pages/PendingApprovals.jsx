@@ -16,6 +16,7 @@ export default function PendingApprovals() {
   const [message, setMessage] = useState("");
   const [reviewSlip, setReviewSlip] = useState(null);
   const [largeSlip, setLargeSlip] = useState(false);
+  const [registrationReviews, setRegistrationReviews] = useState({});
   const slipRequestRef = useRef(0);
   const slipCacheRef = useRef(new Map());
 
@@ -64,7 +65,23 @@ export default function PendingApprovals() {
       month:String(contribution.month ?? ""),
     }});
     setLargeSlip(false);
+    // Review-only data is intentionally lazy so the approvals list can render fast.
+    api.admin.pendingContributionReview(contribution.id).then((detail)=>{
+      setEditing((current)=>current && Number(current.id)===Number(contribution.id) ? {...current,...detail,_original:current._original} : current);
+    }).catch(()=>{});
     loadReviewSlip(contribution);
+  };
+
+  const loadRegistrationReview = async (registration) => {
+    const id=Number(registration.id);
+    if(registrationReviews[id]?.status==="loading" || registrationReviews[id]?.status==="ready")return;
+    setRegistrationReviews((prev)=>({...prev,[id]:{status:"loading"}}));
+    try{
+      const detail=await api.admin.pendingRegistrationReview(id);
+      setRegistrationReviews((prev)=>({...prev,[id]:{status:"ready",detail}}));
+    }catch(e){
+      setRegistrationReviews((prev)=>({...prev,[id]:{status:"error",error:e?.message||"Could not check duplicates"}}));
+    }
   };
 
   const closeReview = () => {
@@ -86,7 +103,6 @@ export default function PendingApprovals() {
     try {
       setError(""); setMessage(""); setBusy(key);
       const result=await fn();
-      await load();
       return result;
     } catch (e) {
       setError(e.message);
@@ -210,11 +226,16 @@ export default function PendingApprovals() {
             </div>
             {r.phone && <div className="sans" style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Phone: <b style={{color:"var(--text)"}}>{r.phone}</b></div>}
             {(r.requested_at || r.created_at) && <div className="sans" style={{fontSize:10,color:"var(--soft-4)",marginTop:4}}>Submitted {formatLocalDateTime(r.requested_at || r.created_at)}</div>}
-            {(r.possible_matches || []).map((m) => <div key={m.id} className="sans"
+            {registrationReviews[Number(r.id)]?.status !== "ready" && <button type="button" onClick={() => loadRegistrationReview(r)} style={{...compactBtn,marginTop:8}}>
+              {registrationReviews[Number(r.id)]?.status === "loading" ? "Checking duplicates…" : "Check possible duplicates"}
+            </button>}
+            {registrationReviews[Number(r.id)]?.status === "error" && <div className="sans" style={{fontSize:10,color:"var(--danger)",marginTop:6}}>{registrationReviews[Number(r.id)].error}</div>}
+            {(registrationReviews[Number(r.id)]?.detail?.possible_matches || []).map((m) => <div key={m.id} className="sans"
               style={{fontSize:11,background:"var(--warning-bg)",padding:8,borderRadius:8,marginTop:8}}>
               Possible existing member: <b>{m.member_code}</b> — {m.name}{m.phone ? ` · ${m.phone}` : ""}
               <button type="button" onClick={() => act(() => api.admin.approveRegistration(r.id, m.id))} style={{...compactBtn,marginLeft:7}}>Link & update phone</button>
             </div>)}
+            {registrationReviews[Number(r.id)]?.status === "ready" && (registrationReviews[Number(r.id)]?.detail?.possible_matches || []).length===0 && <div className="sans" style={{fontSize:10,color:"var(--success)",marginTop:7}}>No duplicate member found.</div>}
             <div style={{display:"flex",gap:7,marginTop:10}}>
               <button type="button" onClick={() => act(() => api.admin.approveRegistration(r.id))} style={{...approveBtn,flex:1}}>Create & approve</button>
               <button type="button" onClick={() => act(() => api.admin.rejectRegistration(r.id, "Rejected by admin"))} style={rejectBtn}>Reject</button>

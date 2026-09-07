@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, onDataChange } from "../../api";
+import { api, onDataChangeDebounced } from "../../api";
 import { currentMonthValue } from "../../utils/date";
 
 export default function useExpensesData() {
@@ -35,14 +35,16 @@ export default function useExpensesData() {
   }, [month, filter, debouncedQuery, documentsFilter]);
 
   useEffect(() => {
-    setRows(null);
+    // Stale-while-refresh: preserve the previous list instead of flashing a full
+    // loading state every time the month/filter changes.
     setPage(1);
     load();
   }, [load]);
 
-  useEffect(() => onDataChange(({ path }) => {
-    if (path?.startsWith("/api/expenses") || path?.startsWith("/api/governance/reverse") || path?.startsWith("/api/projects")) load();
-  }), [load]);
+  useEffect(() => onDataChangeDebounced(({ path, paths = [] }) => {
+    const changed=[path,...paths].filter(Boolean);
+    if (changed.some((p) => p.startsWith("/api/expenses") || p.startsWith("/api/governance/reverse") || p.startsWith("/api/projects"))) load();
+  }, 140), [load]);
 
   const totals = useMemo(() => {
     const base = rows || [];
@@ -54,8 +56,9 @@ export default function useExpensesData() {
 
   const saved = useCallback(async (text = "Expense saved") => {
     setMessage(text);
-    await load();
-  }, [load]);
+    // The mutation event already schedules one debounced refresh. Avoid a
+    // second identical GET here.
+  }, []);
 
   return {
     month, setMonth,

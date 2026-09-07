@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Pencil, CheckCircle2, RotateCcw, X, History, WalletCards, Paperclip, ChevronDown, FolderKanban, CircleDollarSign, HandCoins, Activity } from "lucide-react";
-import { api, onDataChange } from "../api";
+import { api, onDataChangeDebounced } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { LoadingState, EmptyState, MessageBanner, PrimaryButton, smallBtn } from "../components/Shared";
 import { fmt } from "../utils/format";
@@ -20,13 +20,13 @@ export default function Projects({ admin }) {
   const [page,setPage]=useState(1);
   const load=async()=>{setError("");try{setRows(await api.projects.list({status:filter==="all"?"":filter,q:query.trim()}));}catch(e){setError(e.message);setRows([]);}};
   useEffect(()=>{setPage(1);const t=setTimeout(load,220);return()=>clearTimeout(t);},[filter,query]);
-  useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses")||path?.startsWith("/api/donations"))load();}),[filter,query]);
+  useEffect(()=>onDataChangeDebounced(({path,paths=[]})=>{const changed=[path,...paths].filter(Boolean);if(changed.some(p=>p.startsWith("/api/projects")||p.startsWith("/api/expenses")||p.startsWith("/api/donations")))load();},140),[filter,query]);
   const totalSpent=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.spent||0),0),[rows]);
   const activeCount=useMemo(()=> (rows||[]).filter(r=>r.status==="active").length,[rows]);
   const totalBudget=useMemo(()=> (rows||[]).reduce((s,r)=>s+(r.budget==null?0:Number(r.budget||0)),0),[rows]);
   const donationCount=useMemo(()=> (rows||[]).reduce((s,r)=>s+Number(r.donation_count||0),0),[rows]);
   const projectPage=pageSlice(rows||[],page);
-  const saved=async(text)=>{setSelected(null);setShowAdd(false);setMessage(text);await load();};
+  const saved=async(text)=>{setSelected(null);setShowAdd(false);setMessage(text);};
   return <>
     <div className="governance-page-head project-theme">
       <div className="governance-title-row">
@@ -93,7 +93,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
   const [showDonations,setShowDonations]=useState(false),[showExpenses,setShowExpenses]=useState(false),[showAdjustments,setShowAdjustments]=useState(false),[showHistory,setShowHistory]=useState(false);
   const load=()=>api.projects.get(project.id).then(setData).catch(e=>setError(e.message));
   useEffect(()=>{load();},[project.id]);
-  useEffect(()=>onDataChange(({path})=>{if(path?.startsWith("/api/projects")||path?.startsWith("/api/expenses")||path?.startsWith("/api/donations"))load();}),[project.id]);
+  useEffect(()=>onDataChangeDebounced(({path,paths=[]})=>{const changed=[path,...paths].filter(Boolean);if(changed.some(p=>p.startsWith("/api/projects")||p.startsWith("/api/expenses")||p.startsWith("/api/donations")))load();},140),[project.id]);
   if(editing)return <ProjectForm admin={admin} project={data||project} onClose={()=>setEditing(false)} onSaved={onSaved}/>;
   const p=data||project;
   const expenses=p.expenses||[];

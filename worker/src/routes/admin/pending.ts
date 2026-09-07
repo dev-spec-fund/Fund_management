@@ -11,18 +11,32 @@ import { money, validDate, validMonth, boundedText } from "../../validation";
 
 export function registerPendingAdminRoutes(route: Hono<AppEnv>) {
 route.get('/pending', requireFinance, async c => {
+  // Keep the approvals landing page cheap. Duplicate-member matching and
+  // contribution allocation previews are review-only data and are fetched
+  // lazily when an admin opens the relevant item.
   await ensureOperationalSchema(c.env);
-  const registrations = await c.env.DB.prepare(`SELECT * FROM member_registration_requests WHERE status='pending' ORDER BY requested_at ASC`).all<any>();
-  const enrichedRegs=await Promise.all(registrations.results.map(async (r:any) => ({
-    ...r,
-    possible_matches:(await findDuplicateMembers(c.env,r.name,r.phone,r.telegram_id)).filter((m:any)=>!m.telegram_id)
-  })));
-  const contributions = await c.env.DB.prepare(`SELECT c.*,m.name member_name,m.member_code FROM contributions c JOIN members m ON m.id=c.member_id WHERE c.status='pending' ORDER BY c.submitted_at ASC`).all<any>();
-  const contributionRows=await Promise.all(contributions.results.map(async (row:any)=>{
-    try { return {...row,allocation_preview:await buildAllocationPlan(c.env,row)}; }
-    catch { return {...row,allocation_preview:[]}; }
-  }));
-  return c.json({ registrations: enrichedRegs, contributions: contributionRows, slips: contributionRows });
+  const [registrations,contributions] = await Promise.all([
+    c.env.DB.prepare(`SELECT * FROM member_registration_requests WHERE status='pending' ORDER BY requested_at ASC`).all<any>(),
+    c.env.DB.prepare(`SELECT c.*,m.name member_name,m.member_code FROM contributions c JOIN members m ON m.id=c.member_id WHERE c.status='pending' ORDER BY c.submitted_at ASC`).all<any>(),
+  ]);
+  return c.json({ registrations: registrations.results, contributions: contributions.results, slips: contributions.results });
+});
+
+route.get('/pending/registrations/:id/review', requireFinance, async c => {
+  const id=Number(c.req.param('id'));
+  const row=await c.env.DB.prepare(`SELECT * FROM member_registration_requests WHERE id=? AND status='pending'`).bind(id).first<any>();
+  if(!row)return c.json({error:'Registration request not found'},404);
+  const possible_matches=(await findDuplicateMembers(c.env,row.name,row.phone,row.telegram_id)).filter((m:any)=>!m.telegram_id);
+  return c.json({...row,possible_matches});
+});
+
+route.get('/pending/contributions/:id/review', requireFinance, async c => {
+  const id=Number(c.req.param('id'));
+  const row=await c.env.DB.prepare(`SELECT c.*,m.name member_name,m.member_code FROM contributions c JOIN members m ON m.id=c.member_id WHERE c.id=? AND c.status='pending'`).bind(id).first<any>();
+  if(!row)return c.json({error:'Contribution not found'},404);
+  let allocation_preview:any[]=[];
+  try{allocation_preview=await buildAllocationPlan(c.env,row);}catch{}
+  return c.json({...row,allocation_preview});
 });
 
 route.post('/pending/registrations/:id/approve', requireFinance, async c => {
