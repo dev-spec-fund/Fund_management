@@ -1,5 +1,5 @@
 import React from "react";
-import { Download } from "lucide-react";
+import { Download, ArrowRight, ArrowDownRight, Wallet, TrendingUp, TrendingDown } from "lucide-react";
 import { smallBtn } from "../../components/Shared";
 import { fmt } from "../../utils/format";
 
@@ -30,8 +30,16 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
   const generalExpenses = expenseDetails.filter((e) => !e.project_id && !e.project_code);
 
   return <>
-    <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>MONTHLY SUMMARY</div>
-    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 14 }}>
+    <div className="finance-section-title sans">MONTHLY SUMMARY</div>
+    <div className="report-balance-hero sans">
+      <div><small>Closing balance</small><strong>MVR {fmt(summary.fundBalance)}</strong><span>{monthLabel}</span></div>
+      <Wallet size={22}/>
+    </div>
+    <div className="report-cashflow-grid sans">
+      <div><span className="positive"><TrendingUp size={14}/></span><small>Cash received</small><strong>MVR {fmt(Number(summary.memberIncome||0)+Number(summary.donationIncome||0))}</strong></div>
+      <div><span className="negative"><TrendingDown size={14}/></span><small>Expenses</small><strong>MVR {fmt(summary.expenses)}</strong></div>
+    </div>
+    <div className="report-detail-card">
       <Row label="Opening balance" value={`MVR ${fmt(summary.openingBalance ?? 0)}`} />
       <Row label="Contribution cash received" value={`+ MVR ${fmt(summary.memberIncome)}`} color="var(--success)" />
       <Row label="Donations" value={`+ MVR ${fmt(summary.donationIncome)}`} color="var(--success)" />
@@ -40,13 +48,9 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
         <span className="sans" style={{ fontWeight: 700 }}>Net cash change</span>
         <span style={{ fontWeight: 700, color: Number(summary.net) >= 0 ? "var(--success)" : "var(--danger)" }}>{Number(summary.net) >= 0 ? "+" : "−"} MVR {fmt(Math.abs(Number(summary.net || 0)))}</span>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 9 }}>
-        <span className="sans" style={{ color: "var(--muted)" }}>Closing balance</span>
-        <span style={{ fontWeight: 700 }}>MVR {fmt(summary.fundBalance)}</span>
-      </div>
     </div>
 
-    <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>CONTRIBUTION COLLECTION</div>
+    <div className="finance-section-title sans">CONTRIBUTION COLLECTION</div>
     <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, marginBottom: 12 }}>
       <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 7 }}>
         <span><b>MVR {fmt(allocatedContributions)}</b> / MVR {fmt(totalRequired)}</span>
@@ -61,10 +65,10 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
           <b>MVR {fmt(allocatedContributions)}</b>
         </div>
         {advanceAllocated > 0 && <div style={{ display: "flex", justifyContent: "space-between", gap: 10, color: "var(--success)" }}>
-          <span>↳ Paid in advance</span><b>MVR {fmt(advanceAllocated)}</b>
+          <span className="report-inline-label"><ArrowDownRight size={12}/> Paid in advance</span><b>MVR {fmt(advanceAllocated)}</b>
         </div>}
         {currentMonthAllocated > 0 && advanceAllocated > 0 && <div style={{ display: "flex", justifyContent: "space-between", gap: 10, color: "var(--soft)", marginTop: 5 }}>
-          <span>↳ From cash received this month</span><span>MVR {fmt(currentMonthAllocated)}</span>
+          <span className="report-inline-label"><ArrowDownRight size={12}/> From cash received this month</span><span>MVR {fmt(currentMonthAllocated)}</span>
         </div>}
       </div>
     </div>
@@ -75,7 +79,7 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
     {(summary.outstanding?.total || 0) > 0 && (
       <button type="button" onClick={() => setTab?.("members")} style={{ width: "100%", background: "var(--danger-bg-3)", border: "1px solid var(--danger-border)", borderRadius: 12, padding: "13px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", color: "var(--danger)" }}>
         <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>Outstanding dues</span>
-        <span className="sans" style={{ fontSize: 12, fontWeight: 700 }}>MVR {fmt(summary.outstanding?.total)} · {members.length} members ›</span>
+        <span className="sans report-outstanding-link" style={{ fontSize: 12, fontWeight: 700 }}>MVR {fmt(summary.outstanding?.total)} · {members.length} members <ArrowRight size={12}/></span>
       </button>
     )}
 

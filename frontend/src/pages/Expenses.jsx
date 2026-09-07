@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Search, X, Paperclip, SlidersHorizontal } from "lucide-react";
-import { LoadingState, EmptyState, MessageBanner, smallBtn, monthNavBtn } from "../components/Shared";
+import { ChevronLeft, ChevronRight, Plus, Search, X, Paperclip, SlidersHorizontal, ReceiptText, FileWarning, CircleDollarSign } from "lucide-react";
+import { LoadingState, EmptyState, MessageBanner, monthNavBtn } from "../components/Shared";
 import { shiftMonthValue } from "../utils/date";
 import { fmt } from "../utils/format";
 import Pagination, { pageSlice } from "../components/Pagination";
@@ -35,12 +35,19 @@ export default function Expenses({ admin }) {
 
   return <>
     <div className="page-sticky-controls expenses-sticky-controls">
-      <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 8 }}>
+      <div className="finance-page-head sans finance-page-head-compact">
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary-text)", letterSpacing: .4 }}>EXPENSES</div>
-          <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 2 }}>{totals.count} records · Posted MVR {fmt(totals.total)}</div>
+          <div className="finance-page-kicker">FINANCE</div>
+          <div className="finance-page-title">Expenses</div>
+          <div className="finance-page-subtitle">Track fund spending, supporting documents and project expenses.</div>
         </div>
-        <button type="button" onClick={() => setShowAdd(true)} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto", padding: "8px 11px" }}><Plus size={14} /> Add</button>
+        <button type="button" onClick={() => setShowAdd(true)} className="finance-primary-button"><Plus size={15} /> Add expense</button>
+      </div>
+
+      <div className="finance-kpi-grid finance-kpi-grid-3 sans">
+        <div className="finance-kpi-card tone-red"><span><CircleDollarSign size={16}/></span><div><small>Posted</small><strong>MVR {fmt(totals.total)}</strong></div></div>
+        <div className="finance-kpi-card tone-neutral"><span><ReceiptText size={16}/></span><div><small>Records</small><strong>{totals.count}</strong></div></div>
+        <div className="finance-kpi-card tone-amber"><span><FileWarning size={16}/></span><div><small>Documents</small><strong>{(rows || []).filter((r)=>Number(r.document_count||0)===0).length} missing</strong></div></div>
       </div>
 
       <div className="reports-month-selector" style={{ marginBottom: 8 }}>
@@ -91,9 +98,9 @@ export default function Expenses({ admin }) {
           </div>
           <div className="sans expense-row-meta">
             <span>{row.expense_date || row.transaction_month}</span>
-            <span>•</span>
+            <span className="expense-meta-separator" aria-hidden="true"></span>
             <span>{row.category_name || (row.project_name ? "Project expense" : "Uncategorised")}</span>
-            {row.project_name && <><span>•</span><span>{row.project_name}</span></>}
+            {row.project_name && <><span className="expense-meta-separator" aria-hidden="true"></span><span>{row.project_name}</span></>}
           </div>
           <div className="sans expense-row-foot">
             <span>{row.txn_id || `#${row.id}`}</span>
@@ -102,7 +109,7 @@ export default function Expenses({ admin }) {
               : <span className="expense-document-missing">No document</span>}
           </div>
         </div>
-        <div className="sans expense-row-amount">MVR {fmt(row.amount)}</div>
+        <div className="sans expense-row-side"><div className="expense-row-amount">MVR {fmt(row.amount)}</div><ChevronRight size={15} className="expense-row-chevron" /></div>
       </button>;
     })}
 
