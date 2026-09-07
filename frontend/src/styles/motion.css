@@ -1,0 +1,191 @@
+/* KYS shared micro-interactions
+   Lightweight motion for Telegram WebView: opacity/transform only where safe.
+   Imported last so every Admin + Member screen uses the same timing system. */
+
+:root{
+  --motion-instant:90ms;
+  --motion-fast:120ms;
+  --motion-base:160ms;
+  --motion-sheet:210ms;
+  --motion-ease:cubic-bezier(.22,.8,.24,1);
+  --motion-press:cubic-bezier(.2,.7,.3,1);
+}
+
+/* Page changes stay opacity-only. Previous iOS/Telegram repaint fixes deliberately
+   avoid transformed layers around the main page scroller. */
+.page-panel--active{
+  animation:kys-page-enter var(--motion-base) ease-out both !important;
+}
+@keyframes kys-page-enter{
+  from{opacity:.86}
+  to{opacity:1}
+}
+
+/* Consistent physical tap feedback. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]){
+  -webkit-tap-highlight-color:transparent;
+  transition:
+    transform var(--motion-fast) var(--motion-press),
+    opacity var(--motion-fast) ease-out,
+    background-color var(--motion-base) ease-out,
+    border-color var(--motion-base) ease-out,
+    color var(--motion-base) ease-out !important;
+}
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active{
+  transform:scale(.985);
+}
+
+/* Keep the bottom navigation slightly firmer than normal buttons. */
+.app-nav-item:active{transform:scale(.97)!important}
+.app-nav-item>svg{
+  transition:transform var(--motion-base) var(--motion-ease),opacity var(--motion-base) ease-out!important;
+}
+.app-nav-item.active>svg{transform:translateY(-1px) scale(1.03)}
+
+/* Secondary horizontal navigation. */
+.app-section-nav-item{
+  transition:
+    transform var(--motion-fast) var(--motion-press),
+    background-color var(--motion-base) ease-out,
+    border-color var(--motion-base) ease-out,
+    color var(--motion-base) ease-out!important;
+}
+.app-section-nav-item:active{transform:scale(.975)}
+
+/* Bottom sheets and standard modals. */
+.app-modal-overlay{
+  animation:kys-overlay-in var(--motion-base) ease-out both!important;
+}
+.app-modal-sheet{
+  animation:kys-sheet-in var(--motion-sheet) var(--motion-ease) both!important;
+  transform-origin:50% 100%;
+}
+@keyframes kys-overlay-in{
+  from{opacity:0}
+  to{opacity:1}
+}
+@keyframes kys-sheet-in{
+  from{opacity:.72;translate:0 14px}
+  to{opacity:1;translate:0 0}
+}
+
+/* Audit filters use their own sheet markup. */
+.audit-filter-sheet-wrap{
+  animation:kys-overlay-in var(--motion-base) ease-out both;
+}
+.audit-filter-sheet{
+  animation:kys-sheet-in var(--motion-sheet) var(--motion-ease) both;
+}
+
+/* Status changes should feel responsive without drawing attention away from data. */
+:where(
+  .expense-status-badge,
+  .member-status-badge,
+  .member-profile-status,
+  .member-project-status,
+  .project-status-pill,
+  .meeting-audience-badge,
+  .member-exco-badge,
+  .member-profile-exco-badge,
+  .election-member-application-status,
+  .election-notification-status
+){
+  transition:
+    background-color var(--motion-base) ease-out,
+    border-color var(--motion-base) ease-out,
+    color var(--motion-base) ease-out,
+    opacity var(--motion-base) ease-out!important;
+}
+
+/* Expand/collapse indicators. Content itself keeps its existing layout-safe transition. */
+:where(
+  .governance-chevron,
+  .member-project-chevron,
+  .admin-audit-chevron
+){
+  transition:transform var(--motion-base) var(--motion-ease),color var(--motion-base) ease-out!important;
+}
+
+/* Progress bars animate once/when values change, never continuously. */
+:where(
+  .overview-progress-fill,
+  .member-home-progress-fill,
+  .member-fund-progress-fill
+){
+  transition:width 260ms var(--motion-ease)!important;
+}
+
+/* Inputs get a small focus transition without animating dimensions/layout. */
+input,
+select,
+textarea{
+  transition:
+    border-color var(--motion-fast) ease-out,
+    box-shadow var(--motion-fast) ease-out,
+    background-color var(--motion-base) ease-out;
+}
+
+/* Mouse/trackpad enhancement only; touch devices do not get hover lift. */
+@media (hover:hover) and (pointer:fine){
+  :where(
+    .expense-row,
+    .member-list-card,
+    .activity-row-card,
+    .governance-project-row,
+    .governance-meeting-card,
+    .member-action-card
+  ){
+    transition:
+      border-color var(--motion-base) ease-out,
+      background-color var(--motion-base) ease-out,
+      box-shadow var(--motion-base) ease-out!important;
+  }
+}
+
+/* Accessibility + battery/performance safety. */
+@media (prefers-reduced-motion:reduce){
+  .page-panel--active,
+  .app-modal-overlay,
+  .app-modal-sheet,
+  .audit-filter-sheet-wrap,
+  .audit-filter-sheet{
+    animation:none!important;
+  }
+
+  button,
+  [role="button"],
+  .app-nav-item>svg,
+  .app-section-nav-item,
+  input,
+  select,
+  textarea,
+  :where(
+    .expense-status-badge,
+    .member-status-badge,
+    .member-profile-status,
+    .member-project-status,
+    .project-status-pill,
+    .meeting-audience-badge,
+    .member-exco-badge,
+    .member-profile-exco-badge,
+    .election-member-application-status,
+    .election-notification-status,
+    .governance-chevron,
+    .member-project-chevron,
+    .admin-audit-chevron,
+    .overview-progress-fill,
+    .member-home-progress-fill,
+    .member-fund-progress-fill
+  ){
+    transition:none!important;
+  }
+
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  .app-nav-item:active,
+  .app-section-nav-item:active{
+    transform:none!important;
+  }
+}
