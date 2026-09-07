@@ -1,4 +1,5 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { ArrowLeft, Bell, ChevronRight, CircleDollarSign, FolderCog, Landmark, Settings2, ShieldCheck, Wrench } from "lucide-react";
 import { useConfirmDialog } from "../components/FormControls";
 import { LoadingState, ErrorState, MessageBanner } from "../components/Shared";
 import { currentMonthValue } from "../utils/date";
@@ -39,7 +40,17 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   if(settingsLoading)return <LoadingState>Loading settings…</LoadingState>;
   if(settingsError && !Object.keys(settings||{}).length) return <ErrorState onRetry={load}>{settingsError}</ErrorState>;
 
-  const tabs=[["general","General"],["contributions","Contributions"],["reminders","Reminders"],["categories","Categories"],["financial","Financial"],["admins","Admins & Roles"],["system","System"]];
+  const [settingsMenuOpen,setSettingsMenuOpen]=useState(()=>!sectionOnly && initialSection==="general");
+  const settingsCategories=[
+    {key:"general",label:"General",description:"Organization name and app branding",icon:Settings2,tone:"general"},
+    {key:"contributions",label:"Contributions",description:"Contribution amount, rules and allocations",icon:CircleDollarSign,tone:"contributions"},
+    {key:"reminders",label:"Reminders",description:"Monthly contribution reminder schedule",icon:Bell,tone:"reminders"},
+    {key:"categories",label:"Categories",description:"Expense categories and classification",icon:FolderCog,tone:"categories"},
+    {key:"financial",label:"Financial",description:"Month closing and financial controls",icon:Landmark,tone:"financial"},
+    {key:"admins",label:"Admins & Roles",description:"Administrators, roles and permissions",icon:ShieldCheck,tone:"admins"},
+    {key:"system",label:"System",description:"Backup, health and diagnostics",icon:Wrench,tone:"system"},
+  ];
+  const activeCategory=settingsCategories.find(item=>item.key===settingsSection) || settingsCategories[0];
   const filteredErrors=errors.filter(e=>errorFilter==="all"?true:errorFilter==="resolved"?e.status==="resolved":e.status!=="resolved");
   const errorRows=pageSlice(filteredErrors,errorPage);
   const auditRows=pageSlice(audit,auditPage);
@@ -64,24 +75,44 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   return <>
     <MessageBanner>{message}</MessageBanner>
 
-    {!sectionOnly && <div className="settings-subnav-sticky page-sticky-controls">
-      <div className="settings-subnav-scroll">
-        {tabs.map(([key,label])=>
-          <button key={key} type="button" onClick={()=>setSettingsSection(key)} className={`sans settings-section-chip ${settingsSection===key?"active":""}`}>
-            {label}
+    {!sectionOnly && settingsMenuOpen && <section className="settings-directory">
+      <div className="settings-directory-head">
+        <div>
+          <div className="settings-eyebrow">SETTINGS</div>
+          <h2>Settings</h2>
+          <p>Manage your fund, administration and application preferences.</p>
+        </div>
+      </div>
+      <div className="settings-directory-list">
+        {settingsCategories.map(({key,label,description,icon:Icon,tone})=>
+          <button key={key} type="button" className="settings-directory-row" onClick={()=>{setSettingsSection(key);setSettingsMenuOpen(false);}}>
+            <span className={`settings-directory-icon ${tone}`}><Icon size={19} strokeWidth={1.9}/></span>
+            <span className="settings-directory-copy">
+              <strong>{label}</strong>
+              <small>{description}</small>
+            </span>
+            <ChevronRight size={18} className="settings-directory-chevron" aria-hidden="true"/>
           </button>
         )}
       </div>
+    </section>}
+
+    {!sectionOnly && !settingsMenuOpen && <div className="settings-detail-nav">
+      <button type="button" className="settings-back-button" onClick={()=>setSettingsMenuOpen(true)}>
+        <ArrowLeft size={17} aria-hidden="true"/>
+        <span>Settings</span>
+      </button>
+      <span className="settings-current-section">{activeCategory.label}</span>
     </div>}
 
-    {settingsSection==="general" && <GeneralSettingsSection {...sectionProps} />}
-    {settingsSection==="contributions" && <ContributionSettingsSection {...sectionProps} />}
-    {settingsSection==="reminders" && <ReminderSettingsSection {...sectionProps} />}
-    {settingsSection==="categories" && <ExpenseCategorySettingsSection {...sectionProps} />}
-    {settingsSection==="financial" && <MonthManagementSettingsSection {...sectionProps} />}
-    {settingsSection==="admins" && <AdminSettingsSection {...sectionProps} />}
-    {settingsSection==="system" && <SystemSettingsSection {...sectionProps} />}
-    {settingsSection==="audit" && <AuditSettingsSection {...sectionProps} />}
+    {(sectionOnly || !settingsMenuOpen) && settingsSection==="general" && <GeneralSettingsSection {...sectionProps} />}
+    {(sectionOnly || !settingsMenuOpen) && settingsSection==="contributions" && <ContributionSettingsSection {...sectionProps} />}
+    {(sectionOnly || !settingsMenuOpen) && settingsSection==="reminders" && <ReminderSettingsSection {...sectionProps} />}
+    {(sectionOnly || !settingsMenuOpen) && settingsSection==="categories" && <ExpenseCategorySettingsSection {...sectionProps} />}
+    {(sectionOnly || !settingsMenuOpen) && settingsSection==="financial" && <MonthManagementSettingsSection {...sectionProps} />}
+    {(sectionOnly || !settingsMenuOpen) && settingsSection==="admins" && <AdminSettingsSection {...sectionProps} />}
+    {(sectionOnly || !settingsMenuOpen) && settingsSection==="system" && <SystemSettingsSection {...sectionProps} />}
+    {(sectionOnly || !settingsMenuOpen) && settingsSection==="audit" && <AuditSettingsSection {...sectionProps} />}
     {confirmationDialog}
   </>;
 }
