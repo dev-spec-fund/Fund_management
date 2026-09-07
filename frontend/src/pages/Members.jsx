@@ -19,7 +19,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
   const { confirm, confirmationDialog } = useConfirmDialog();
   const {
     month, setMonth, search, setSearch, filter, setFilter, defaultMonthly, form, setForm,
-    page, setPage, load, outstandingByMember, activeMembers, memberStatus, counts, expected,
+    page, setPage, outstandingByMember, activeMembers, memberStatus, counts, expected,
     collected, percent, filtered, memberPage, shiftMonth, monthLabel,
   } = useMembersData(isAdmin, sharedMonth, onMonthChange);
   const [selected, setSelected] = useState(null);
@@ -36,7 +36,6 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
     await api.members.create({ ...form, monthly_amount: amount });
     setForm({ name: "", phone: "", monthly_amount: String(defaultMonthly) });
     setShowAdd(false);
-    load();
   };
 
 
@@ -156,7 +155,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
       <Pagination page={memberPage.page} total={filtered.length} onChange={setPage} />
       <div className="members-page-tail-space" aria-hidden="true" />
 
-      {selected && <MemberPopup member={selected} month={month} canEdit={financeAdmin} canRemind={financeAdmin} onClose={() => setSelected(null)} onChanged={load} />}
+      {selected && <MemberPopup member={selected} month={month} canEdit={financeAdmin} canRemind={financeAdmin} onClose={() => setSelected(null)} />}
       {financeAdmin && showAdd && (
         <Modal onClose={() => setShowAdd(false)} title="Add member">
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />

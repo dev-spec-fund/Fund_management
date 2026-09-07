@@ -88,6 +88,22 @@ function invalidateAfterMutation(path) {
     return;
   }
 
+  if(p.startsWith("/api/admin/pending")){
+    // Approval/rejection writes affect finance/member summaries, but should not
+    // evict unrelated stable page caches such as Settings or governance lists.
+    invalidateCacheMatching([
+      "/api/admin/pending",
+      "/api/reports/",
+      "/api/members",
+      "/api/me/dashboard",
+      "/api/me/contributions",
+      "/api/projects",
+      "/api/me/projects",
+      "/api/elections"
+    ]);
+    return;
+  }
+
   if(p.startsWith("/api/admin/meetings") || p.startsWith("/api/governance/meetings") || p.startsWith("/api/governance/meeting-")){
     invalidateCacheMatching([
       "/api/admin/meetings",

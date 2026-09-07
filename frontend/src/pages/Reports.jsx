@@ -27,7 +27,6 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
     analytics,
     annualBusy,
     shiftMonth,
-    loadMonthly,
     loadAnnual,
   } = useReportsData(sharedMonth, onMonthChange, { enabled: view === "reports" });
 
@@ -36,7 +35,8 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
   useEffect(() => onDataChange(({ path }) => { if (path?.startsWith("/api/donations")) loadDonations(); }), [month]);
 
   const donationSaved = async (message = "Donation updated") => {
-    await Promise.all([view === "reports" ? loadMonthly() : Promise.resolve(), loadDonations()]);
+    // Donation mutations broadcast a data-change event; the existing listeners
+    // refresh the list/report once. Avoid issuing the same GETs a second time.
     setSelectedDonation(null);
     return message;
   };
@@ -115,13 +115,13 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
       {donations.length === 0 ? <div className="sans" style={{ fontSize: 11, color: "var(--soft)", padding: "12px 2px" }}>No donations logged for this month.</div> : donations.map((donation) => <button key={donation.id} type="button" onClick={() => setSelectedDonation(donation)} className="sans" style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left", border: 0, borderTop: "1px solid var(--divider)", background: "transparent", color: "var(--text)", padding: "10px 2px", cursor: "pointer" }}>
         <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 11, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{donation.donor_name}</div><div style={{ fontSize: 9, color: "var(--soft)", marginTop: 2 }}>{donation.donation_date || String(donation.created_at || "").slice(0,10)} · {donation.txn_id}{donation.project_name ? ` · ${donation.project_code || ""} ${donation.project_name}` : " · General fund"}{Number(donation.document_count || 0) > 0 ? ` · ${donation.document_count} document${Number(donation.document_count) === 1 ? "" : "s"}` : ""}</div></div>
         {Number(donation.document_count || 0) > 0 && <Paperclip size={12} style={{ color: "var(--muted)", flex: "0 0 auto" }} />}
-        <div style={{ textAlign: "right", flex: "0 0 auto" }}><b style={{ fontSize: 11, color: donation.status === "active" ? "var(--success)" : "var(--muted)" }}>{donation.status === "active" ? "+ " : ""}MVR {fmt(donation.amount)}</b><div style={{ fontSize: 8, color: "var(--soft)", marginTop: 2, textTransform: "uppercase" }}>{donation.status} · {donation.status === "active" ? "Edit" : "View"} ›</div></div>
+        <div style={{ textAlign: "right", flex: "0 0 auto" }}><b style={{ fontSize: 11, color: donation.status === "active" ? "var(--success)" : "var(--muted)" }}>{donation.status === "active" ? "+ " : ""}MVR {fmt(donation.amount)}</b><div style={{ fontSize: 8, color: "var(--soft)", marginTop: 2, textTransform: "uppercase" }}>{donation.status} · {donation.status === "active" ? "Edit" : "View"} <ChevronRight size={10} style={{verticalAlign:"-2px"}}/></div></div>
       </button>)}
     </div>
 
     {view === "reports" && <AnnualAnalyticsSection annualYear={annualYear} setAnnualYear={setAnnualYear} annual={annual} analytics={analytics} annualBusy={annualBusy} loadAnnual={loadAnnual} setError={setError} />}
 
-    {showExpense && <ExpenseModal onClose={() => setShowExpense(false)} onSaved={loadMonthly} />}
+    {showExpense && <ExpenseModal onClose={() => setShowExpense(false)} onSaved={() => {}} />}
     {showDonation && <DonationModal onClose={() => setShowDonation(false)} onSaved={async (message) => { await donationSaved(message); setShowDonation(false); }} />}
     {selectedDonation && <DonationDetails admin={admin} row={selectedDonation} onClose={() => setSelectedDonation(null)} onSaved={donationSaved} />}
   </>;

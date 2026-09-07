@@ -1,5 +1,5 @@
 import React from "react";
-import { Download, ArrowRight, ArrowDownRight, Wallet, TrendingUp, TrendingDown } from "lucide-react";
+import { Download, ArrowRight, ArrowDownRight, Wallet, TrendingUp, TrendingDown, Circle } from "lucide-react";
 import { smallBtn } from "../../components/Shared";
 import { fmt } from "../../utils/format";
 
@@ -85,7 +85,7 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
 
     <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--muted)", marginBottom: 7, fontWeight: 700 }}>
       <span>CASH INCOME VS EXPENSES — 6 MONTHS</span>
-      <span style={{ display: "flex", gap: 8, fontSize: 11, fontWeight: 500 }}><span>● Income</span><span style={{ color: "var(--danger)" }}>● Expenses</span></span>
+      <span style={{ display: "flex", gap: 8, fontSize: 11, fontWeight: 500 }}><span style={{display:"inline-flex",alignItems:"center",gap:4}}><Circle size={7} fill="currentColor"/> Income</span><span style={{ color: "var(--danger)",display:"inline-flex",alignItems:"center",gap:4 }}><Circle size={7} fill="currentColor"/> Expenses</span></span>
     </div>
     <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 12px", marginBottom: 16 }}>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 7, height: 112 }}>

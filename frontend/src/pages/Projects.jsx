@@ -162,8 +162,8 @@ function ProjectDetails({project,admin,onClose,onSaved}){
 
     <div className="project-detail-actions">{canEdit&&<button type="button" disabled={busy} onClick={()=>setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13}/> Edit</button>}{["planned"].includes(p.status)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Activate</button>}{p.status==="active"&&<button type="button" disabled={busy} onClick={()=>changeStatus("completed")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Complete</button>}{!["cancelled"].includes(p.status)&&p.status!=="completed"&&<button type="button" disabled={busy} onClick={()=>changeStatus("cancelled")} style={smallBtn("var(--danger)")}><X size={13}/> Cancel</button>}{["completed","cancelled"].includes(p.status)&&isSuper(admin)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--primary-text)")}><RotateCcw size={13}/> Reopen</button>}</div>
     {!canEdit&&<div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:10,textAlign:"center"}}>Completed/cancelled projects are read-only. Super Admin can reopen them.</div>}
-    {selectedDonation&&<DonationDetails admin={admin} row={selectedDonation} onClose={()=>setSelectedDonation(null)} onSaved={async(message)=>{setSelectedDonation(null);await load();await onSaved(message||"Donation updated");}}/>}
-    {selectedExpense&&<ExpenseDetails admin={admin} row={selectedExpense} onClose={()=>setSelectedExpense(null)} onSaved={async()=>{setSelectedExpense(null);await load();}}/>}
+    {selectedDonation&&<DonationDetails admin={admin} row={selectedDonation} onClose={()=>setSelectedDonation(null)} onSaved={async(message)=>{setSelectedDonation(null);await onSaved(message||"Donation updated");}}/>}
+    {selectedExpense&&<ExpenseDetails admin={admin} row={selectedExpense} onClose={()=>setSelectedExpense(null)} onSaved={async()=>{setSelectedExpense(null);}}/>}
   </Modal>;
 }
 

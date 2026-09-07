@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { api, onDataChange } from "../api";
+import { api, onDataChangeDebounced } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { LoadingState, ErrorState, SectionTitle, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
@@ -25,7 +25,10 @@ export default function PendingApprovals() {
     .catch((e) => setError(e.message));
 
   useEffect(() => { load(); }, []);
-  useEffect(() => onDataChange(() => load()), []);
+  useEffect(() => onDataChangeDebounced(({ path, paths = [] }) => {
+    const changed = [path, ...paths].filter(Boolean);
+    if (changed.some((value) => value.startsWith("/api/admin/pending"))) load();
+  }, 100), []);
   useEffect(() => () => {
     for (const entry of slipCacheRef.current.values()) if(entry?.url) URL.revokeObjectURL(entry.url);
     slipCacheRef.current.clear();

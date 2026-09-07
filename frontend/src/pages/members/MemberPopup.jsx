@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Bell, CheckCircle2, ChevronDown, Download, Eye, Paperclip, Pencil, Send } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, ChevronDown, Download, Eye, Paperclip, Pencil, Send, CircleCheck, CircleX } from "lucide-react";
 import { api } from "../../api";
 import { Modal, Field, useConfirmDialog } from "../../components/FormControls";
 import { PreviewLoadState, PrimaryButton, smallBtn, approveBtn, rejectBtn } from "../../components/Shared";
@@ -29,7 +29,7 @@ function formatMemberPopupDate(value){
   catch{return String(value).slice(0,10)}
 }
 
-export default function MemberPopup({ member, month, canEdit = false, canRemind, onClose, onChanged }) {
+export default function MemberPopup({ member, month, canEdit = false, canRemind, onClose }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [detail, setDetail] = useState(()=>api.peekCached(`/api/members/${member.id}/statement`));
   const [editing, setEditing] = useState(false);
@@ -56,7 +56,6 @@ export default function MemberPopup({ member, month, canEdit = false, canRemind,
   const save = async () => {
     await api.members.update(member.id, { ...form, monthly_amount: Number(form.monthly_amount) });
     setEditing(false);
-    onChanged();
     onClose();
   };
 
@@ -103,7 +102,6 @@ export default function MemberPopup({ member, month, canEdit = false, canRemind,
     const action = member.active ? "deactivate" : "reactivate";
     if (!await confirm({title:`${action === "deactivate" ? "Deactivate" : "Reactivate"} member?`,message:`${action === "deactivate" ? "Deactivate" : "Reactivate"} ${member.name}?`,confirmLabel:action === "deactivate" ? "Deactivate" : "Reactivate",tone:action === "deactivate" ? "danger" : "primary"})) return;
     await api.members.update(member.id, { active: member.active ? 0 : 1 });
-    onChanged();
     onClose();
   };
 
@@ -227,7 +225,7 @@ export default function MemberPopup({ member, month, canEdit = false, canRemind,
               <div style={{fontSize:9,color:"var(--soft)",marginTop:4}}>Joined {formatMemberPopupDate(detail?.member?.joined_at||member.joined_at||member.created_at)} · Role: <b style={{color:"var(--primary-text)"}}>{detail?.member?.exco_role||member.exco_role||"Member"}</b></div>
             </div>
             <div style={{fontSize:9,fontWeight:700,color:member.telegram_id?"var(--success)":"var(--soft)",whiteSpace:"nowrap"}}>
-              {member.telegram_id ? "● Telegram linked" : "○ Not linked"}
+              {member.telegram_id ? <><CircleCheck size={12}/> Telegram linked</> : <><CircleX size={12}/> Not linked</>}
             </div>
           </div>
 

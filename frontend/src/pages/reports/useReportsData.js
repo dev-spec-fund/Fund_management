@@ -15,8 +15,6 @@ export function useReportsData(sharedMonth, onMonthChange, { enabled = true } = 
   const [analytics, setAnalytics] = useState(null);
   const [annualBusy, setAnnualBusy] = useState(false);
 
-  const loadMonthly = () => enabled ? api.reports.summary(month).then(value=>{const prev=monthCache.current.get(month)||{};monthCache.current.set(month,{...prev,summary:value});setSummary(value);}) : Promise.resolve(null);
-
   useEffect(() => {
     if (!enabled) return;
     const local=monthCache.current.get(month)||{};
@@ -84,7 +82,6 @@ export function useReportsData(sharedMonth, onMonthChange, { enabled = true } = 
     analytics,
     annualBusy,
     shiftMonth: (delta) => onMonthChange?.(shiftMonthValue(month,delta)),
-    loadMonthly,
     loadAnnual,
   };
 }
