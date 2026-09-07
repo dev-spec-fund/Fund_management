@@ -138,7 +138,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
                 <div className="sans" style={{ fontSize: 10, marginTop: 8, color: "var(--muted)" }}>
                   {(() => {
                     const joined = String(m.joined_at || m.created_at || "").slice(0, 7);
-                    return joined && joined > month ? `Joined after ${monthLabel}` : `Contribution not applicable for ${monthLabel}`;
+                    return joined && joined > month ? `N/A · Joined after ${monthLabel}` : `N/A · Contribution not applicable for ${monthLabel}`;
                   })()}
                 </div>
               ) : <>
