@@ -1681,3 +1681,52 @@ button:not(:disabled):active {
   color:var(--primary-text);
   flex:0 0 auto;
 }
+
+/* v90 — Project Details mobile cleanup */
+.project-detail-summary{
+  padding:10px 11px;
+  margin-bottom:8px;
+}
+.project-detail-topline{margin-bottom:7px}
+.project-finance-grid{gap:5px}
+.project-finance-metric{padding:7px 7px}
+.project-budget-progress{margin-top:6px}
+.project-detail-meta{gap:8px}
+
+/* Entire donation/expense row is the interaction target. */
+.project-transaction-button{
+  width:100%;
+  border-left:0;
+  border-right:0;
+  border-bottom:0;
+  background:transparent;
+  color:var(--text);
+  text-align:left;
+  cursor:pointer;
+  align-items:flex-start;
+}
+.project-transaction-button:active{background:var(--button-soft)}
+.project-transaction-button .project-transaction-main{flex:1 1 auto}
+.project-transaction-button .project-transaction-amount{padding-top:1px}
+
+/* Keep project actions reachable while the long sheet scrolls. */
+.project-detail-actions{
+  position:sticky;
+  bottom:calc(-20px - env(safe-area-inset-bottom));
+  z-index:3;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+  margin:14px -18px calc(-20px - env(safe-area-inset-bottom));
+  padding:10px 18px calc(12px + env(safe-area-inset-bottom));
+  border-top:1px solid var(--divider-2);
+  background:var(--bg);
+}
+.project-detail-actions button{min-height:40px}
+
+@media(max-width:360px){
+  .project-detail-summary{padding:9px 10px}
+  .project-finance-metric>span{font-size:8px}
+  .project-finance-metric>strong{font-size:10px}
+  .project-transaction-row{padding:8px 0}
+}
