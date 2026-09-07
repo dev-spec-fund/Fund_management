@@ -17,6 +17,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   const canCloseMonth = adminCan(admin, "close_month");
   const canBackup = adminCan(admin, "backup");
   const currentMonth = currentMonthValue();
+  const [settingsMenuOpen,setSettingsMenuOpen]=useState(()=>!sectionOnly && initialSection==="general");
 
   const data=useSettingsData({admin,role,superAdmin,financeAdmin,initialSection});
   useEffect(()=>{
@@ -40,7 +41,6 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   if(settingsLoading)return <LoadingState>Loading settings…</LoadingState>;
   if(settingsError && !Object.keys(settings||{}).length) return <ErrorState onRetry={load}>{settingsError}</ErrorState>;
 
-  const [settingsMenuOpen,setSettingsMenuOpen]=useState(()=>!sectionOnly && initialSection==="general");
   const settingsCategories=[
     {key:"general",label:"General",description:"Organization name and app branding",icon:Settings2,tone:"general"},
     {key:"contributions",label:"Contributions",description:"Contribution amount, rules and allocations",icon:CircleDollarSign,tone:"contributions"},
