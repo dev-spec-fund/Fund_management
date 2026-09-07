@@ -19,7 +19,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
   const { confirm, confirmationDialog } = useConfirmDialog();
   const {
     month, setMonth, search, setSearch, filter, setFilter, defaultMonthly, form, setForm,
-    page, setPage, load, ensureDefaultMonthly, outstandingByMember, activeMembers, memberStatus, counts, expected,
+    page, setPage, load, outstandingByMember, activeMembers, memberStatus, counts, expected,
     collected, percent, filtered, memberPage, shiftMonth, monthLabel,
   } = useMembersData(isAdmin, sharedMonth, onMonthChange);
   const [selected, setSelected] = useState(null);
@@ -64,7 +64,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
           <div className="sans members-page-title">Members</div>
           <div className="sans members-page-subtitle">{activeMembers.length} active members · contribution overview</div>
         </div>
-        {financeAdmin && <button type="button" onClick={async () => { const amount = await ensureDefaultMonthly(); setForm({name:"",phone:"",monthly_amount:String(amount)}); setShowAdd(true); }} className="sans" style={primaryBtn}>
+        {financeAdmin && <button type="button" onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={primaryBtn}>
           <Plus size={15} /> Add
         </button>}
       </div>
@@ -88,7 +88,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
           <div><b style={{ display: "block", fontSize: 14, color: "var(--warning)" }}>{counts.partial}</b>Partial</div>
           <div><b style={{ display: "block", fontSize: 14, color: "var(--danger)" }}>{counts.unpaid}</b>Unpaid</div>
           <div><b style={{ display: "block", fontSize: 14, color: "var(--neutral-text)" }}>{counts.exempt}</b>Exempt</div>
-          <div><b style={{ display: "block", fontSize: 14, color: "var(--soft)" }}>{counts.not_applicable||0}</b>Not due</div>
+          <div><b style={{ display: "block", fontSize: 14, color: "var(--soft)" }}>{counts.not_applicable||0}</b>N/A</div>
         </div>
       </section>
 
@@ -102,7 +102,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
       {reminderMessage && <div className="sans" style={{fontSize:10,color:reminderMessage.startsWith("Sent")?"var(--success)":"var(--danger)",margin:"0 2px 10px"}}>{reminderMessage}</div>}
 
       <div className="members-filter-row">
-        {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt'],['not_applicable','Not due']].map(([key,label]) => (
+        {[['all','All'],['outstanding','Outstanding'],['paid','Paid'],['partial','Partial'],['unpaid','Unpaid'],['exempt','Exempt'],['not_applicable','N/A']].map(([key,label]) => (
           <button type="button" key={key} onClick={() => setFilter(key)} className={filter === key ? "expense-filter-chip active sans" : "expense-filter-chip sans"}>{label}</button>
         ))}
       </div>
@@ -136,7 +136,10 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
             {m.active && status !== "exempt" && (
               status === "not_applicable" || required <= 0.004 ? (
                 <div className="sans" style={{ fontSize: 10, marginTop: 8, color: "var(--muted)" }}>
-                  No contribution due for {monthLabel}
+                  {(() => {
+                    const joined = String(m.joined_at || m.created_at || "").slice(0, 7);
+                    return joined && joined > month ? `Joined after ${monthLabel}` : `Contribution not applicable for ${monthLabel}`;
+                  })()}
                 </div>
               ) : <>
                 <div className="sans" style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginTop: 8, color: "var(--muted)" }}>
@@ -151,6 +154,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
       })}
       {filtered.length === 0 && <div className="sans" style={{ textAlign: "center", fontSize: 13, color: "var(--soft)", padding: "24px 0" }}>No members match this view.</div>}
       <Pagination page={memberPage.page} total={filtered.length} onChange={setPage} />
+      <div className="members-page-tail-space" aria-hidden="true" />
 
       {selected && <MemberPopup member={selected} month={month} canEdit={financeAdmin} canRemind={financeAdmin} onClose={() => setSelected(null)} onChanged={load} />}
       {financeAdmin && showAdd && (
