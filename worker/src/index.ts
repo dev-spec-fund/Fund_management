@@ -75,6 +75,14 @@ app.use("/api/*", async (c, next) => {
   const started = Date.now();
   await next();
   const elapsed = Math.max(0, Date.now() - started);
+
+  // Authenticated fund data must never be persisted by a browser, Telegram
+  // WebView, proxy or CDN. The frontend's short-lived in-memory cache remains
+  // the only cache for API responses and is cleared when the Mini App closes.
+  c.header("Cache-Control", "no-store, max-age=0");
+  c.header("Pragma", "no-cache");
+  c.header("X-Content-Type-Options", "nosniff");
+
   c.header("Server-Timing", `app;dur=${elapsed}`);
   c.header("X-Fund-Response-Time", String(elapsed));
   if (elapsed >= 750) {
