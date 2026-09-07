@@ -19,7 +19,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   const currentMonth = currentMonthValue();
   const [settingsMenuOpen,setSettingsMenuOpen]=useState(()=>!sectionOnly && initialSection==="general");
 
-  const data=useSettingsData({admin,role,superAdmin,financeAdmin,initialSection});
+  const data=useSettingsData({admin,role,superAdmin,financeAdmin,initialSection,deferCore:!sectionOnly&&initialSection==="general"});
   useEffect(()=>{
     if(adminMonth && adminMonth!==data.closeMonthValue){
       data.setCloseMonthValue(adminMonth);
@@ -39,7 +39,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   });
 
   if(settingsLoading)return <LoadingState>Loading settings…</LoadingState>;
-  if(settingsError && !Object.keys(settings||{}).length) return <ErrorState onRetry={load}>{settingsError}</ErrorState>;
+  if(settingsError && !Object.keys(settings||{}).length && (sectionOnly || !settingsMenuOpen)) return <ErrorState onRetry={load}>{settingsError}</ErrorState>;
 
   const settingsCategories=[
     {key:"general",label:"General",description:"Organization name and app branding",icon:Settings2,tone:"general"},

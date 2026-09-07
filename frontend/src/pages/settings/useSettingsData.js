@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, onDataChange } from "../../api";
 import { currentMonthValue } from "../../utils/date";
 
-export function useSettingsData({ admin, role, superAdmin, financeAdmin, initialSection = "general" }) {
-  const [settings,setSettings]=useState(null);
+export function useSettingsData({ admin, role, superAdmin, financeAdmin, initialSection = "general", deferCore = false }) {
+  const [settings,setSettings]=useState({});
   const [admins,setAdmins]=useState([]);
   const [audit,setAudit]=useState([]);
   const [health,setHealth]=useState(null);
@@ -25,55 +25,81 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
   const [errorPage,setErrorPage]=useState(1);
   const [errorFilter,setErrorFilter]=useState("open");
   const [auditPage,setAuditPage]=useState(1);
-  const [settingsLoading,setSettingsLoading]=useState(true);
+  const [settingsLoading,setSettingsLoading]=useState(!deferCore && initialSection!=="audit");
   const [settingsError,setSettingsError]=useState("");
+  const loadedSections=useRef(new Set());
 
-  const load=useCallback(async()=>{
-    setSettingsLoading(true);
+  const loadCore=useCallback(async({showLoading=false}={})=>{
+    if(showLoading) setSettingsLoading(true);
     setSettingsError("");
     try{
       const core=await api.settings.get();
       setSettings(core || {});
     }catch(e){
       setSettingsError(e?.message || "Unable to load settings");
-      setSettings({});
     }finally{
-      setSettingsLoading(false);
+      if(showLoading) setSettingsLoading(false);
     }
+  },[]);
 
-    const jobs=[
-      api.settings.admins().then(setAdmins),
-      api.expenses.categories().then(setCategories),
-      api.governance.monthClosures().then(setClosures),
-    ];
-    if(superAdmin){
-      jobs.push(api.members.list().then(setMembersForAdmin));
-      jobs.push(api.settings.roles().then(setCustomRoles));
+  const loadSection=useCallback(async(section,{force=false}={})=>{
+    if(!section || (!force && loadedSections.current.has(section))) return;
+    const jobs=[];
+    const safe=(promise,setter)=>promise.then(setter).catch(e=>setMessage(e?.message || "Unable to load settings data"));
+
+    if(section==="categories") jobs.push(safe(api.expenses.categories(),setCategories));
+    if(section==="financial") jobs.push(safe(api.governance.monthClosures(),setClosures));
+    if(section==="admins") {
+      jobs.push(safe(api.settings.admins(),setAdmins));
+      if(superAdmin){
+        jobs.push(safe(api.members.list(),setMembersForAdmin));
+        jobs.push(safe(api.settings.roles(),setCustomRoles));
+      }
     }
+    if(section==="reminders" || section==="system") jobs.push(safe(api.admin.health(),setHealth));
+    if(section==="system" && superAdmin) jobs.push(safe(api.admin.errors(),setErrors));
+    if(section==="audit" && financeAdmin) jobs.push(safe(api.settings.auditLog(),setAudit));
+
     await Promise.allSettled(jobs);
-  },[superAdmin]);
+    loadedSections.current.add(section);
+  },[superAdmin,financeAdmin]);
 
-  useEffect(()=>{ load(); },[admin?.id,role,load]);
+  const load=useCallback(async()=>{
+    await loadCore();
+    loadedSections.current.delete(settingsSection);
+    await loadSection(settingsSection,{force:true});
+  },[loadCore,loadSection,settingsSection]);
 
   useEffect(()=>{
-    if(!["system","reminders"].includes(settingsSection)) return;
-    api.admin.health().then(setHealth).catch(e=>setMessage(e.message));
-    if(settingsSection==="system" && superAdmin) api.admin.errors().then(setErrors).catch(e=>setMessage(e.message));
-  },[settingsSection,superAdmin,admin?.id]);
+    // The Settings directory does not need to wait for every admin dataset.
+    // Load only the core settings in the background; section-specific data is fetched on demand.
+    if(initialSection==="audit") {
+      setSettingsLoading(false);
+      return;
+    }
+    loadCore({showLoading:!deferCore});
+  },[admin?.id,role,initialSection,deferCore,loadCore]);
 
   useEffect(()=>{
-    if(settingsSection!=="audit" || !financeAdmin) return;
-    api.settings.auditLog().then(setAudit).catch(e=>setMessage(e.message));
-  },[settingsSection,financeAdmin,admin?.id]);
+    loadSection(settingsSection);
+  },[settingsSection,admin?.id,loadSection]);
 
   useEffect(()=>onDataChange(({path})=>{
-    if(
-      path?.startsWith("/api/settings") ||
-      path?.startsWith("/api/expenses/categories") ||
-      path?.startsWith("/api/governance/month-close") ||
-      path?.startsWith("/api/admin/errors")
-    ) load();
-  }),[admin?.id,role,load]);
+    if(path?.startsWith("/api/settings")){
+      loadCore();
+      if(settingsSection==="admins") { loadedSections.current.delete("admins"); loadSection("admins",{force:true}); }
+      return;
+    }
+    if(path?.startsWith("/api/expenses/categories") && settingsSection==="categories") {
+      loadedSections.current.delete("categories"); loadSection("categories",{force:true});
+    }
+    if(path?.startsWith("/api/governance/month-close") && settingsSection==="financial") {
+      loadedSections.current.delete("financial"); loadSection("financial",{force:true});
+    }
+    if(path?.startsWith("/api/admin/errors") && settingsSection==="system") {
+      loadedSections.current.delete("system"); loadSection("system",{force:true});
+    }
+  }),[admin?.id,role,settingsSection,loadCore,loadSection]);
 
   return {
     settings,setSettings,admins,setAdmins,audit,setAudit,health,setHealth,closures,setClosures,
@@ -82,6 +108,6 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
     customRoles,setCustomRoles,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,
     closeCheck,setCloseCheck,closeBusy,setCloseBusy,closeMonthValue,setCloseMonthValue,
     closurePage,setClosurePage,errorPage,setErrorPage,errorFilter,setErrorFilter,auditPage,setAuditPage,
-    settingsLoading,settingsError,load,
+    settingsLoading,settingsError,load,loadSection,
   };
 }
