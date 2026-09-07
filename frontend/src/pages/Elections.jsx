@@ -117,7 +117,6 @@ export default function Elections(){
     try{
       await api.elections.deleteUnusedDraft(detail.id);
       setSelected(null);setDetail(null);setReadiness(null);setSummary(null);setNotificationStatus(null);setTimeline(null);
-      await load();
       setMessage("Unused draft election deleted permanently.");
     }catch(e){
       const reasons=Array.isArray(e?.reasons)?e.reasons.join(" · "):"";
@@ -143,7 +142,7 @@ export default function Elections(){
     if(!handover?.handover?.id)return;
     setBusy(true);try{
       await api.elections.updateHandoverItem(handover.handover.id,item.id,{completed,note:item.note||null});
-      const refreshed=await api.elections.currentHandover();setHandover(refreshed);await load();
+      const refreshed=await api.elections.currentHandover();setHandover(refreshed);
       setMessage(completed?"Handover item completed.":"Handover item reopened.");
     }catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
@@ -154,7 +153,7 @@ export default function Elections(){
     if(notes===null)return;
     setBusy(true);try{
       await api.elections.completeHandover(handover.handover.id,notes);
-      setHandover(await api.elections.currentHandover());await load();setMessage("EXCO handover completed.");
+      setHandover(await api.elections.currentHandover());setMessage("EXCO handover completed.");
     }catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const repairApplicationSync=async()=>{
@@ -176,7 +175,7 @@ export default function Elections(){
     if(!summary)return setMessage("Certified election summary is still loading.");
     setBusy(true);try{const {exportElectionCsv}=await import("../utils/exports");await exportElectionCsv(summary);setMessage("Election CSV sent to your Telegram chat.")}catch(e){setMessage(e.message||"Could not export election CSV")}finally{setBusy(false)}
   };
-  const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});await load();await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
+  const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addPosition=async()=>{if(!detail||!position.title.trim())return;setBusy(true);try{const seats=Number(position.seats)||1;const d=await api.elections.addPosition(detail.id,{title:position.title,seats,max_selections:seats,min_selections:Math.max(0,Math.min(seats,Number(position.min_selections)||0))});setDetail(d);setPosition({title:"",seats:"1",min_selections:"1"})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addCandidate=async()=>{if(!detail||!candidate.position_id||!candidate.member_id)return;setBusy(true);try{const d=await api.elections.addCandidate(detail.id,candidate);setDetail(d);setCandidate({position_id:"",member_id:""})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const reviewApplication=async(a,decision)=>{
@@ -207,7 +206,6 @@ export default function Elections(){
     setBusy(true);try{
       await api.elections.extendApplications(detail.id,next.trim());
       setDetail(await api.elections.get(detail.id));
-      await load();
       setMessage(`Application deadline extended to ${next.trim().replace("T"," ")}.`);
     }catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
@@ -217,7 +215,6 @@ export default function Elections(){
     setBusy(true);try{
       await api.elections.withdrawCandidate(detail.id,c.id,reason.trim()||"Withdrawn");
       setDetail(await api.elections.get(detail.id));
-      await load();
       setMessage(`${c.display_name} withdrawn from the election. Member application status updated too.`);
     }catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
@@ -239,10 +236,10 @@ export default function Elections(){
 
   const certify=async()=>{
     if(!await confirm({title:"Certify election results?",message:"Certification makes the results final and publishes them to members. Ballots remain secret.",confirmLabel:"Certify results",tone:"primary"}))return;
-    setBusy(true);try{await api.elections.certify(detail.id);setDetail(await api.elections.get(detail.id));await load();await refreshNotificationStatus();setMessage("Election certified · EXCO roles assigned and published.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
+    setBusy(true);try{await api.elections.certify(detail.id);setDetail(await api.elections.get(detail.id));await refreshNotificationStatus();setMessage("Election certified · EXCO roles assigned and published.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
 
-  const changeStatus=async(action)=>{if(!detail)return;if(!await confirm({title:`${action[0].toUpperCase()+action.slice(1)} election?`,message:action==="open"?"Eligible voters will be snapshotted, Telegram-linked members will be notified, and all election setup will become read-only.":`Are you sure you want to ${action} this election?`,confirmLabel:action[0].toUpperCase()+action.slice(1),tone:action==="cancel"?"danger":"primary"}))return;setBusy(true);try{const d=await api.elections[action](detail.id);setDetail(d);await load();await refreshNotificationStatus(detail.id);setMessage(action==="open"?"Election opened. Eligible voters were snapshotted.":action==="close"?"Election closed. Results are now available.":"Election cancelled.")}catch(e){setMessage(e.message)}finally{setBusy(false)}};
+  const changeStatus=async(action)=>{if(!detail)return;if(!await confirm({title:`${action[0].toUpperCase()+action.slice(1)} election?`,message:action==="open"?"Eligible voters will be snapshotted, Telegram-linked members will be notified, and all election setup will become read-only.":`Are you sure you want to ${action} this election?`,confirmLabel:action[0].toUpperCase()+action.slice(1),tone:action==="cancel"?"danger":"primary"}))return;setBusy(true);try{const d=await api.elections[action](detail.id);setDetail(d);await refreshNotificationStatus(detail.id);setMessage(action==="open"?"Election opened. Eligible voters were snapshotted.":action==="close"?"Election closed. Results are now available.":"Election cancelled.")}catch(e){setMessage(e.message)}finally{setBusy(false)}};
 
   const electionStats=useMemo(()=>({
     active:(rows||[]).filter(e=>!["closed","cancelled"].includes(String(e.status))).length,

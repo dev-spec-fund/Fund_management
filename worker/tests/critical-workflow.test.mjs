@@ -1869,3 +1869,15 @@ test('annual analytics uses the same historical member performance dataset as AG
   assert.match(governance, /sort\(\(a:any,b:any\)=>/);
   assert.doesNotMatch(governance, /FROM members m WHERE m\.active=1 ORDER BY m\.name LIMIT 100/);
 });
+
+
+test('v76 workflow refreshes stay targeted after governance, meeting, and election writes', () => {
+  const client = fs.readFileSync(path.resolve(root,'../frontend/src/api/client.js'),'utf8');
+  const meetings = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Meetings.jsx'),'utf8');
+  const elections = fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  assert.match(client, /p\.startsWith\("\/api\/governance\/month-close"\) \|\| p\.startsWith\("\/api\/governance\/reverse"\)/);
+  assert.match(client, /\"\/api\/governance\/annual\/\"/);
+  assert.match(client, /\"\/api\/governance\/analytics\/\"/);
+  assert.doesNotMatch(meetings, /setShowCreate\(false\);setForm\(emptyForm\);await load\(\)/);
+  assert.doesNotMatch(elections, /setDetail\(d\);await load\(\);await refreshNotificationStatus/);
+});

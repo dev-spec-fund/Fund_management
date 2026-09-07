@@ -87,11 +87,10 @@ export default function Meetings({admin}){
     setBusy(true);setMessage("");
     try{
       const meeting=await api.admin.createMeeting(form);
-      setShowCreate(false);setForm(emptyForm);await load();
+      setShowCreate(false);setForm(emptyForm);
       if(await confirm({title:"Send invitations?",message:"Meeting created. Send Telegram invitations to all active linked members now?",confirmLabel:"Send invitations",tone:"primary"})){
         const r=await api.admin.sendMeetingInvites(meeting.id);
         setMessage(`Invitations sent: ${r.sent}${r.unlinked?` · ${r.unlinked} unlinked`:""}${r.failed?` · ${r.failed} failed`:""}`);
-        await load();
       }
     }catch(e){setMessage(e.message||"Could not create meeting")}finally{setBusy(false)}
   };
@@ -102,7 +101,7 @@ export default function Meetings({admin}){
     try{
       const r=await api.admin.sendMeetingInvites(m.id);
       setMessage(`Invitations sent: ${r.sent}${r.unlinked?` · ${r.unlinked} unlinked`:""}${r.failed?` · ${r.failed} failed`:""}`);
-      await load();if(selected?.id===m.id)await openDetails(m);
+      if(selected?.id===m.id)await openDetails(m);
     }catch(e){setMessage(e.message||"Could not send invitations")}finally{setBusy(false)}
   };
 
@@ -120,7 +119,7 @@ export default function Meetings({admin}){
     setBusy(true);setMessage("");
     try{
       const result=await api.admin.updateMeeting(details.id,form);
-      setEditing(false);await load();await openDetails(result);
+      setEditing(false);await openDetails(result);
       if(!result.changed){
         setMessage("No changes to save.");
         return;
@@ -150,7 +149,7 @@ export default function Meetings({admin}){
     try{
       const r=await api.admin.cancelMeeting(details.id,reason.trim());
       setMessage(`Meeting cancelled · ${r.sent||0} notification${Number(r.sent||0)===1?"":"s"} sent.`);
-      await load();await openDetails(r.meeting);
+      await openDetails(r.meeting);
     }catch(e){setMessage(e.message||"Could not cancel meeting")}finally{setBusy(false)}
   };
 
@@ -165,7 +164,6 @@ export default function Meetings({admin}){
       const r=await api.admin.remindMeetingPending(details.id);
       setMessage(`RSVP reminder sent to ${r.sent} member${Number(r.sent)===1?"":"s"}${r.unlinked?` · ${r.unlinked} awaiting member(s) not linked`:""}.`);
       setDetails(await api.admin.meeting(details.id));
-      await load();
     }catch(e){setMessage(e.message||"Could not send RSVP reminder")}finally{setBusy(false)}
   };
 
@@ -186,7 +184,7 @@ export default function Meetings({admin}){
     setBusy(true);setMessage("");
     try{
       const r=await api.admin.completeMeeting(details.id);
-      await load();await openDetails(r.meeting);setMessage("Meeting completed.");
+      await openDetails(r.meeting);setMessage("Meeting completed.");
     }catch(e){setMessage(e.message||"Could not complete meeting")}finally{setBusy(false)}
   };
   const saveMinutes=async()=>{

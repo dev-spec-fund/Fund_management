@@ -162,6 +162,23 @@ function invalidateAfterMutation(path) {
     return;
   }
 
+  if(p.startsWith("/api/governance/month-close") || p.startsWith("/api/governance/reverse")){
+    // Month close/reopen/reversal changes reporting state across admin + member
+    // finance views, but it does not change navigation/session/meeting/election data.
+    invalidateCacheMatching([
+      "/api/reports/",
+      "/api/members",
+      "/api/me/dashboard",
+      "/api/me/contributions",
+      "/api/projects",
+      "/api/me/projects",
+      "/api/governance/month-close",
+      "/api/governance/annual/",
+      "/api/governance/analytics/"
+    ]);
+    return;
+  }
+
   if(p.startsWith("/api/settings")){
     clearGetCache({preserveStable:false});
     return;
