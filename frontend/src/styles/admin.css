@@ -1730,3 +1730,33 @@ button:not(:disabled):active {
   .project-finance-metric>strong{font-size:10px}
   .project-transaction-row{padding:8px 0}
 }
+
+
+/* vNext: Admin Members historical-status and narrow-phone polish. */
+.members-filter-row{
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-inline:contain;
+}
+.members-filter-row .expense-filter-chip{flex:0 0 auto}
+.members-page-tail-space{height:22px;pointer-events:none}
+
+@media(max-width:420px){
+  .members-filter-row{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:6px;
+    overflow:visible;
+    padding:1px 0 4px;
+  }
+  .members-filter-row .expense-filter-chip{
+    width:100%;
+    min-width:0;
+    padding:6px 5px;
+    font-size:10px;
+    white-space:nowrap;
+  }
+}
+
+@media(max-width:350px){
+  .members-filter-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
