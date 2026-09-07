@@ -1509,3 +1509,79 @@ textarea:focus {
   .governance-kpi strong{font-size:12px}
   .governance-primary-action{padding:0 9px;font-size:10px}
 }
+
+
+/* v87 — final Telegram mobile QA pass */
+/* Governance had several 6–7px labels from the older dense UI.
+   Keep secondary information compact, but readable on a Telegram phone. */
+:where(
+  .election-application-counts span,
+  .election-summary-grid span,
+  .election-summary-grid small,
+  .election-summary-runoff small,
+  .election-archive-row strong small,
+  .election-notification-row small,
+  .election-dashboard-alert small,
+  .election-dashboard-card-top small,
+  .election-dashboard-metrics span,
+  .election-dashboard-metrics small,
+  .exco-term-head small,
+  .exco-handover-head small,
+  .election-timeline-head small,
+  .exco-term-previous span,
+  .exco-term-previous small,
+  .exco-handover-item small,
+  .election-timeline-event small,
+  .election-timeline-event em,
+  .exco-workboard-head small,
+  .exco-workboard-summary span,
+  .exco-workboard-item span,
+  .exco-workboard-item small,
+  .meeting-resolution-top small,
+  .meeting-resolution-meta,
+  .member-governance-head small,
+  .member-governance-term-head small,
+  .member-governance-resolution>div:first-child small,
+  .member-governance-meta,
+  .member-governance-followup,
+  .member-governance-work small,
+  .election-delete-zone-copy small,
+  .meeting-attendance-row small,
+  .member-history-allocation-title,
+  .member-reconciliation-head small,
+  .member-reconciliation-grid span,
+  .member-reconciliation-legacy,
+  .member-reconciliation-issues>div
+){
+  font-size:9px;
+  line-height:1.4;
+}
+
+/* Tiny governance action text gets a real touch/readability floor. */
+:where(
+  .exco-workboard-actions button,
+  .meeting-resolution-actions button
+){
+  font-size:10px;
+  min-height:36px;
+}
+
+/* Dashboard metric labels need a little more breathing room after font increase. */
+.election-dashboard-metrics{gap:6px}
+.election-dashboard-metrics>div{min-width:0}
+.election-dashboard-metrics strong{overflow-wrap:anywhere}
+
+/* Avoid clipped titles/statuses on narrow Telegram widths. */
+:where(
+  .governance-title-row,
+  .governance-project-row,
+  .governance-meeting-card,
+  .member-governance-card,
+  .election-dashboard-card
+){min-width:0}
+
+@media(max-width:360px){
+  .governance-page-head{padding:12px}
+  .governance-title-row{gap:8px}
+  .governance-primary-action{min-height:38px;height:38px}
+}

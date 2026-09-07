@@ -1602,3 +1602,45 @@ button:not(:disabled):active {
   .expense-row{padding:10px 11px}
   .app-nav-label{font-size:9.5px}
 }
+
+
+/* v87 — final Telegram mobile QA pass */
+/* Remove the repeated group heading above the horizontal section chips.
+   The active page already provides the page title, so this saves vertical space. */
+.app-section-title{display:none}
+.app-section-nav-wrap{padding-top:8px}
+
+/* Headerless Telegram shell: keep mode switch close to the native Mini App header. */
+.app-shell--telegram .app-mode-wrap{
+  margin-top:0;
+  padding-top:8px;
+}
+
+/* Prevent fixed bottom navigation from covering the final interactive row. */
+.app-scroll-root{scroll-padding-bottom:calc(104px + env(safe-area-inset-bottom))}
+.app-page-content{padding-bottom:calc(104px + env(safe-area-inset-bottom))!important}
+
+/* Long labels/names should wrap rather than force a horizontal viewport. */
+.finance-page-head,
+.settings-page-head,
+.members-page-head,
+.overview-page-head,
+.expense-row,
+.report-detail-card,
+.admin-audit-row{min-width:0}
+.finance-page-title,
+.members-page-title,
+.settings-page-head h2,
+.overview-page-title{overflow-wrap:anywhere}
+
+/* Better narrow-phone behavior for action rows. */
+@media(max-width:390px){
+  .finance-page-head,
+  .members-page-head,
+  .settings-page-head{gap:8px}
+  .finance-primary-button{flex:0 0 auto}
+}
+@media(max-width:350px){
+  .app-section-nav-item{min-height:38px;font-size:10px;padding-inline:9px}
+  .admin-tab-strip.app-icon-nav{border-radius:20px}
+}

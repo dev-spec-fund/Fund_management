@@ -1204,3 +1204,46 @@
   .member-profile-name{font-size:20px}
   .member-contribution-hero{padding:14px}
 }
+
+
+/* v87 — final Telegram mobile QA pass */
+/* Raise important member metadata above micro-text sizes for real phones. */
+:where(
+  .member-profile-kicker,
+  .member-profile-summary-label,
+  .member-history-kicker,
+  .member-history-metric-label,
+  .member-section-head,
+  .member-section-head span,
+  .member-history-transaction-amount>span,
+  .member-history-allocation-title,
+  .member-project-transaction>div div,
+  .member-fund-category-meta,
+  .member-meeting-agenda b,
+  .member-rsvp-label,
+  .member-meeting-notes b
+){
+  font-size:10px;
+  line-height:1.3;
+}
+
+/* Allocation notes were too small to read inside Telegram. */
+.member-history-allocation-row small{font-size:9px;line-height:1.3}
+
+/* Long member/project names and references should never stretch the viewport. */
+:where(
+  .member-profile-name,
+  .member-project-title-row,
+  .member-history-transaction-ref,
+  .member-history-month
+){
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+
+/* More compact but safer phone layout. */
+@media(max-width:360px){
+  .member-history-transaction-top{gap:8px}
+  .member-history-transaction{padding:12px}
+  .member-profile-row{gap:10px}
+}
