@@ -285,52 +285,61 @@ export default function App() {
   useEffect(() => {
     if (!me) return undefined;
 
-    // v69: preload JavaScript chunks, then warm only the single most likely
-    // next screen's data while the browser is idle. Shared GET cache and
-    // in-flight de-duplication prevent this from causing duplicate navigation fetches.
+    // Performance pass: protect Telegram startup from speculative work.
+    // Warm only one likely next screen after the browser is idle. Secondary
+    // chunks are deferred further, and data prefetch is disabled on Save-Data
+    // and slow cellular connections. Pointer-down warming still makes an
+    // intentional tab change feel immediate.
     const likelyNext = adminView
       ? (canFinance ? ["pending", "members", "expenses", "projects"] : ["members", "reports"])
       : ["history", "fund", "activity", ...(memberProjectsEnabled ? ["projects"] : []), "meetings"];
     const secondary = adminView
       ? ["activity", "reports", "meetings"]
       : ["actions", "profile"];
-    const later = adminView ? ["settings"] : [];
 
-    const warmCode = (items) => {
-      items
-        .filter((name) => tabs.includes(name))
-        .forEach((name) => loaderForTab(name, adminView)?.());
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const constrainedNetwork = Boolean(
+      connection?.saveData || /(^|-)2g$/.test(String(connection?.effectiveType || ""))
+    );
+    const first = likelyNext.find((name) => tabs.includes(name));
+    const secondaryFirst = secondary.find((name) => tabs.includes(name));
+
+    const warmPrimary = () => {
+      if (!first) return;
+      loaderForTab(first, adminView)?.();
+      if (!constrainedNetwork) {
+        api.prefetchTabData({
+          tab: first,
+          adminView,
+          canFinance,
+          memberId: me?.member?.id || null,
+          adminMonth: adminView ? adminMonth : null,
+        }).catch(() => {});
+      }
     };
 
-    const timers = [
-      setTimeout(() => warmCode(likelyNext), 260),
-      setTimeout(() => warmCode(secondary), 1400),
-      setTimeout(() => warmCode(later), 2800),
-    ];
-
-    const warmLikelyData=()=>{
-      const next=likelyNext.find((name)=>tabs.includes(name));
-      if(!next)return;
-      api.prefetchTabData({
-        tab:next,
-        adminView,
-        canFinance,
-        memberId:me?.member?.id||null,
-        adminMonth:adminView?adminMonth:null,
-      }).catch(()=>{});
+    const warmSecondary = () => {
+      if (constrainedNetwork || !secondaryFirst) return;
+      loaderForTab(secondaryFirst, adminView)?.();
     };
-    let idleHandle=null;
-    let idleTimer=null;
-    if(typeof window.requestIdleCallback==="function"){
-      idleHandle=window.requestIdleCallback(warmLikelyData,{timeout:1800});
-    }else{
-      idleTimer=setTimeout(warmLikelyData,900);
+
+    let primaryIdle = null;
+    let primaryTimer = null;
+    let secondaryIdle = null;
+    let secondaryTimer = null;
+    if (typeof window.requestIdleCallback === "function") {
+      primaryIdle = window.requestIdleCallback(warmPrimary, { timeout: 2200 });
+      secondaryIdle = window.requestIdleCallback(warmSecondary, { timeout: 5000 });
+    } else {
+      primaryTimer = setTimeout(warmPrimary, 1200);
+      secondaryTimer = setTimeout(warmSecondary, 4200);
     }
 
     return () => {
-      timers.forEach(clearTimeout);
-      if(idleHandle!==null)window.cancelIdleCallback?.(idleHandle);
-      if(idleTimer!==null)clearTimeout(idleTimer);
+      if (primaryIdle !== null) window.cancelIdleCallback?.(primaryIdle);
+      if (secondaryIdle !== null) window.cancelIdleCallback?.(secondaryIdle);
+      if (primaryTimer !== null) clearTimeout(primaryTimer);
+      if (secondaryTimer !== null) clearTimeout(secondaryTimer);
     };
   }, [me, adminView, canFinance, tabs, memberProjectsEnabled, adminMonth]);
 

@@ -30,18 +30,34 @@ export default function Elections(){
   const [candidate,setCandidate]=useState({position_id:"",member_id:""});
   const {confirm,confirmationDialog}=useConfirmDialog();
 
-  const load=()=>Promise.all([
+  const loadPrimary=()=>Promise.all([
     api.elections.list().then(setRows),
     api.members.list().then(setMembers),
+    api.elections.dashboard().then(setDashboard),
+  ]).catch(e=>setMessage(e.message));
+  const loadSecondary=()=>Promise.all([
     api.elections.currentExco().then(r=>setCurrentExco(r.roles||[])),
     api.elections.archive().then(r=>setArchive(r.archive||[])),
-    api.elections.dashboard().then(setDashboard),
     api.elections.excoTerms().then(setExcoTerms),
     api.elections.currentHandover().then(setHandover),
-    api.elections.excoWorkboard().then(setWorkboard)
+    api.elections.excoWorkboard().then(setWorkboard),
   ]).catch(e=>setMessage(e.message));
+  const load=()=>Promise.all([loadPrimary(),loadSecondary()]);
   const open=async(row)=>{setSelected(row);setReadiness(null);setMessage("");try{setDetail(await api.elections.get(row.id))}catch(e){setMessage(e.message)}};
-  useEffect(()=>{load()},[]);
+  useEffect(()=>{
+    let cancelled=false;
+    loadPrimary();
+    const warmSecondary=()=>{ if(!cancelled) loadSecondary(); };
+    let idleHandle=null;
+    let timer=null;
+    if(typeof window.requestIdleCallback==="function") idleHandle=window.requestIdleCallback(warmSecondary,{timeout:2200});
+    else timer=setTimeout(warmSecondary,900);
+    return()=>{
+      cancelled=true;
+      if(idleHandle!==null)window.cancelIdleCallback?.(idleHandle);
+      if(timer!==null)clearTimeout(timer);
+    };
+  },[]);
   useEffect(()=>onDataChangeDebounced(({paths=[]})=>{
     if(paths.some((path)=>path?.startsWith("/api/elections")))load();
   },140),[]);
@@ -221,7 +237,7 @@ export default function Elections(){
     <div className="governance-page-head election-theme">
       <div className="governance-title-row">
         <div><span className="governance-eyebrow sans">GOVERNANCE</span><h2>Elections</h2><p className="sans">Run transparent EXCO elections with secret ballots and certified results.</p></div>
-        <button type="button" className="governance-primary-action sans" onClick={()=>setShowCreate(true)}><Plus size={16}/> Create election</button>
+        <button type="button" className="governance-primary-action sans" onClick={()=>setShowCreate(true)}><Plus size={16}/> New election</button>
       </div>
       <div className="governance-kpi-grid">
         <ElectionKpi icon={<Vote size={16}/>} label="Active" value={electionStats.active}/>
@@ -275,7 +291,7 @@ export default function Elections(){
       {handover.handover.status==="completed"&&<div className="sans exco-handover-completed"><CheckCircle2 size={14}/> Handover completed {formatElectionDate(handover.handover.completed_at)}</div>}
     </section>}
     {workboard?.term&&<section className="exco-workboard-card">
-      <div className="sans exco-workboard-head"><span><b>EXCO WORKBOARD</b><small>{workboard.term.term_label||workboard.term.election_title}</small></span><button type="button" onClick={()=>setShowResponsibility(true)}><Plus size={14}/> Add</button></div>
+      <div className="sans exco-workboard-head"><span><b>EXCO WORKBOARD</b><small>{workboard.term.term_label||workboard.term.election_title}</small></span><button type="button" onClick={()=>setShowResponsibility(true)}>+ Add</button></div>
       <div className="sans exco-workboard-summary">
         <span><b>{workboard.summary?.overdue||0}</b> overdue</span><span><b>{workboard.summary?.in_progress||0}</b> in progress</span><span><b>{workboard.summary?.upcoming||0}</b> upcoming</span><span><b>{workboard.summary?.completed||0}</b> completed</span>
       </div>

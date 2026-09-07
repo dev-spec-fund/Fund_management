@@ -299,10 +299,12 @@ export async function prefetchTabData({ tab, adminView = false, canFinance = fal
       `/api/governance/annual/${year}`,
       `/api/governance/analytics/${year}`,
     ];
-    else if (tab === "settings") paths = [
-      "/api/settings", "/api/settings/admins", "/api/expenses/categories",
-      "/api/governance/month-close",
-    ];
+    else if (tab === "settings") {
+      // Settings now loads each directory section on demand. Prefetch only the
+      // small core settings payload so opening Settings stays fast without
+      // eagerly downloading admins, categories, or financial history.
+      paths = ["/api/settings"];
+    }
   } else {
     if (tab === "history" && memberId) paths = [`/api/members/${memberId}/statement`];
     else if (tab === "fund") paths = [`/api/reports/public-summary?month=${month}`];
