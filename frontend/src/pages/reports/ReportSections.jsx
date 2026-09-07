@@ -31,10 +31,6 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
 
   return <>
     <div className="finance-section-title sans">MONTHLY SUMMARY</div>
-    <div className="report-balance-hero sans">
-      <div><small>Closing balance</small><strong>MVR {fmt(summary.fundBalance)}</strong><span>{monthLabel}</span></div>
-      <Wallet size={22}/>
-    </div>
     <div className="report-cashflow-grid sans">
       <div><span className="positive"><TrendingUp size={14}/></span><small>Cash received</small><strong>MVR {fmt(Number(summary.memberIncome||0)+Number(summary.donationIncome||0))}</strong></div>
       <div><span className="negative"><TrendingDown size={14}/></span><small>Expenses</small><strong>MVR {fmt(summary.expenses)}</strong></div>
@@ -47,6 +43,10 @@ export function MonthlyReportSections({ summary, trend, monthLabel, setTab }) {
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, paddingTop: 9, borderTop: "1px solid var(--border)" }}>
         <span className="sans" style={{ fontWeight: 700 }}>Net cash change</span>
         <span style={{ fontWeight: 700, color: Number(summary.net) >= 0 ? "var(--success)" : "var(--danger)" }}>{Number(summary.net) >= 0 ? "+" : "−"} MVR {fmt(Math.abs(Number(summary.net || 0)))}</span>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, paddingTop: 9, marginTop: 8, borderTop: "1px solid var(--border)" }}>
+        <span className="sans" style={{ fontWeight: 700 }}>Closing balance</span>
+        <span style={{ fontWeight: 700 }}>MVR {fmt(summary.fundBalance)}</span>
       </div>
     </div>
 
