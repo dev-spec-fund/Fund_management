@@ -1585,3 +1585,134 @@ textarea:focus {
   .governance-title-row{gap:8px}
   .governance-primary-action{min-height:38px;height:38px}
 }
+
+
+/* v89 — Governance header aligned with Finance visual language.
+   Remove the oversized gradient hero treatment while preserving governance accents. */
+.governance-page-head{
+  position:relative;
+  overflow:visible;
+  padding:4px 0 0;
+  margin:0 0 14px;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+}
+.governance-page-head::after{display:none!important}
+
+.governance-title-row{
+  align-items:flex-start;
+  gap:10px;
+}
+.governance-title-row>div:first-child{
+  min-width:0;
+  flex:1 1 auto;
+}
+.governance-kicker{
+  margin-bottom:4px;
+  font-size:9px;
+  letter-spacing:.14em;
+}
+.governance-title{
+  font-size:20px;
+  line-height:1.08;
+  letter-spacing:-.02em;
+}
+.governance-subtitle{
+  max-width:430px;
+  margin-top:5px;
+  font-size:11px;
+  line-height:1.4;
+  color:var(--muted);
+}
+
+/* Match Finance's compact square/rounded action treatment instead of a large CTA. */
+.governance-primary-action{
+  flex:0 0 auto;
+  min-height:40px;
+  height:40px;
+  padding:0 12px;
+  border-radius:11px;
+  box-shadow:none;
+  font-size:11px;
+  white-space:nowrap;
+}
+.governance-primary-action svg{
+  width:15px;
+  height:15px;
+}
+
+/* KPI strip: compact Finance-style cards, no hero container. */
+.governance-kpi-grid{
+  margin-top:13px;
+  gap:7px;
+}
+.governance-kpi{
+  min-height:58px;
+  padding:9px 10px;
+  border-radius:12px;
+  background:var(--card);
+  border:1px solid var(--border);
+  box-shadow:none;
+}
+.governance-kpi-icon{
+  width:27px;
+  height:27px;
+  border-radius:9px;
+}
+.governance-kpi-icon svg{
+  width:14px;
+  height:14px;
+}
+.governance-kpi-label{
+  font-size:9px;
+  line-height:1.2;
+}
+.governance-kpi-value{
+  margin-top:2px;
+  font-size:14px;
+  line-height:1.15;
+}
+
+/* Keep Governance color identity through icons/actions, not a large tinted background. */
+.governance-page--projects .governance-kicker,
+.governance-page--projects .governance-kpi-icon{color:var(--project-accent,#5f8ee6)}
+.governance-page--meetings .governance-kicker,
+.governance-page--meetings .governance-kpi-icon{color:var(--meeting-accent,#8b63e6)}
+.governance-page--elections .governance-kicker,
+.governance-page--elections .governance-kpi-icon{color:var(--election-accent,#a85ad8)}
+
+@media(max-width:430px){
+  .governance-page-head{padding-top:2px;margin-bottom:12px}
+  .governance-title{font-size:19px}
+  .governance-subtitle{font-size:10.5px}
+  .governance-primary-action{
+    min-height:38px;
+    height:38px;
+    padding-inline:11px;
+    font-size:10.5px;
+  }
+  .governance-kpi-grid{
+    margin-top:12px;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:7px;
+  }
+  .governance-kpi{
+    min-height:56px;
+    padding:8px 9px;
+  }
+}
+
+/* Projects has four useful metrics; use a compact 2x2 grid on phone like Finance summaries. */
+@media(max-width:430px){
+  .governance-page--projects .governance-kpi-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+/* On very narrow Telegram widths keep the action readable without crowding the title. */
+@media(max-width:350px){
+  .governance-title-row{flex-wrap:wrap}
+  .governance-primary-action{margin-left:auto}
+}
