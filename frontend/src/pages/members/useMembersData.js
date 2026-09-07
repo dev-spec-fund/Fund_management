@@ -58,17 +58,28 @@ export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
 
   const outstandingByMember = new Map((monthlySummary?.member_statuses || monthlySummary?.outstanding?.members || []).map((member) => [Number(member.id), member]));
   const activeMembers = members.filter((member) => member.active);
+  const memberJoinMonth = (member) => String(member?.joined_at || member?.created_at || "").slice(0, 7);
+  const joinedAfterSelectedMonth = (member) => {
+    const joined = memberJoinMonth(member);
+    return /^\d{4}-\d{2}$/.test(joined) && joined > month;
+  };
   const memberStatus = (member) => {
     if (!member.active) return "inactive";
-    return outstandingByMember.get(Number(member.id))?.payment_status || "paid";
+    // Historical views must never mark a member as paid before they joined.
+    if (joinedAfterSelectedMonth(member)) return "not_applicable";
+    const row = outstandingByMember.get(Number(member.id));
+    if (row?.payment_status) return row.payment_status;
+    // Missing summary rows are safer treated as outstanding than incorrectly paid.
+    return "unpaid";
   };
   const counts = activeMembers.reduce((result, member) => {
     const status = memberStatus(member);
     result[status] = (result[status] || 0) + 1;
     return result;
   }, { paid: 0, partial: 0, unpaid: 0, exempt: 0, not_applicable: 0 });
-  const expected = Number(monthlySummary?.collection?.expected ?? activeMembers.reduce((sum, member) => sum + Number(member.monthly_amount || 0), 0));
-  const collected = Number(monthlySummary?.collection?.collected ?? Math.max(0, expected - Number(monthlySummary?.outstanding?.total || 0)));
+  const eligibleMembers = activeMembers.filter((member) => !joinedAfterSelectedMonth(member));
+  const expected = Number(monthlySummary?.collection?.expected ?? eligibleMembers.reduce((sum, member) => sum + Number(member.monthly_amount || 0), 0));
+  const collected = Number(monthlySummary?.collection?.collected ?? 0);
   const percent = expected > 0 ? Math.min(100, Math.round((collected / expected) * 100)) : 0;
   const filtered = members.filter((member) => {
     const query = search.trim().toLowerCase();
@@ -80,6 +91,7 @@ export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
     const matchesFilter = filter === "all" || (filter === "outstanding" ? status === "partial" || status === "unpaid" : status === filter);
     return matchesSearch && matchesFilter;
   });
+  useEffect(() => { setPage(1); }, [month, search, filter]);
   const memberPage = pageSlice(filtered, page);
 
   const shiftMonth = (delta) => {
