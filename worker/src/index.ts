@@ -15,7 +15,6 @@ import { projectsRoute } from "./routes/projects";
 import { electionsRoute } from "./routes/elections";
 import { consumeRateLimit, safeLogError } from "./ops";
 import { currentMonth, getBranding, getSetting } from "./db";
-import { paidForMonth } from "./allocations";
 import { contributionRateForMonth, contributionDueFromRate, firstMonthContributionRule } from "./contributionRates";
 
 const app = new Hono<AppEnv>();
@@ -156,13 +155,31 @@ app.post("/api/me/actions/:id/done", async (c) => {
 // to My Account without losing admin permissions.
 app.get("/api/me/dashboard", async (c) => {
   const user=c.get("telegramUser");
-  const member=await c.env.DB.prepare("SELECT id,member_code,name,phone,monthly_amount,active,joined_at,created_at,telegram_id FROM members WHERE telegram_id=? AND active=1 LIMIT 1").bind(String(user.id)).first<any>();
-  if(!member) return c.json({error:"Member account not linked"},404);
   const month=currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
-  const [paid,baseRate,exemption,pending,nextMeeting,openActions,currentExco,excoHistory]=await Promise.all([
-    paidForMonth(c.env,member.id,month),
-    contributionRateForMonth(c.env,member.id,month,Number(member.monthly_amount||0)),
-    c.env.DB.prepare("SELECT reason FROM exemptions WHERE member_id=? AND month=?").bind(member.id,month).first<any>(),
+  // Fetch the member plus current contribution state in one D1 round-trip.
+  // This replaces separate member, paid-total, rate and exemption queries on
+  // every Member Home visit while preserving the same allocation fallback.
+  const member=await c.env.DB.prepare(`
+    SELECT m.id,m.member_code,m.name,m.phone,m.monthly_amount,m.active,m.joined_at,m.created_at,m.telegram_id,
+      COALESCE((SELECT r.amount FROM member_contribution_rates r
+        WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?)
+        ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) current_rate,
+      COALESCE((SELECT SUM(amount) FROM (
+        SELECT ca.amount amount FROM contribution_allocations ca
+          JOIN contributions c ON c.id=ca.contribution_id
+          WHERE ca.member_id=m.id AND ca.month=? AND c.status='approved'
+        UNION ALL
+        SELECT c.amount amount FROM contributions c
+          WHERE c.member_id=m.id AND c.month=? AND c.status='approved'
+            AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
+      )),0) paid,
+      (SELECT e.reason FROM exemptions e WHERE e.member_id=m.id AND e.month=? LIMIT 1) exemption_reason
+    FROM members m
+    WHERE m.telegram_id=? AND m.active=1
+    LIMIT 1
+  `).bind(month,month,month,month,month,String(user.id)).first<any>();
+  if(!member) return c.json({error:"Member account not linked"},404);
+  const [pending,nextMeeting,openActions,currentExco,excoHistory,firstMonthRule]=await Promise.all([
     c.env.DB.prepare(`SELECT id,txn_id,amount,month,ref_number,status,submitted_at,bank_date FROM contributions WHERE member_id=? AND status='pending' ORDER BY submitted_at DESC LIMIT 5`).bind(member.id).all<any>(),
     c.env.DB.prepare(`SELECT m.id,m.title,m.meeting_date,m.meeting_time,m.venue,m.status,m.audience,r.response rsvp
       FROM meetings m LEFT JOIN meeting_rsvps r ON r.meeting_id=m.id AND r.member_id=?
@@ -176,13 +193,17 @@ app.get("/api/me/dashboard", async (c) => {
     c.env.DB.prepare(`SELECT x.role_title,x.term,x.started_at,e.title election_title FROM exco_role_assignments x
       JOIN elections e ON e.id=x.election_id WHERE x.member_id=? AND x.ended_at IS NULL ORDER BY x.id DESC LIMIT 1`).bind(member.id).first<any>(),
     c.env.DB.prepare(`SELECT x.role_title,x.term,x.started_at,x.ended_at,e.title election_title FROM exco_role_assignments x
-      JOIN elections e ON e.id=x.election_id WHERE x.member_id=? ORDER BY x.started_at DESC,x.id DESC`).bind(member.id).all<any>()
+      JOIN elections e ON e.id=x.election_id WHERE x.member_id=? ORDER BY x.started_at DESC,x.id DESC`).bind(member.id).all<any>(),
+    firstMonthContributionRule(c.env)
   ]);
-  const firstMonthRule=await firstMonthContributionRule(c.env);
-  const requiredAmount=contributionDueFromRate(Number(baseRate),member.joined_at||member.created_at,month,firstMonthRule);
-  const due=exemption?0:Math.max(0,requiredAmount-Number(paid));
-  const status=exemption?'exempt':requiredAmount<=0.004?'not_applicable':Number(paid)<=0?'unpaid':Number(paid)+0.005<requiredAmount?'partial':'paid';
-  return c.json({member:{...member,exco_role:currentExco?.role_title||null},month,contribution:{status,paid:Number(paid),due,monthly_amount:Number(baseRate),required_amount:requiredAmount,exemption_reason:exemption?.reason||null},pending_payments:pending.results,next_meeting:nextMeeting||null,open_actions:openActions.results,current_exco:currentExco||null,exco_history:excoHistory.results});
+  const baseRate=Number(member.current_rate||member.monthly_amount||0);
+  const paid=Number(member.paid||0);
+  const exemptionReason=member.exemption_reason||null;
+  const requiredAmount=contributionDueFromRate(baseRate,member.joined_at||member.created_at,month,firstMonthRule);
+  const due=exemptionReason?0:Math.max(0,requiredAmount-paid);
+  const status=exemptionReason?'exempt':requiredAmount<=0.004?'not_applicable':paid<=0?'unpaid':paid+0.005<requiredAmount?'partial':'paid';
+  const {current_rate:_currentRate,paid:_paid,exemption_reason:_exemptionReason,...memberPayload}=member;
+  return c.json({member:{...memberPayload,exco_role:currentExco?.role_title||null},month,contribution:{status,paid,due,monthly_amount:baseRate,required_amount:requiredAmount,exemption_reason:exemptionReason},pending_payments:pending.results,next_meeting:nextMeeting||null,open_actions:openActions.results,current_exco:currentExco||null,exco_history:excoHistory.results});
 });
 
 
@@ -192,32 +213,43 @@ app.get("/api/me/projects", async (c) => {
   if(!member) return c.json({error:"Member account not linked"},404);
   const showProjects=await getSetting(c.env,"show_projects_to_members");
   if(showProjects==="0") return c.json({enabled:false,projects:[]});
-  const projects=await c.env.DB.prepare(`SELECT p.id,p.project_code,p.name,p.description,p.budget,p.start_date,p.target_end_date,p.status,
-      m.name responsible_member_name,m.member_code responsible_member_code,
-      COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.project_id=p.id AND e.status='approved'),0) spent,
-      COALESCE((SELECT COUNT(*) FROM expenses e WHERE e.project_id=p.id AND e.status='approved'),0) expense_count,
-      COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donations_received,
-      COALESCE((SELECT COUNT(*) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_count
-    FROM projects p
-    LEFT JOIN members m ON m.id=p.responsible_member_id
-    WHERE p.status IN ('active','completed')
-    ORDER BY CASE p.status WHEN 'active' THEN 0 ELSE 1 END,p.start_date DESC,p.id DESC`).all<any>();
-  const result=[] as any[];
-  for(const project of projects.results){
-    const [expenses,donations]=await Promise.all([
-      c.env.DB.prepare(`SELECT e.id,e.txn_id,e.description,e.amount,e.expense_date,COALESCE(cat.name,'Project expense / Uncategorised') category
-        FROM expenses e LEFT JOIN expense_categories cat ON cat.id=e.category_id
-        WHERE e.project_id=? AND e.status='approved'
-        ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC LIMIT 100`).bind(project.id).all<any>(),
-      c.env.DB.prepare(`SELECT d.id,d.txn_id,d.amount,COALESCE(d.donation_date,date(d.created_at)) donation_date
+  const [projects,expenseRows,donationRows]=await Promise.all([
+    c.env.DB.prepare(`SELECT p.id,p.project_code,p.name,p.description,p.budget,p.start_date,p.target_end_date,p.status,
+        m.name responsible_member_name,m.member_code responsible_member_code,
+        COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.project_id=p.id AND e.status='approved'),0) spent,
+        COALESCE((SELECT COUNT(*) FROM expenses e WHERE e.project_id=p.id AND e.status='approved'),0) expense_count,
+        COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donations_received,
+        COALESCE((SELECT COUNT(*) FROM donations d WHERE d.project_id=p.id AND COALESCE(d.status,'active')='active'),0) donation_count
+      FROM projects p
+      LEFT JOIN members m ON m.id=p.responsible_member_id
+      WHERE p.status IN ('active','completed')
+      ORDER BY CASE p.status WHEN 'active' THEN 0 ELSE 1 END,p.start_date DESC,p.id DESC`).all<any>(),
+    c.env.DB.prepare(`SELECT * FROM (
+        SELECT e.project_id,e.id,e.txn_id,e.description,e.amount,e.expense_date,
+          COALESCE(cat.name,'Project expense / Uncategorised') category,
+          ROW_NUMBER() OVER(PARTITION BY e.project_id ORDER BY COALESCE(e.expense_date,e.created_at) DESC,e.id DESC) rn
+        FROM expenses e
+        LEFT JOIN expense_categories cat ON cat.id=e.category_id
+        JOIN projects p ON p.id=e.project_id AND p.status IN ('active','completed')
+        WHERE e.status='approved'
+      ) WHERE rn<=100 ORDER BY project_id,rn`).all<any>(),
+    c.env.DB.prepare(`SELECT * FROM (
+        SELECT d.project_id,d.id,d.txn_id,d.amount,COALESCE(d.donation_date,date(d.created_at)) donation_date,
+          ROW_NUMBER() OVER(PARTITION BY d.project_id ORDER BY COALESCE(d.donation_date,d.created_at) DESC,d.id DESC) rn
         FROM donations d
-        WHERE d.project_id=? AND COALESCE(d.status,'active')='active'
-        ORDER BY COALESCE(d.donation_date,d.created_at) DESC,d.id DESC LIMIT 100`).bind(project.id).all<any>()
-    ]);
+        JOIN projects p ON p.id=d.project_id AND p.status IN ('active','completed')
+        WHERE COALESCE(d.status,'active')='active'
+      ) WHERE rn<=100 ORDER BY project_id,rn`).all<any>()
+  ]);
+  const expensesByProject=new Map<number,any[]>();
+  for(const row of expenseRows.results as any[]){ const list=expensesByProject.get(Number(row.project_id))||[]; const {project_id:_,rn:__,...item}=row; list.push(item); expensesByProject.set(Number(row.project_id),list); }
+  const donationsByProject=new Map<number,any[]>();
+  for(const row of donationRows.results as any[]){ const list=donationsByProject.get(Number(row.project_id))||[]; const {project_id:_,rn:__,...item}=row; list.push(item); donationsByProject.set(Number(row.project_id),list); }
+  const result=(projects.results as any[]).map((project:any)=>{
     const spent=Number(project.spent||0); const budget=project.budget==null?null:Number(project.budget);
     const donationsReceived=Number(project.donations_received||0);
-    result.push({...project,spent,donations_received:donationsReceived,remaining_budget:budget==null?null:budget-spent,budget_used_pct:budget==null?null:(spent/Math.max(budget,0.01))*100,expenses:expenses.results,donations:donations.results});
-  }
+    return {...project,spent,donations_received:donationsReceived,remaining_budget:budget==null?null:budget-spent,budget_used_pct:budget==null?null:(spent/Math.max(budget,0.01))*100,expenses:expensesByProject.get(Number(project.id))||[],donations:donationsByProject.get(Number(project.id))||[]};
+  });
   return c.json({enabled:true,projects:result});
 });
 

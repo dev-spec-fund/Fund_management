@@ -14,10 +14,21 @@ const yearRx=/^\d{4}$/;
 const n=(v:any)=>Number(v||0);
 
 async function monthMetrics(env:any, month:string){
-  const [cash,donations,expenses,memberRows,pendingContrib,openErrors,lastBackup]=await Promise.all([
-    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM contributions WHERE status='approved' AND month=?").bind(month).first<any>(),
-    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month=?").bind(month).first<any>(),
-    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month=?").bind(month).first<any>(),
+  // Keep the member-status dataset separate, but collapse the scalar finance /
+  // health totals into one D1 statement. This cuts the month-close dashboard
+  // from many independent round-trips to three primary reads.
+  const [totals,memberRows,firstMonthRule]=await Promise.all([
+    env.DB.prepare(`SELECT
+      (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved' AND month=?) contribution_cash,
+      (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month=?) donation_cash,
+      (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month=?) expense_cash,
+      (SELECT COUNT(*) FROM contributions WHERE status='pending' AND month=?) pending_contributions,
+      (SELECT COUNT(*) FROM error_log WHERE status='open') open_errors,
+      (SELECT created_at FROM audit_log WHERE action='database_backup_exported' ORDER BY created_at DESC LIMIT 1) last_backup_at,
+      ((SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved' AND month < ?) +
+       (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month < ?) -
+       (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month < ?)) opening_balance
+    `).bind(month,month,month,month,month,month,month).first<any>(),
     env.DB.prepare(`
       WITH paid AS (
         SELECT member_id,SUM(amount) paid FROM (
@@ -29,35 +40,30 @@ async function monthMetrics(env:any, month:string){
       SELECT m.id,m.joined_at,m.created_at,
         COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) monthly_amount,
         COALESCE(p.paid,0) paid,
-        CASE WHEN ex.member_id IS NOT NULL THEN 'exempt' WHEN COALESCE(p.paid,0)<=0 THEN 'unpaid' WHEN COALESCE(p.paid,0)<COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) THEN 'partial' ELSE 'paid' END payment_status
-      FROM members m LEFT JOIN paid p ON p.member_id=m.id LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=?
+        CASE WHEN ex.member_id IS NOT NULL THEN 1 ELSE 0 END exempt
+      FROM members m
+      LEFT JOIN paid p ON p.member_id=m.id
+      LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=?
       WHERE m.active=1 AND substr(COALESCE(m.joined_at,m.created_at),1,7)<=?
-    `).bind(month,month,month,month,month,month,month,month).all<any>(),
-    env.DB.prepare("SELECT COUNT(*) count FROM contributions WHERE status='pending' AND month=?").bind(month).first<any>(),
-    env.DB.prepare("SELECT COUNT(*) count FROM error_log WHERE status='open'").first<any>(),
-    env.DB.prepare("SELECT created_at FROM audit_log WHERE action='database_backup_exported' ORDER BY created_at DESC LIMIT 1").first<any>()
+    `).bind(month,month,month,month,month,month).all<any>(),
+    firstMonthContributionRule(env)
   ]);
-  const before=await env.DB.prepare(`SELECT
-    (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved' AND month < ?) +
-    (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month < ?) -
-    (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month < ?) balance`).bind(month,month,month).first<any>();
-  const firstMonthRule=await firstMonthContributionRule(env);
   const rows=(memberRows.results as any[]).map((r:any)=>{
     const required=contributionDueFromRate(n(r.monthly_amount),r.joined_at||r.created_at,month,firstMonthRule);
     const paid=n(r.paid);
-    const payment_status=String(r.payment_status)==='exempt'?'exempt':required<=0.004?'not_applicable':paid<=0?'unpaid':paid+0.005<required?'partial':'paid';
+    const payment_status=Number(r.exempt)?'exempt':required<=0.004?'not_applicable':paid<=0?'unpaid':paid+0.005<required?'partial':'paid';
     return {...r,monthly_amount:required,payment_status};
   });
   const totalDue=rows.reduce((s:number,r:any)=>s+(r.payment_status==='exempt'||r.payment_status==='not_applicable'?0:n(r.monthly_amount)),0);
   const totalCollected=rows.reduce((s:number,r:any)=>s+(r.payment_status==='exempt'||r.payment_status==='not_applicable'?0:Math.min(n(r.paid),n(r.monthly_amount))),0);
   const counts=(status:string)=>rows.filter((r:any)=>r.payment_status===status).length;
-  const contributionCash=n(cash?.total), donationCash=n(donations?.total), expenseCash=n(expenses?.total), opening=n(before?.balance);
+  const contributionCash=n(totals?.contribution_cash), donationCash=n(totals?.donation_cash), expenseCash=n(totals?.expense_cash), opening=n(totals?.opening_balance);
   return {
     month,opening_balance:opening,contribution_cash:contributionCash,donation_cash:donationCash,expenses:expenseCash,
     closing_balance:opening+contributionCash+donationCash-expenseCash,total_due:totalDue,total_collected:totalCollected,
     collection_rate:totalDue>0?Math.min(100,(totalCollected/totalDue)*100):100,active_members:rows.length,
     paid_members:counts('paid'),partial_members:counts('partial'),unpaid_members:counts('unpaid'),exempt_members:counts('exempt'),
-    pending_contributions:n(pendingContrib?.count),open_errors:n(openErrors?.count),last_backup_at:lastBackup?.created_at||null
+    pending_contributions:n(totals?.pending_contributions),open_errors:n(totals?.open_errors),last_backup_at:totals?.last_backup_at||null
   };
 }
 
