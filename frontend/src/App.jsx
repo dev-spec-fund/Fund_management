@@ -418,7 +418,7 @@ export default function App() {
   };
 
   const renderPage = (page) => {
-    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} adminMonth={adminView ? adminMonth : null} />;
+    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} adminMonth={adminView ? adminMonth : null} branding={me?.branding} />;
     if (page === "pending" && canFinance) return <PendingApprovals />;
     if (page === "members" && adminView) return <Members isAdmin admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} />;
     if (page === "history" && memberView) return <MyHistory member={me.member} />;
@@ -441,7 +441,7 @@ export default function App() {
   };
 
   return (
-    <Shell branding={me?.branding}>
+    <Shell>
       {isAdmin && isMember && (
         <div className="app-mode-wrap">
           <div className="sans app-mode-switch">
@@ -572,14 +572,9 @@ function modeButton(active) {
   return { border: "none", borderRadius: 9, padding: "9px 10px", background: active ? "var(--primary)" : "transparent", color: active ? "var(--on-primary)" : "var(--muted)", fontSize: 12, fontWeight: 600, cursor: "pointer" };
 }
 
-function Shell({ children, branding }) {
+function Shell({ children }) {
   return (
-    <div className="app-scroll-root" style={{ fontFamily: "'Fraunces','Georgia',serif", background: "var(--bg)", color: "var(--text)" }}>
-      <div className="theme-brand-surface app-brand-header" style={{ flexShrink: 0, background: "var(--primary)", color: "var(--on-primary)" }}>
-        <div className="sans app-brand-kicker">{branding?.short_name || "Fund"}</div>
-        <div className="app-brand-title">Ledger</div>
-        {branding?.fund_name && <div className="sans app-brand-name">{branding.fund_name}</div>}
-      </div>
+    <div className="app-scroll-root app-shell--telegram" style={{ fontFamily: "'Fraunces','Georgia',serif", background: "var(--bg)", color: "var(--text)" }}>
       {children}
     </div>
   );

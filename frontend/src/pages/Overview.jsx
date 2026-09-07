@@ -17,7 +17,7 @@ import { currentMonthValue } from "../utils/date";
 import { fmt } from "../utils/format";
 import { ActivityRow } from "../components/ActivityRow";
 
-export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null, member = null, adminMonth = null }) {
+export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null, member = null, adminMonth = null, branding = null }) {
   const [summary, setSummary] = useState(bootstrapSummary);
   const [activity, setActivity] = useState([]);
   const [pendingCount, setPendingCount] = useState(null);
@@ -139,7 +139,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
     <div className={`overview-page${isAdmin ? " overview-page--admin" : " overview-page--member"}`}>
       <header className="overview-page-head">
         <div>
-          <div className="sans overview-eyebrow">{isAdmin ? "ADMIN OVERVIEW" : "KYS FUND"}</div>
+          <div className="sans overview-eyebrow">{isAdmin ? "ADMIN OVERVIEW" : (branding?.short_name || "FUND")}</div>
           <h1 className="overview-page-title">{isAdmin ? "Fund overview" : `Welcome, ${firstName}`}</h1>
           <p className="sans overview-page-subtitle">{isAdmin ? `${monthLabel} performance and items needing attention.` : "Your contribution, fund position and community updates in one place."}</p>
         </div>
