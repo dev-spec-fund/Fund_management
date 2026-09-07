@@ -16,13 +16,27 @@ import {
 export function registerElectionOverviewRoutes(electionsRoute: Hono<AppEnv>) {
 electionsRoute.get("/", async c=>{
   await ensureOperationalSchema(c.env);
-  await processElectionLifecycle(c.env);
+  // Election lifecycle is already processed by the hourly scheduled job. Keeping
+  // it out of this read route prevents Telegram page navigation from waiting on
+  // reminder checks, readiness work, notifications, and lifecycle writes.
   const member=await memberForUser(c);
   const admin=c.get("admin");
+  const memberId=member?.id||null;
   const rows=await c.env.DB.prepare(`SELECT e.*,
-    (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id) eligible,
-    (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id AND v.voted_at IS NOT NULL) voted,
-    (SELECT COUNT(*) FROM election_runoffs r WHERE r.election_id=e.id AND r.status='open') open_runoffs
+    (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id) eligible_count,
+    (SELECT COUNT(*) FROM election_voters v WHERE v.election_id=e.id AND v.voted_at IS NOT NULL) voted_count,
+    (SELECT COUNT(*) FROM election_runoffs r WHERE r.election_id=e.id AND r.status='open') open_runoffs,
+    CASE WHEN ? IS NULL THEN 0 ELSE EXISTS(
+      SELECT 1 FROM election_voters mv WHERE mv.election_id=e.id AND mv.member_id=?
+    ) END my_eligible,
+    CASE WHEN ? IS NULL THEN 0 ELSE EXISTS(
+      SELECT 1 FROM election_voters mv WHERE mv.election_id=e.id AND mv.member_id=? AND mv.voted_at IS NOT NULL
+    ) END my_voted,
+    CASE WHEN ? IS NULL THEN NULL ELSE (
+      SELECT ma.status FROM election_applications ma
+      WHERE ma.election_id=e.id AND ma.member_id=?
+      ORDER BY ma.submitted_at DESC,ma.id DESC LIMIT 1
+    ) END my_application_status
     FROM elections e
     WHERE ? IS NOT NULL
        OR e.status<>'draft'
@@ -33,23 +47,19 @@ electionsRoute.get("/", async c=>{
       WHEN e.status='closed' THEN 2
       WHEN e.status='draft' THEN 3
       ELSE 4 END,e.id DESC`)
-    .bind(admin?.id||null).all<any>();
-  const result=[];
-  for(const e of rows.results as any[]){
-    let my_vote=false,eligible=false,my_application_status:string|null=null;
-    if(member){
-      const [v,app]=await Promise.all([
-        c.env.DB.prepare("SELECT voted_at FROM election_voters WHERE election_id=? AND member_id=?").bind(e.id,member.id).first<any>(),
-        c.env.DB.prepare(`SELECT status FROM election_applications WHERE election_id=? AND member_id=?
-          ORDER BY submitted_at DESC,id DESC LIMIT 1`).bind(e.id,member.id).first<any>()
-      ]);
-      eligible=!!v; my_vote=!!v?.voted_at; my_application_status=app?.status||null;
-    }
-    const eligibleCount=Number(e.eligible||0),votedCount=Number(e.voted||0);
-    result.push({...e,eligible,my_vote,my_application_status,
-      application_phase:applicationPhase(e,localNow(c.env.FUND_TIMEZONE || "Indian/Maldives")),
-      turnout:{eligible:eligibleCount,voted:votedCount,percent:eligibleCount>0?Math.round((votedCount/eligibleCount)*1000)/10:0}});
-  }
+    .bind(memberId,memberId,memberId,memberId,memberId,memberId,admin?.id||null).all<any>();
+  const now=localNow(c.env.FUND_TIMEZONE || "Indian/Maldives");
+  const result=(rows.results as any[]).map((e:any)=>{
+    const eligibleCount=Number(e.eligible_count||0),votedCount=Number(e.voted_count||0);
+    const {eligible_count,voted_count,my_eligible,my_voted,...base}=e;
+    return {...base,
+      eligible:!!my_eligible,
+      my_vote:!!my_voted,
+      my_application_status:e.my_application_status||null,
+      application_phase:applicationPhase(e,now),
+      turnout:{eligible:eligibleCount,voted:votedCount,percent:eligibleCount>0?Math.round((votedCount/eligibleCount)*1000)/10:0}
+    };
+  });
   return c.json(result);
 });
 

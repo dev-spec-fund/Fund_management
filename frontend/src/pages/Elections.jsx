@@ -39,25 +39,28 @@ export default function Elections(){
     api.elections.currentHandover().then(setHandover),
     api.elections.excoWorkboard().then(setWorkboard),
   ]).catch(e=>setMessage(e.message));
-  const load=()=>Promise.all([loadPrimary(),loadSecondary()]);
+  const scheduleSecondary=(delay=0)=>new Promise((resolve)=>{
+    const run=()=>{
+      const warm=()=>loadSecondary().finally(resolve);
+      if(typeof window.requestIdleCallback==="function")window.requestIdleCallback(warm,{timeout:2600});
+      else setTimeout(warm,700);
+    };
+    if(delay>0)setTimeout(run,delay);else run();
+  });
+  const load=async()=>{
+    await loadPrimary();
+    // Keep governance dashboard/archive/EXCO work off the critical election-list path.
+    scheduleSecondary(250);
+  };
   const open=async(row)=>{setSelected(row);setReadiness(null);setMessage("");try{setDetail(await api.elections.get(row.id))}catch(e){setMessage(e.message)}};
   useEffect(()=>{
     let cancelled=false;
-    loadPrimary();
-    const warmSecondary=()=>{ if(!cancelled) loadSecondary(); };
-    let idleHandle=null;
-    let timer=null;
-    if(typeof window.requestIdleCallback==="function") idleHandle=window.requestIdleCallback(warmSecondary,{timeout:2200});
-    else timer=setTimeout(warmSecondary,1200);
-    return()=>{
-      cancelled=true;
-      if(idleHandle!==null)window.cancelIdleCallback?.(idleHandle);
-      if(timer!==null)clearTimeout(timer);
-    };
+    loadPrimary().finally(()=>{if(!cancelled)scheduleSecondary(180)});
+    return()=>{cancelled=true};
   },[]);
   useEffect(()=>onDataChangeDebounced(({paths=[]})=>{
     if(paths.some((path)=>path?.startsWith("/api/elections")))load();
-  },140),[]);
+  },180),[]);
   useEffect(()=>{
     if(!detail?.id||detail.status!=="draft"){setReadiness(null);return;}
     let active=true;
@@ -246,7 +249,7 @@ export default function Elections(){
     pending:Number(dashboard?.totals?.pending_applications||0),
     certified:(rows||[]).filter(e=>!!e.certified_at).length
   }),[rows,dashboard]);
-  if(rows===null)return <LoadingState>Loading elections…</LoadingState>;
+  const initialLoading=rows===null;
   return <>
     <div className="governance-page-head election-theme">
       <div className="governance-title-row">
@@ -326,7 +329,7 @@ export default function Elections(){
         <strong>{e.turnout?.voted||0}/{e.turnout?.eligible||0}<small>{Number(e.turnout?.percent||0).toFixed(1)}%</small></strong>
       </button>)}
     </section>}
-    {!rows.length?<EmptyState>No elections yet.</EmptyState>:rows.map(e=><button key={e.id} type="button" onClick={()=>open(e)} className="expense-row" style={{alignItems:"center"}}>
+    {initialLoading?<LoadingState>Loading elections…</LoadingState>:!rows.length?<EmptyState>No elections yet.</EmptyState>:rows.map(e=><button key={e.id} type="button" onClick={()=>open(e)} className="expense-row" style={{alignItems:"center"}}>
       <div style={{minWidth:0,flex:1,textAlign:"left"}}><div className="sans" style={{fontSize:13,fontWeight:750}}>{e.title}</div><div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:3}}>{e.term||"No term"} · {String(e.status).toUpperCase()}</div></div>
       <div className="sans" style={{textAlign:"right"}}><b>{e.turnout?.voted||0}/{e.turnout?.eligible||0}</b><div style={{fontSize:9,color:"var(--soft)"}}>{Number(e.turnout?.percent||0).toFixed(1)}% turnout</div></div>
     </button>)}

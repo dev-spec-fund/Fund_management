@@ -297,7 +297,7 @@ export async function prefetchTabData({ tab, adminView = false, canFinance = fal
     else if (tab === "expenses" && canFinance) paths = ["/api/expenses", "/api/expenses/categories", "/api/projects"];
     else if (tab === "projects" && canFinance) paths = ["/api/projects", "/api/members"];
     else if (tab === "meetings") paths = ["/api/admin/meetings"];
-    else if (tab === "elections") paths = ["/api/elections","/api/members"];
+    else if (tab === "elections") paths = ["/api/elections"];
     else if (tab === "reports") paths = [
       `/api/reports/summary?month=${month}`,
       `/api/reports/trend?month=${month}`,
