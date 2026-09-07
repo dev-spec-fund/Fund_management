@@ -32,7 +32,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   }, [bootstrapSummary]);
 
   const refreshOverview = () => {
-    const summaryRequest = isAdmin ? api.reports.summary(adminMonth || undefined) : api.reports.publicSummary();
+    const summaryRequest = isAdmin ? api.reports.overview(adminMonth || undefined) : api.reports.publicSummary();
     summaryRequest.then((data) => {
       setSummary(data);
       setActivity(normalizeRecentActivity(data?.recentActivity));
@@ -50,7 +50,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
   useEffect(() => {
     if (isAdmin) {
-      const path = adminMonth ? `/api/reports/summary?month=${adminMonth}` : "/api/reports/summary";
+      const path = adminMonth ? `/api/reports/overview?month=${adminMonth}` : "/api/reports/overview";
       setSummary(api.peekCached(path) || null);
     }
     refreshOverview();

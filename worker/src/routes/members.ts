@@ -10,6 +10,79 @@ import { downloadTelegramFile, sendPhoto } from "../telegram";
 
 export const membersRoute = new Hono<AppEnv>();
 
+// Lightweight Members page payload. This replaces the old frontend pattern of
+// requesting /api/members plus the much heavier /api/reports/summary endpoint.
+// One route keeps page entry to a single network round trip and only reads the
+// fields needed by the Members screen.
+membersRoute.get("/overview", requireAdmin, async (c) => {
+  const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
+  if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
+  const admin=c.get("admin")!;
+  const viewer=admin.role==='viewer';
+  const [rows,firstMonthRule] = await Promise.all([
+    c.env.DB.prepare(`
+      WITH paid AS (
+        SELECT member_id,SUM(amount) paid FROM (
+          SELECT ca.member_id,ca.amount
+          FROM contribution_allocations ca
+          JOIN contributions c ON c.id=ca.contribution_id
+          WHERE ca.month=? AND c.status='approved'
+          UNION ALL
+          SELECT c.member_id,c.amount
+          FROM contributions c
+          WHERE c.month=? AND c.status='approved'
+            AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
+        ) GROUP BY member_id
+      )
+      SELECT m.id,m.member_code,m.name,${viewer?'NULL':'m.phone'} phone,m.monthly_amount,m.active,m.joined_at,m.created_at,
+             ${viewer?'NULL':'m.telegram_id'} telegram_id,
+             (SELECT x.role_title FROM exco_role_assignments x WHERE x.member_id=m.id AND x.ended_at IS NULL ORDER BY x.id DESC LIMIT 1) exco_role,
+             COALESCE((SELECT r.amount FROM member_contribution_rates r
+               WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?)
+               ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) effective_rate,
+             COALESCE(p.paid,0) paid,
+             CASE WHEN ex.member_id IS NOT NULL THEN 1 ELSE 0 END exempt,
+             ex.reason exemption_reason
+      FROM members m
+      LEFT JOIN paid p ON p.member_id=m.id
+      LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=?
+      ORDER BY m.name
+    `).bind(month,month,month,month,month).all<any>(),
+    firstMonthContributionRule(c.env),
+  ]);
+
+  const members=(rows.results as any[]).map((row:any)=>({
+    id:row.id,member_code:row.member_code,name:row.name,phone:row.phone,
+    monthly_amount:row.monthly_amount,active:row.active,joined_at:row.joined_at,
+    created_at:row.created_at,telegram_id:row.telegram_id,exco_role:row.exco_role,
+  }));
+  const memberStatuses=(rows.results as any[]).filter((row:any)=>Number(row.active)===1).map((row:any)=>{
+    const required=contributionDueFromRate(Number(row.effective_rate||row.monthly_amount||0),row.joined_at||row.created_at,month,firstMonthRule);
+    const paid=Number(row.paid||0);
+    const payment_status=Number(row.exempt)?'exempt':required<=0.004?'not_applicable':paid<=0?'unpaid':paid+0.005<required?'partial':'paid';
+    return {
+      id:row.id,member_code:row.member_code,name:row.name,joined_at:row.joined_at,created_at:row.created_at,
+      monthly_amount:required,paid,exempt:Number(row.exempt||0),exemption_reason:row.exemption_reason||null,payment_status,
+    };
+  });
+  const expected=memberStatuses.reduce((sum:number,row:any)=>sum+(row.payment_status==='exempt'?0:Number(row.monthly_amount||0)),0);
+  const collected=memberStatuses.reduce((sum:number,row:any)=>sum+(row.payment_status==='exempt'?0:Math.min(Number(row.paid||0),Number(row.monthly_amount||0))),0);
+  const outstandingMembers=memberStatuses.filter((row:any)=>row.payment_status==='unpaid'||row.payment_status==='partial');
+  return c.json({
+    month,
+    members,
+    monthly_summary:{
+      month,
+      member_statuses:memberStatuses,
+      outstanding:{
+        total:outstandingMembers.reduce((sum:number,row:any)=>sum+Math.max(0,Number(row.monthly_amount||0)-Number(row.paid||0)),0),
+        members:outstandingMembers,
+      },
+      collection:{expected,collected,outstanding_members:outstandingMembers.length},
+    },
+  });
+});
+
 membersRoute.get("/", requireAdmin, async (c) => {
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!;

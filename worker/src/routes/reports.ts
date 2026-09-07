@@ -329,6 +329,102 @@ reportsRoute.get("/public-expenses", requireMemberOrAdmin, async (c) => {
   return c.json({month,category,total,expenses:rows.results});
 });
 
+/** Lightweight dashboard summary. Avoids loading report-only expense/project detail rows. */
+reportsRoute.get("/overview", requireAdmin, async (c) => {
+  const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
+  if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
+
+  const [totals,outstanding,recentActivity,firstMonthRule] = await Promise.all([
+    c.env.DB.prepare(`SELECT
+      (SELECT COALESCE(SUM(amount),0) FROM contributions WHERE status='approved' AND month=?) contribution_total,
+      (SELECT COALESCE(SUM(amount),0) FROM (
+        SELECT ca.amount amount FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id WHERE ca.month=? AND c.status='approved'
+        UNION ALL
+        SELECT c.amount amount FROM contributions c WHERE c.month=? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations ca2 WHERE ca2.contribution_id=c.id)
+      )) allocated_total,
+      (SELECT COALESCE(SUM(ca.amount),0) FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id WHERE ca.month=? AND c.status='approved' AND c.month<>ca.month) advance_allocated,
+      (SELECT COALESCE(SUM(amount),0) FROM donations WHERE COALESCE(status,'active')='active' AND transaction_month=?) donation_total,
+      (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE COALESCE(status,'approved')='approved' AND transaction_month=?) expense_total
+    `).bind(month,month,month,month,month,month).first<any>(),
+    c.env.DB.prepare(`
+      WITH paid AS (
+        SELECT member_id,SUM(amount) paid FROM (
+          SELECT ca.member_id,ca.amount FROM contribution_allocations ca JOIN contributions c ON c.id=ca.contribution_id WHERE ca.month=? AND c.status='approved'
+          UNION ALL
+          SELECT c.member_id,c.amount FROM contributions c WHERE c.month=? AND c.status='approved' AND NOT EXISTS(SELECT 1 FROM contribution_allocations x WHERE x.contribution_id=c.id)
+        ) GROUP BY member_id
+      )
+      SELECT m.id,m.member_code,m.name,m.joined_at,m.created_at,
+        COALESCE((SELECT r.amount FROM member_contribution_rates r WHERE r.member_id=m.id AND r.effective_from<=? AND (r.effective_to IS NULL OR r.effective_to>=?) ORDER BY r.effective_from DESC LIMIT 1),m.monthly_amount) monthly_amount,
+        COALESCE(p.paid,0) paid,
+        CASE WHEN ex.member_id IS NOT NULL THEN 1 ELSE 0 END exempt
+      FROM members m LEFT JOIN paid p ON p.member_id=m.id LEFT JOIN exemptions ex ON ex.member_id=m.id AND ex.month=? WHERE m.active=1
+    `).bind(month,month,month,month,month).all<any>(),
+    c.env.DB.prepare(`
+      SELECT * FROM (
+        SELECT c.id,c.txn_id,m.name who,m.member_code,'contribution' kind,c.amount,c.month,NULL ref,
+               COALESCE(c.approved_at,c.submitted_at) at,a.name by_name,NULL category
+        FROM contributions c JOIN members m ON m.id=c.member_id LEFT JOIN admins a ON a.id=c.approved_by
+        WHERE c.status='approved'
+        UNION ALL
+        SELECT e.id,e.txn_id,e.description,NULL,'expense',e.amount,e.transaction_month,NULL,
+               COALESCE(e.approved_at,e.created_at),a.name,cat.name
+        FROM expenses e LEFT JOIN admins a ON a.id=e.logged_by LEFT JOIN expense_categories cat ON cat.id=e.category_id
+        WHERE COALESCE(e.status,'approved')='approved'
+        UNION ALL
+        SELECT d.id,d.txn_id,d.donor_name,NULL,'donation',d.amount,d.transaction_month,NULL,
+               COALESCE(d.donation_date,d.created_at),a.name,NULL
+        FROM donations d LEFT JOIN admins a ON a.id=d.logged_by
+        WHERE COALESCE(d.status,'active')='active'
+      ) ORDER BY at DESC LIMIT 4
+    `).all<any>(),
+    firstMonthContributionRule(c.env),
+  ]);
+
+  const allocatedContributions=num(totals?.allocated_total);
+  const advanceAllocated=num(totals?.advance_allocated);
+  const liveMonthNet=num(totals?.contribution_total)+num(totals?.donation_total)-num(totals?.expense_total);
+  const balances=await balanceChainForMonth(c.env,month,liveMonthNet);
+  const snapshotFinancials=balances.snapshot?{
+    contributions:num(balances.snapshot.contribution_cash),donations:num(balances.snapshot.donation_cash),expenses:num(balances.snapshot.expenses),
+  }:null;
+  const reportContributions=snapshotFinancials?.contributions ?? num(totals?.contribution_total);
+  const reportDonations=snapshotFinancials?.donations ?? num(totals?.donation_total);
+  const reportExpenses=snapshotFinancials?.expenses ?? num(totals?.expense_total);
+  const adjustedOutstanding=(outstanding.results as any[]).map((row:any)=>{
+    const required=contributionDueFromRate(Number(row.monthly_amount||0),row.joined_at||row.created_at,month,firstMonthRule);
+    const paid=Number(row.paid||0);
+    const payment_status=Number(row.exempt)?'exempt':required<=0.004?'not_applicable':paid<=0?'unpaid':paid+0.005<required?'partial':'paid';
+    return {...row,monthly_amount:required,payment_status};
+  });
+  const outstandingMembers=adjustedOutstanding.filter((m:any)=>m.payment_status==='unpaid'||m.payment_status==='partial');
+  return c.json({
+    month,
+    memberIncome:reportContributions,
+    allocatedContributions,
+    advanceAllocated,
+    donationIncome:reportDonations,
+    expenses:reportExpenses,
+    net:reportContributions+reportDonations-reportExpenses,
+    outstanding:{
+      total:outstandingMembers.reduce((sum:number,m:any)=>sum+Math.max(0,Number(m.monthly_amount)-Number(m.paid||0)),0),
+      members:outstandingMembers,
+    },
+    collection:{
+      expected:adjustedOutstanding.reduce((sum:number,m:any)=>sum+(m.payment_status==='exempt'?0:Number(m.monthly_amount||0)),0),
+      collected:adjustedOutstanding.reduce((sum:number,m:any)=>sum+(m.payment_status==='exempt'?0:Math.min(Number(m.paid||0),Number(m.monthly_amount||0))),0),
+      outstanding_members:outstandingMembers.length,
+    },
+    openingBalance:balances.openingBalance,
+    closingBalance:balances.closingBalance,
+    fundBalance:balances.closingBalance,
+    balanceSource:balances.balanceSource,
+    closed:Boolean(balances.snapshot),
+    closedAt:balances.snapshot?.closed_at||null,
+    recentActivity:recentActivity.results,
+  });
+});
+
 /** Summary for a given month (YYYY-MM), or 'ytd' for year-to-date. */
 reportsRoute.get("/summary", requireAdmin, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");

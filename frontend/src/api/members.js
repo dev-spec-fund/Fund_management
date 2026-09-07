@@ -15,6 +15,7 @@ export const memberApi = {
 
 export const membersApi = {
   list: () => request("/api/members"),
+  overview: (month) => request(`/api/members/overview${month ? `?month=${month}` : ""}`),
   create: (data) => request("/api/members", { method: "POST", body: JSON.stringify(data) }),
   update: (id, data) => request(`/api/members/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   statement: (id) => request(`/api/members/${id}/statement`),

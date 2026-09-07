@@ -231,14 +231,21 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Start the safe overview request immediately so it overlaps the /me round-trip.
-    api.reports.publicSummary().then(setBootstrapSummary).catch(() => {});
+    // Resolve identity first. The old bootstrap always started public-summary,
+    // which meant admins paid for a large member-safe report they never used,
+    // then immediately fetched a second admin summary. The selected lightweight
+    // overview request is now started once the mode is known; Overview reuses
+    // the same in-flight GET through the API client's request deduplication.
     api.me()
       .then((data) => {
         setMe(data);
         setMode(data?.admin ? "admin" : "member");
+        const initialSummary = data?.admin
+          ? api.reports.overview(adminMonth)
+          : api.reports.publicSummary();
+        initialSummary.then(setBootstrapSummary).catch(() => {});
         if (import.meta.env.DEV && bootStartedAt.current && typeof performance !== "undefined") {
-          if (import.meta.env.DEV) console.debug(`[Fund perf] app identity ready: ${Math.round(performance.now() - bootStartedAt.current)}ms`);
+          console.debug(`[Fund perf] app identity ready: ${Math.round(performance.now() - bootStartedAt.current)}ms`);
         }
       })
       .catch((e) => setError(e.message))

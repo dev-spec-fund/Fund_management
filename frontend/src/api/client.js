@@ -26,7 +26,8 @@ const PERF_DEBUG = Boolean(import.meta.env.DEV);
 function cacheTtlFor(path) {
   if (path === "/api/me" || path === "/api/branding" || path === "/api/settings") return 60_000;
   if (path.startsWith("/api/members/") && path.endsWith("/statement")) return 20_000;
-  if (path.startsWith("/api/reports/summary") || path.startsWith("/api/reports/public-summary")) return 15_000;
+  if (path.startsWith("/api/reports/summary") || path.startsWith("/api/reports/overview") || path.startsWith("/api/reports/public-summary")) return 15_000;
+  if (path.startsWith("/api/members/overview")) return 15_000;
   if (path.startsWith("/api/reports/trend") || path.startsWith("/api/governance/annual/") || path.startsWith("/api/governance/analytics/")) return 30_000;
   if (path.startsWith("/api/projects") || path === "/api/me/projects") return 25_000;
   if (path.startsWith("/api/elections/exco/") || path === "/api/elections/archive") return 60_000;
@@ -286,7 +287,7 @@ export async function prefetchTabData({ tab, adminView = false, canFinance = fal
   let paths = [];
 
   if (adminView) {
-    if (tab === "members") paths = ["/api/members"];
+    if (tab === "members") paths = [`/api/members/overview?month=${month}`];
     else if (tab === "pending" && canFinance) paths = ["/api/admin/pending"];
     else if (tab === "activity") paths = ["/api/reports/activity"];
     else if (tab === "expenses" && canFinance) paths = ["/api/expenses", "/api/expenses/categories", "/api/projects"];

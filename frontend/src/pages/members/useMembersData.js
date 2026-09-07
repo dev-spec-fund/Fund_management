@@ -4,11 +4,12 @@ import { pageSlice } from "../../components/Pagination";
 
 export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
   const month=sharedMonth;
-  const summaryPath=`/api/reports/summary?month=${month}`;
-  const [members, setMembers] = useState(()=>api.peekCached("/api/members")||[]);
-  const [monthlySummary, setMonthlySummary] = useState(()=>api.peekCached(summaryPath));
-  const monthSummaryCache=useRef(new Map());
-  if(monthlySummary && !monthSummaryCache.current.has(month)) monthSummaryCache.current.set(month,monthlySummary);
+  const overviewPath=`/api/members/overview?month=${month}`;
+  const initialOverview=api.peekCached(overviewPath);
+  const [members, setMembers] = useState(()=>initialOverview?.members || api.peekCached("/api/members") || []);
+  const [monthlySummary, setMonthlySummary] = useState(()=>initialOverview?.monthly_summary || null);
+  const monthOverviewCache=useRef(new Map());
+  if(initialOverview && !monthOverviewCache.current.has(month)) monthOverviewCache.current.set(month,initialOverview);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [defaultMonthly, setDefaultMonthly] = useState(250);
@@ -19,22 +20,21 @@ export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
     onMonthChange?.(value);
   };
 
-  const loadMembers = () => api.members.list().then(setMembers).catch(() => {});
-  const loadSummary = () => api.reports.summary(month).then(value=>{monthSummaryCache.current.set(month,value);setMonthlySummary(value);}).catch(() => {});
-  const load = () => Promise.all([loadMembers(), loadSummary()]);
+  const applyOverview = (data) => {
+    if(!data)return null;
+    monthOverviewCache.current.set(month,data);
+    if(Array.isArray(data.members)) setMembers(data.members);
+    setMonthlySummary(data.monthly_summary || null);
+    return data;
+  };
+  const loadOverview = () => api.members.overview(month).then(applyOverview).catch(() => null);
+  const load = loadOverview;
 
   useEffect(() => {
     if (!isAdmin) return;
-    const cachedMembers=api.peekCached("/api/members");
-    if(cachedMembers) setMembers(cachedMembers);
-    loadMembers();
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    const cachedSummary=api.peekCached(summaryPath) || monthSummaryCache.current.get(month);
-    setMonthlySummary(cachedSummary || null);
-    loadSummary();
+    const cached=api.peekCached(overviewPath) || monthOverviewCache.current.get(month);
+    if(cached) applyOverview(cached);
+    loadOverview();
   }, [isAdmin, month]);
 
   useEffect(() => onDataChangeDebounced(({ paths = [] }) => {
@@ -45,8 +45,7 @@ export default function useMembersData(isAdmin, sharedMonth, onMonthChange) {
       path?.startsWith("/api/donations") ||
       path?.startsWith("/api/expenses")
     );
-    if (membersChanged) loadMembers();
-    if (membersChanged || financeChanged) loadSummary();
+    if (membersChanged || financeChanged) loadOverview();
   }, 120), [isAdmin, month]);
 
   const ensureDefaultMonthly = async () => {
