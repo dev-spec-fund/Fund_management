@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { RefreshCw, CircleCheck, AlertTriangle, ArrowRight, ReceiptText, UserPlus, ScanLine } from "lucide-react";
 import { api, onDataChange } from "../api";
 import { Modal, Field } from "../components/FormControls";
 import { LoadingState, ErrorState, SectionTitle, cardStyle, compactBtn, approveBtn, rejectBtn } from "../components/Shared";
 import { formatLocalDateTime } from "../utils/date";
 import { fmt } from "../utils/format";
+import { AlertTriangle, CheckCircle2, ChevronRight, RefreshCw } from "lucide-react";
 
 export default function PendingApprovals() {
   const [data, setData] = useState(()=>api.peekCached("/api/admin/pending"));
@@ -57,7 +57,12 @@ export default function PendingApprovals() {
   };
 
   const openReview = (contribution) => {
-    setEditing({...contribution});
+    setEditing({...contribution,_original:{
+      amount:String(contribution.amount ?? ""),
+      ref_number:String(contribution.ref_number ?? ""),
+      bank_date:String(contribution.bank_date ?? ""),
+      month:String(contribution.month ?? ""),
+    }});
     setLargeSlip(false);
     loadReviewSlip(contribution);
   };
@@ -95,7 +100,14 @@ export default function PendingApprovals() {
     const id=editing.id;
     const result=await act(async()=>{
       if(decision==="approved"){
-        await api.admin.correctContribution(id,{amount:editing.amount,ref_number:editing.ref_number||null,bank_date:editing.bank_date||null,month:editing.month});
+        const original=editing._original || {};
+        const changed =
+          String(editing.amount ?? "") !== String(original.amount ?? "") ||
+          String(editing.ref_number ?? "") !== String(original.ref_number ?? "") ||
+          String(editing.bank_date ?? "") !== String(original.bank_date ?? "") ||
+          String(editing.month ?? "") !== String(original.month ?? "");
+        // Avoid the extra PATCH request when OCR details were already correct.
+        if(changed) await api.admin.correctContribution(id,{amount:editing.amount,ref_number:editing.ref_number||null,bank_date:editing.bank_date||null,month:editing.month});
         return api.admin.approveContribution(id);
       }
       return api.admin.rejectContribution(id,"Rejected by admin");
@@ -121,19 +133,15 @@ export default function PendingApprovals() {
     : "";
 
   return <>
-    <div className="finance-page-head sans">
+    <div className="sans" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
       <div>
-        <div className="finance-page-kicker">FINANCE</div>
-        <div className="finance-page-title">Pending approvals</div>
-        <div className="finance-page-subtitle">Review new members and contribution slips in one inbox.</div>
+        <div style={{fontWeight:700,fontSize:15}}>Pending approvals</div>
+        {count > 0
+          ? <div style={{fontSize:11,color:"var(--soft)",marginTop:2}}>{count} item{count===1?"":"s"} waiting</div>
+          : <div style={{fontSize:11,color:"var(--success)",marginTop:2}}>All caught up</div>}
       </div>
-      <button type="button" onClick={load} aria-label="Refresh approvals" className="finance-icon-button"><RefreshCw size={17} /></button>
-    </div>
-
-    <div className="finance-kpi-grid finance-kpi-grid-3 sans">
-      <div className="finance-kpi-card tone-amber"><span><ScanLine size={16} /></span><div><small>Waiting</small><strong>{count}</strong></div></div>
-      <div className="finance-kpi-card tone-green"><span><ReceiptText size={16} /></span><div><small>Slips</small><strong>{contributions.length}</strong></div></div>
-      <div className="finance-kpi-card tone-blue"><span><UserPlus size={16} /></span><div><small>Members</small><strong>{registrations.length}</strong></div></div>
+      <button type="button" onClick={load} aria-label="Refresh approvals"
+        style={{...compactBtn,width:36,minWidth:36,height:36,minHeight:36,padding:0}}><RefreshCw size={16}/></button>
     </div>
 
     {error && <div className="sans" style={{background:"var(--danger-bg)",color:"var(--danger)",padding:10,borderRadius:10,fontSize:12,marginBottom:12}}>{error}</div>}
@@ -141,7 +149,7 @@ export default function PendingApprovals() {
 
     {count === 0 ? (
       <div style={{background:"var(--card)",border:"1px solid var(--success-bg-3)",borderRadius:16,padding:"34px 20px",textAlign:"center",marginTop:18}}>
-        <div className="finance-empty-icon"><CircleCheck size={25} /></div>
+        <div style={{width:48,height:48,borderRadius:24,background:"var(--success-bg)",color:"var(--success)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><CheckCircle2 size={24}/></div>
         <div className="sans" style={{fontSize:16,fontWeight:700,color:"var(--primary-text)"}}>All caught up</div>
         <div className="sans" style={{fontSize:12,color:"var(--soft)",lineHeight:1.55,marginTop:6}}>
           No approvals are waiting.<br/>New submissions will appear here.
@@ -174,8 +182,8 @@ export default function PendingApprovals() {
                 Ref: <b style={{color:c.ref_number?"var(--primary-text)":"var(--danger)"}}>{c.ref_number || "Not detected"}</b>
               </div>
               {c.created_at && <div className="sans" style={{fontSize:10,color:"var(--soft-4)",marginTop:4}}>Submitted {formatLocalDateTime(c.created_at)}</div>}
-              <div className={`sans finance-review-state ${needsReview ? "warning" : "success"}`}>
-                {needsReview ? <><AlertTriangle size={12} /> OCR needs review</> : <><CircleCheck size={12} /> OCR details detected</>}
+              <div className="sans" style={{fontSize:10,color:needsReview?"var(--warning-3)":"var(--success)",marginTop:7,fontWeight:600}}>
+                <span style={{display:"inline-flex",alignItems:"center",gap:5}}>{needsReview ? <><AlertTriangle size={12}/> OCR needs review</> : <><CheckCircle2 size={12}/> OCR details detected</>}</span>
               </div>
               {Array.isArray(c.allocation_preview) && c.allocation_preview.length>0 && (
                 <div className="sans" style={{background:"var(--bg)",borderRadius:9,padding:9,marginTop:8,fontSize:10,color:"var(--neutral-text-2)"}}>
@@ -187,7 +195,7 @@ export default function PendingApprovals() {
               )}
               <button type="button" onClick={() => openReview(c)}
                 style={{...approveBtn,width:"100%",marginTop:10,padding:"9px 10px"}}>
-                Review <ArrowRight size={14} />
+                <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5}}>Review <ChevronRight size={14}/></span>
               </button>
             </div>;
           })}

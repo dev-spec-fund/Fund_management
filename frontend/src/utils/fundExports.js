@@ -10,7 +10,7 @@ export async function exportFundPdf({ month, monthLabel, summary }) {
   const expected = Number(summary.collection?.expected || 0);
   const collected = Number(summary.collection?.collected || 0);
   const rate = expected > 0 ? Math.min(100, collected / expected * 100) : 100;
-  const closed = Boolean(summary?.closed || summary?.isClosed || summary?.snapshot);
+  const closed = summary?.closed === true || (summary?.closed == null && Boolean(summary?.isClosed || summary?.snapshot));
 
   reportMeta(ctx, [
     { label: "Reporting period", value: monthLabel || month },

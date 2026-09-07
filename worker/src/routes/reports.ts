@@ -469,6 +469,8 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
     closingBalance: balances.closingBalance,
     fundBalance: balances.closingBalance, // backward-compatible alias
     balanceSource: balances.balanceSource,
+    closed: Boolean(balances.snapshot),
+    closedAt: balances.snapshot?.closed_at || null,
     recentActivity: recentActivity.results,
   });
 });

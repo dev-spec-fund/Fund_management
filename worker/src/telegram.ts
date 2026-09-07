@@ -316,11 +316,14 @@ export async function ocrSlip(
       extractedText = String(first?.data || first?.text || "");
       const parsed = parseSlipText(extractedText);
       const date = cleanDate(extractedText);
-      if (parsed.amount !== null && parsed.ref) {
+      // Fast path for contribution slips: once the amount is readable, do not
+      // spend another AI round-trip trying to recover a missing reference.
+      // Missing/uncertain references are intentionally sent to admin review.
+      if (parsed.amount !== null) {
         return {
           amount: parsed.amount,
           ref: parsed.ref,
-          raw: JSON.stringify({ amount: parsed.amount, ref: parsed.ref, date }),
+          raw: JSON.stringify({ amount: parsed.amount, ref: parsed.ref, date, review_ref: !parsed.ref }),
         };
       }
     } else {
@@ -330,19 +333,12 @@ export async function ocrSlip(
     await safeLogError(env, "ocr.convert", err);
   }
 
-  // Second path: direct vision extraction. Thinking is disabled so the model spends
-  // its output budget on the requested fields rather than internal reasoning.
-  let firstVision: { amount: number | null; ref: string | null; date: string | null } = {
-    amount: null,
-    ref: null,
-    date: null,
-  };
-
-  const runVision = async (retry = false) => {
-    const prompt = retry
-      ? "Read the bank transfer slip image carefully. Reply with ONLY three lines: AMOUNT=<MVR transferred amount or null>\\nREF=<bank transaction/reference number or null>\\nDATE=<transaction date as YYYY-MM-DD or null>. REF must be the value visibly labelled Reference/Ref/Transaction ID/Transaction Reference. Never use an account, card, phone, customer, beneficiary, date, time, amount, receipt number or transfer-to/from number as REF. If the reference label/value is unclear, return null."
-      : "Read this Maldivian bank transfer slip. Extract the transferred MVR amount, BANK reference number, and transaction date. Reply ONLY as AMOUNT=<number|null>\\nREF=<string|null>\\nDATE=<YYYY-MM-DD|null>. REF must come from a visible Reference/Ref/Transaction ID/Transaction Reference label. Never use account/card/phone/customer/beneficiary/date/time/amount/receipt values as REF. If uncertain, return null.";
-
+  // Second path: direct vision extraction, used only when the fast text OCR
+  // could not determine the amount. Run it once; repeated vision retries made
+  // bot replies noticeably slower and a missing reference can be corrected by
+  // an admin during approval.
+  try {
+    const prompt = "Read this Maldivian bank transfer slip. Extract the transferred MVR amount, BANK reference number, and transaction date. Reply ONLY as AMOUNT=<number|null>\nREF=<string|null>\nDATE=<YYYY-MM-DD|null>. REF must come from a visible Reference/Ref/Transaction ID/Transaction Reference label. Never use account/card/phone/customer/beneficiary/date/time/amount/receipt values as REF. If uncertain, return null.";
     const result: any = await (env.AI as any).run(
       "@cf/google/gemma-4-26b-a4b-it" as any,
       {
@@ -357,30 +353,14 @@ export async function ocrSlip(
       } as any
     );
 
-    const text = modelText(result);
-    return { parsed: parseModelJson(text), raw: text };
-  };
-
-  try {
-    const one = await runVision(false);
-    firstVision = one.parsed;
-    if (one.parsed.amount !== null && one.parsed.ref && !referenceLooksSuspicious(one.parsed.ref)) {
-      return {
-        amount: one.parsed.amount,
-        ref: one.parsed.ref,
-        raw: JSON.stringify(one.parsed),
-      };
-    }
-
-    const two = await runVision(true);
+    const parsed = parseModelJson(modelText(result));
+    const local = parseSlipText(extractedText);
     const merged = {
-      amount: two.parsed.amount ?? firstVision.amount,
-      ref: (!referenceLooksSuspicious(two.parsed.ref) ? two.parsed.ref : null) ?? (!referenceLooksSuspicious(firstVision.ref) ? firstVision.ref : null),
-      date: two.parsed.date ?? firstVision.date,
+      amount: parsed.amount ?? local.amount,
+      ref: !referenceLooksSuspicious(parsed.ref) ? parsed.ref : local.ref,
+      date: parsed.date ?? cleanDate(extractedText),
     };
-    if (merged.amount !== null || merged.ref) {
-      return { amount: merged.amount, ref: merged.ref, raw: JSON.stringify(merged) };
-    }
+    return { amount: merged.amount, ref: merged.ref, raw: JSON.stringify(merged) };
   } catch (err) {
     await safeLogError(env, "ocr.vision", err);
   }
