@@ -226,7 +226,8 @@ async function processApplicationReminders(env:any){
     const deliveries=await Promise.allSettled((members.results as any[]).map((member:any)=>sendMessage(env,member.telegram_id,
       `⏳ <b>${brand.fund_name} · ${election.title}</b>\n\nCandidate applications close within 24 hours. All registered active members can apply for an available EXCO position in the Mini App.`
     )));
-    const result={sent:deliveries.filter((r:any)=>r.status==="fulfilled").length,failed:deliveries.filter((r:any)=>r.status==="rejected").length};
+    const sent=deliveries.filter((r:any)=>r.status==="fulfilled" && r.value?.ok===true).length;
+    const result={sent,failed:deliveries.length-sent};
     await finishClaimedElectionNotification(env,notificationId,result);
     await env.DB.prepare("UPDATE elections SET application_reminder_sent_at=datetime('now') WHERE id=? AND application_reminder_sent_at IS NULL").bind(election.id).run();
     await auditEntity(env,null,"election_application_reminder_sent","election",election.id,null,{election_id:election.id,sent:result.sent,failed:result.failed});

@@ -53,7 +53,7 @@ electionsRoute.post("/:id/applications", async c=>{
           `📝 <b>${esc(election.title)}</b>\n\nYour application for <b>${esc(position.title)}</b> was submitted and is awaiting review.`
         )]);
         await recordElectionNotification(c.env,id,`application_submitted_member:${applicationId}`,"applicant",
-          {sent:r.filter((x:any)=>x.status==="fulfilled").length,failed:r.filter((x:any)=>x.status==="rejected").length},
+          {sent:r.filter((x:any)=>x.status==="fulfilled" && x.value?.ok===true).length,failed:r.filter((x:any)=>!(x.status==="fulfilled" && x.value?.ok===true)).length},
           {application_id:applicationId,position_id:positionId});
       })());
     }
@@ -150,7 +150,7 @@ electionsRoute.post("/:id/applications/:applicationId/review", requireElectionsM
     c.executionCtx.waitUntil((async()=>{
       const sent=await Promise.allSettled([sendMessage(c.env,applicant.telegram_id,note)]);
       await recordElectionNotification(c.env,id,`application_${decision}:${applicationId}`,"applicant",
-        {sent:sent.filter((x:any)=>x.status==="fulfilled").length,failed:sent.filter((x:any)=>x.status==="rejected").length},
+        {sent:sent.filter((x:any)=>x.status==="fulfilled" && x.value?.ok===true).length,failed:sent.filter((x:any)=>!(x.status==="fulfilled" && x.value?.ok===true)).length},
         {application_id:applicationId,decision},admin.id);
     })());
   }

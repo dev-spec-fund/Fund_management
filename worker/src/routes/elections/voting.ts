@@ -62,7 +62,8 @@ electionsRoute.post("/:id/runoffs", requireElectionsManage, async c=>{
   const runoffDeliveries=await Promise.allSettled((voters.results as any[]).map((m:any)=>sendMessage(c.env,m.telegram_id,
     `🗳 <b>${brand.fund_name} · Runoff Vote</b>\n\nA runoff is now open for <b>${position?.title||"EXCO position"}</b> in ${election.title}. Open the Mini App to vote.`
   )));
-  const runoffDelivery={sent:runoffDeliveries.filter((r:any)=>r.status==="fulfilled").length,failed:runoffDeliveries.filter((r:any)=>r.status==="rejected").length};
+  const runoffSent=runoffDeliveries.filter((r:any)=>r.status==="fulfilled" && r.value?.ok===true).length;
+  const runoffDelivery={sent:runoffSent,failed:runoffDeliveries.length-runoffSent};
   await recordElectionNotification(c.env,id,`runoff_opened:${runoffId}`,"runoff_voters",runoffDelivery,{runoff_id:runoffId,position_id:positionId,round_no:tie.round_no},admin.id);
   return c.json({ok:true,runoff_id:runoffId,...await electionDetail(c.env,id)});
 });
@@ -149,7 +150,8 @@ electionsRoute.post("/:id/certify", requireElectionsCertify, async c=>{
   const roleDeliveries=await Promise.allSettled((electedMembers.results as any[]).filter((m:any)=>m.telegram_id).map((m:any)=>sendMessage(c.env,m.telegram_id,
     `🎉 <b>${brand.fund_name} · EXCO</b>\n\nCongratulations ${m.name}. You have been officially assigned as <b>${m.role_title}</b> after certification of ${after.title}.`
   )));
-  const roleDelivery={sent:roleDeliveries.filter((r:any)=>r.status==="fulfilled").length,failed:roleDeliveries.filter((r:any)=>r.status==="rejected").length};
+  const roleSent=roleDeliveries.filter((r:any)=>r.status==="fulfilled" && r.value?.ok===true).length;
+  const roleDelivery={sent:roleSent,failed:roleDeliveries.length-roleSent};
   await recordElectionNotification(c.env,id,"elected_roles_assigned","elected_members",roleDelivery,{roles:elected.length},admin.id);
   return c.json({...await electionDetail(c.env,id),results:calculated.results,unresolved_ties:[],assigned_roles:elected});
 });

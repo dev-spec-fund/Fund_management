@@ -1947,3 +1947,15 @@ test('production request paths do not mutate D1 schema at runtime', () => {
     assert.doesNotMatch(src, /CREATE\s+(?:TABLE|INDEX)|ALTER\s+TABLE/i, `${rel} contains runtime DDL`);
   }
 });
+
+test('notification delivery accounting treats Telegram API null responses as failures', () => {
+  const telegram = fs.readFileSync(path.join(root,'src/telegram.ts'),'utf8');
+  const support = fs.readFileSync(path.join(root,'src/botSupport.ts'),'utf8');
+  const pending = fs.readFileSync(path.join(root,'src/routes/admin/pending.ts'),'utf8');
+  const electionCore = fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8');
+  assert.match(telegram, /response\?\.ok === true/);
+  assert.match(telegram, /Telegram did not confirm sendMessage/);
+  assert.match(support, /r\.status==="fulfilled" && r\.value\?\.ok===true/);
+  assert.match(pending, /sendInBatches\(c\.env,messages,6\)/);
+  assert.match(electionCore, /r\.status==="fulfilled" && r\.value\?\.ok===true/);
+});

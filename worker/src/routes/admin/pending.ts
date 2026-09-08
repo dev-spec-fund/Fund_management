@@ -4,7 +4,7 @@ import { requireApprovalsManage } from "../../auth";
 import { auditEntity, contributionDuplicateKey, duplicateSlip, ensureOperationalSchema, normalizeName, normalizePhone, requireOpenMonth, requireOpenContributionMonths, safeLogError, findDuplicateMembers } from "../../ops";
 import { currentMonth, currentDate, getSetting, getBranding, generateMemberCode } from "../../db";
 import { ensureInitialContributionRate, contributionDueFromRate, firstMonthContributionRule } from "../../contributionRates";
-import { sendMessage } from "../../telegram";
+import { sendInBatches, sendMessage } from "../../telegram";
 import { approveWithAllocations, allocationReceipt, buildAllocationPlan, allocatedPaidSql } from "../../allocations";
 import { syncContributionReviewMessages } from "../../contributionReviewMessages";
 import { money, validDate, validMonth, boundedText } from "../../validation";
@@ -195,18 +195,20 @@ route.post('/payment-reminders', requireApprovalsManage, async c => {
     .filter((m:any)=>!Number(m.exempt) && m.due>0.005);
 
   const reminderBrand=await getBranding(c.env);
-  let sent=0, unlinked=0, failed=0;
-  const results=await Promise.all(dueMembers.map(async (m:any)=>{
-    if(!m.telegram_id){unlinked++;return;}
+  const unlinked=dueMembers.filter((m:any)=>!m.telegram_id).length;
+  const messages=dueMembers.filter((m:any)=>m.telegram_id).map((m:any)=>{
     const status=m.paid>0?'partially paid':'unpaid';
-    try{
-      await sendMessage(c.env,m.telegram_id,
-        `🔔 <b>${reminderBrand.fund_name} · Payment reminder</b>\n\n${month} is ${status}.\nPaid: <b>MVR ${m.paid.toFixed(2)}</b>\nRemaining: <b>MVR ${m.due.toFixed(2)}</b>\n\nPlease send your bank slip photo to the bot after payment.`
-      );
-      sent++;
-    }catch(e){failed++;await safeLogError(c.env,'manual.payment_reminder',e,{member_id:m.id,month});}
-  }));
-  void results;
+    return {
+      chatId:m.telegram_id,
+      text:`🔔 <b>${reminderBrand.fund_name} · Payment reminder</b>\n\n${month} is ${status}.\nPaid: <b>MVR ${m.paid.toFixed(2)}</b>\nRemaining: <b>MVR ${m.due.toFixed(2)}</b>\n\nPlease send your bank slip photo to the bot after payment.`,
+      context:{member_id:m.id,month}
+    };
+  });
+  const delivery=await sendInBatches(c.env,messages,6);
+  for(const failure of delivery.failures){
+    await safeLogError(c.env,'manual.payment_reminder',failure.error,failure.message.context);
+  }
+  const sent=delivery.sent, failed=delivery.failed;
 
   await auditEntity(c.env,admin.id,'payment_reminders_sent','month',month,null,{
     member_id:memberId,

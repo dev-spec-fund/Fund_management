@@ -184,7 +184,8 @@ electionsRoute.post("/:id/open", requireElectionsManage, async c=>{
     WHERE v.election_id=? AND m.telegram_id IS NOT NULL`).bind(id).all<any>();
   const deliveryResults=await Promise.allSettled(members.results.map((m:any)=>sendMessage(c.env,m.telegram_id,
     `🗳 <b>${branding.fund_name} · ${election.title}</b>\n\nVoting is now open. Open the Mini App to cast your secret ballot.`)));
-  const delivery={sent:deliveryResults.filter((r:any)=>r.status==="fulfilled").length,failed:deliveryResults.filter((r:any)=>r.status==="rejected").length};
+  const sent=deliveryResults.filter((r:any)=>r.status==="fulfilled" && r.value?.ok===true).length;
+  const delivery={sent,failed:deliveryResults.length-sent};
   await recordElectionNotification(c.env,id,"voting_opened","eligible_voters",delivery,{automatic:false},admin.id);
   return c.json(await electionDetail(c.env,id));
 });

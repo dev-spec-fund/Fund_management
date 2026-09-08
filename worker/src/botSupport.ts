@@ -23,9 +23,10 @@ export function esc(value: unknown) {
 export async function notifyAdmins(env: Env, text: string, extra: Record<string, unknown> = {}) {
   const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
   const results=await Promise.allSettled(admins.results.map((a) => sendMessage(env, a.telegram_id, text, extra)));
+  const sent=results.filter((r:any)=>r.status==="fulfilled" && r.value?.ok===true).length;
   return {
-    sent:results.filter((r:any)=>r.status==="fulfilled").length,
-    failed:results.filter((r:any)=>r.status==="rejected").length,
+    sent,
+    failed:results.length-sent,
     recipients:admins.results.length
   };
 }

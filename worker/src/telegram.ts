@@ -400,8 +400,12 @@ export async function sendInBatches(
       const message = queue.shift();
       if (!message) break;
       try {
-        await sendMessage(env, message.chatId, message.text, message.extra || {});
-        sent++;
+        const response:any = await sendMessage(env, message.chatId, message.text, message.extra || {});
+        if (response?.ok === true) {
+          sent++;
+        } else {
+          failures.push({ message, error: new Error("Telegram did not confirm sendMessage") });
+        }
       } catch (error) {
         failures.push({ message, error });
       }
