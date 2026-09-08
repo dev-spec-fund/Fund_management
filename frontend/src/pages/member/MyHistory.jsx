@@ -104,7 +104,7 @@ export function MyHistory({ member }) {
       <span>Your approved contribution total does not fully match the monthly allocation records. The fund administrator should review this account.</span>
     </div>}
 
-    <div className="sans member-section-head"><b>MONTHLY VIEW</b><div style={{display:"flex",gap:6}}><button type="button" onClick={async()=>{const {exportStatementPdf}=await import("../../utils/exports");return exportStatementPdf(member)}} style={compactBtn}>PDF</button><button type="button" onClick={async()=>{const {exportStatementCsv}=await import("../../utils/exports");return exportStatementCsv(member)}} style={compactBtn}>CSV</button></div></div>
+    <div className="sans member-section-head"><b>MONTHLY VIEW</b><div style={{display:"flex",gap:6}}><button type="button" onClick={async()=>{const {exportStatementPdf}=await import("../../utils/statementExports");return exportStatementPdf(member)}} style={compactBtn}>PDF</button><button type="button" onClick={async()=>{const {exportStatementCsv}=await import("../../utils/statementExports");return exportStatementCsv(member)}} style={compactBtn}>CSV</button></div></div>
 
     {selectedStatus&&<div className="member-history-month-card sans">
       <div className="member-history-month-nav">

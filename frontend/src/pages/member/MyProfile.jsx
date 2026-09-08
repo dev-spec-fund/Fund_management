@@ -62,11 +62,11 @@ export function MyProfile({ member, setTab }) {
   const joined=formatJoinedDate(m.joined_at||m.created_at);
 
   const exportPdf=async()=>{
-    const {exportStatementPdf}=await import("../../utils/exports");
+    const {exportStatementPdf}=await import("../../utils/statementExports");
     return exportStatementPdf(m);
   };
   const exportCsv=async()=>{
-    const {exportStatementCsv}=await import("../../utils/exports");
+    const {exportStatementCsv}=await import("../../utils/statementExports");
     return exportStatementCsv(m);
   };
 

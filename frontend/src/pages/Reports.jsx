@@ -83,7 +83,7 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
       return `"${/^[=+\-@]/.test(safe) ? "'" + safe : safe}"`;
     }).join(",")).join("\n");
     const filename = `fund-report-${month}.csv`;
-    const { sendExportToTelegram } = await import("../utils/exports");
+    const { sendExportToTelegram } = await import("../utils/exportDelivery");
     await sendExportToTelegram(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename, `${monthLabel} · Fund report CSV`);
   };
 
@@ -95,7 +95,7 @@ export default function Reports({ setTab, admin, month: sharedMonth, onMonthChan
           {view === "reports" && canExportReports && <div className="report-action-menu-wrap">
             <button type="button" onClick={() => { setShowExport(!showExport); setShowAdd(false); }} className="report-header-action sans"><Download size={13} /> Export</button>
             {showExport && <div className="report-action-menu">
-              <button type="button" onClick={async () => { setShowExport(false); try { const { exportFundPdf } = await import("../utils/exports"); await exportFundPdf({ month, monthLabel, summary }); } catch (e) { setError(e.message || "Could not export PDF"); } }} className="sans"><FileText size={14} /><span><b>PDF report</b><small>Formatted monthly report</small></span></button>
+              <button type="button" onClick={async () => { setShowExport(false); try { const { exportFundPdf } = await import("../utils/fundExports"); await exportFundPdf({ month, monthLabel, summary }); } catch (e) { setError(e.message || "Could not export PDF"); } }} className="sans"><FileText size={14} /><span><b>PDF report</b><small>Formatted monthly report</small></span></button>
               <button type="button" onClick={async () => { setShowExport(false); try { await exportCsv(); } catch (e) { setError(e.message || "Could not export CSV"); } }} className="sans"><Table2 size={14} /><span><b>CSV data</b><small>Spreadsheet-friendly export</small></span></button>
             </div>}
           </div>}

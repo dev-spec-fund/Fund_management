@@ -193,7 +193,7 @@ export function MonthManagementSettingsSection(ctx) {
             <div key={x.month} className="sans" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,fontSize:11,padding:"7px 0",borderBottom:"1px solid var(--divider)"}}>
               <span><b>{x.month}</b><div style={{color:"var(--soft-2)",marginTop:2}}>by {x.closed_by_name || "admin"}</div></span>
               <div style={{display:"flex",gap:6}}>
-                <button type="button" onClick={async()=>{try{const summary=await api.reports.summary(x.month);const {exportFundPdf}=await import("../../utils/exports");await exportFundPdf({month:x.month,monthLabel:monthLabel(x.month),summary});}catch(e){setMessage(e.message||"Could not create closed-month PDF")}}} style={compactBtn}>PDF</button>
+                <button type="button" onClick={async()=>{try{const summary=await api.reports.summary(x.month);const {exportFundPdf}=await import("../../utils/fundExports");await exportFundPdf({month:x.month,monthLabel:monthLabel(x.month),summary});}catch(e){setMessage(e.message||"Could not create closed-month PDF")}}} style={compactBtn}>PDF</button>
                 {canCloseMonth&&<button type="button" onClick={()=>api.governance.reopenMonth(x.month).then(load).catch(e=>setMessage(e.message))} style={compactBtn}>Reopen</button>}
               </div>
             </div>

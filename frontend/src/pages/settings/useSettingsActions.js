@@ -1,6 +1,6 @@
 import { api } from "../../api";
 import { todayValue } from "../../utils/date";
-import { sendExportToTelegram } from "../../utils/exports";
+import { sendExportToTelegram } from "../../utils/exportDelivery";
 import { requestText } from "../../utils/systemDialogs";
 
 export function useSettingsActions({

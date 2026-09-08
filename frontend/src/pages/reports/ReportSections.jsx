@@ -135,7 +135,7 @@ export function AnnualAnalyticsSection({ annualYear, setAnnualYear, annual, anal
       <div className="annual-report-controls">
         <input className="sans" type="number" min="2000" max="2100" value={annualYear} onChange={(e) => setAnnualYear(e.target.value.slice(0, 4))} style={{ width: 90, border: "1px solid var(--border-strong)", borderRadius: 9, padding: "8px 10px", background: "var(--bg)" }} />
         <button type="button" disabled={annualBusy || annualYear.length !== 4} onClick={async () => { try { await loadAnnual(); } catch (e) { setError?.(e.message || "Could not load annual analytics"); } }} style={{ ...smallBtn("var(--primary-text)"), flex: 1 }}>{annualBusy ? "Loading…" : "Load annual report"}</button>
-        {annual && <button type="button" onClick={async () => { const { exportAnnualAgmPdf } = await import("../../utils/exports"); await exportAnnualAgmPdf(annual); }} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto" }}><Download size={13} /> AGM PDF</button>}
+        {annual && <button type="button" onClick={async () => { const { exportAnnualAgmPdf } = await import("../../utils/annualExports"); await exportAnnualAgmPdf(annual); }} style={{ ...smallBtn("var(--primary-text)"), flex: "0 0 auto" }}><Download size={13} /> AGM PDF</button>}
       </div>
       {annual && <>
         <div className="annual-report-totals">

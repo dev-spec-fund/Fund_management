@@ -182,11 +182,11 @@ export default function Elections({admin}){
   };
   const exportPdf=async()=>{
     if(!summary)return setMessage("Certified election summary is still loading.");
-    setBusy(true);try{const {exportElectionPdf}=await import("../utils/exports");await exportElectionPdf(summary);setMessage("Election PDF sent to your Telegram chat.")}catch(e){setMessage(e.message||"Could not export election PDF")}finally{setBusy(false)}
+    setBusy(true);try{const {exportElectionPdf}=await import("../utils/electionExports");await exportElectionPdf(summary);setMessage("Election PDF sent to your Telegram chat.")}catch(e){setMessage(e.message||"Could not export election PDF")}finally{setBusy(false)}
   };
   const exportCsv=async()=>{
     if(!summary)return setMessage("Certified election summary is still loading.");
-    setBusy(true);try{const {exportElectionCsv}=await import("../utils/exports");await exportElectionCsv(summary);setMessage("Election CSV sent to your Telegram chat.")}catch(e){setMessage(e.message||"Could not export election CSV")}finally{setBusy(false)}
+    setBusy(true);try{const {exportElectionCsv}=await import("../utils/electionExports");await exportElectionCsv(summary);setMessage("Election CSV sent to your Telegram chat.")}catch(e){setMessage(e.message||"Could not export election CSV")}finally{setBusy(false)}
   };
   const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addPosition=async()=>{if(!detail||!position.role_key)return;setBusy(true);try{const seats=Number(position.seats)||1;const d=await api.elections.addPosition(detail.id,{role_key:position.role_key,seats,max_selections:seats,min_selections:Math.max(0,Math.min(seats,Number(position.min_selections)||0))});setDetail(d);setPosition({role_key:"",seats:"1",min_selections:"1"})}catch(e){setMessage(e.message)}finally{setBusy(false)}};

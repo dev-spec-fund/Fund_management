@@ -283,8 +283,8 @@ export default function MemberPopup({ member, month, canEdit = false, canRemind,
             <Download size={14}/> Export statement
           </button>
           {showExport && <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:7}}>
-            <button type="button" className="sans" onClick={async () => { const { exportStatementPdf } = await import("../../utils/exports"); return exportStatementPdf(member); }} style={smallBtn()}>PDF</button>
-            <button type="button" className="sans" onClick={async () => { const { exportStatementCsv } = await import("../../utils/exports"); return exportStatementCsv(member); }} style={smallBtn()}>CSV</button>
+            <button type="button" className="sans" onClick={async () => { const { exportStatementPdf } = await import("../../utils/statementExports"); return exportStatementPdf(member); }} style={smallBtn()}>PDF</button>
+            <button type="button" className="sans" onClick={async () => { const { exportStatementCsv } = await import("../../utils/statementExports"); return exportStatementCsv(member); }} style={smallBtn()}>CSV</button>
           </div>}
 
           {member.active && canRemind && currentDue > 0 && <button type="button" className="sans" disabled={reminding} onClick={async()=>{
