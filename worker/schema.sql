@@ -573,6 +573,35 @@ CREATE TABLE IF NOT EXISTS election_positions (
   require_good_standing INTEGER,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS election_position_admin_roles (
+  position_id INTEGER PRIMARY KEY REFERENCES election_positions(id) ON DELETE CASCADE,
+  election_id INTEGER NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
+  role_kind TEXT NOT NULL CHECK(role_kind IN ('builtin','custom')),
+  builtin_role TEXT,
+  custom_role_id INTEGER REFERENCES admin_roles(id),
+  role_name_snapshot TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_election_position_admin_roles_election
+  ON election_position_admin_roles(election_id,position_id);
+
+CREATE TABLE IF NOT EXISTS election_admin_assignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  election_id INTEGER NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
+  position_id INTEGER NOT NULL REFERENCES election_positions(id),
+  member_id INTEGER NOT NULL REFERENCES members(id),
+  role_kind TEXT NOT NULL CHECK(role_kind IN ('builtin','custom')),
+  builtin_role TEXT,
+  custom_role_id INTEGER REFERENCES admin_roles(id),
+  role_name_snapshot TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','ended')),
+  activated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at TEXT,
+  UNIQUE(election_id,position_id,member_id)
+);
+CREATE INDEX IF NOT EXISTS idx_election_admin_assignments_status
+  ON election_admin_assignments(status,election_id);
+
 CREATE TABLE IF NOT EXISTS election_candidates (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   election_id INTEGER NOT NULL REFERENCES elections(id) ON DELETE CASCADE,

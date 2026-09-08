@@ -10,10 +10,15 @@ import {
   iso, text, localNow, applicationPhase, notifyEligible, recordElectionNotification, claimElectionNotification, finishClaimedElectionNotification,
   electionSetupLocked, synchronizeElectionApplications, evaluateElectionReadiness, processElectionLifecycle,
   calculateElectionResults, ensureExcoTerms, createExcoTermHandover, assignCertifiedExcoRoles,
-  buildElectionSummary, memberForUser, electionDeleteEligibility, electionDetail
+  buildElectionSummary, memberForUser, electionDeleteEligibility, electionDetail,
+  electionAdminRoleOptions, resolveElectionAdminRole, linkElectionPositionAdminRole
 } from "../../elections/core";
 
 export function registerElectionManagementRoutes(electionsRoute: Hono<AppEnv>) {
+electionsRoute.get("/setup/position-roles", requireElectionsManage, async c=>{
+  return c.json({roles:await electionAdminRoleOptions(c.env)});
+});
+
 electionsRoute.post("/", requireElectionsManage, async c=>{
   const admin=c.get("admin")!; const body=await c.req.json<any>();
   const title=text(body.title); if(!title)return c.json({error:"Election title is required"},400);
@@ -94,12 +99,19 @@ electionsRoute.post("/:id/positions", requireElectionsManage, async c=>{
   if(phase==="open"||phase==="closed")return c.json({error:"Election positions are locked once candidate applications have opened",code:"ELECTION_POSITIONS_LOCKED"},409);
   const existingApplication=await c.env.DB.prepare("SELECT 1 ok FROM election_applications WHERE election_id=? LIMIT 1").bind(id).first<any>();
   if(existingApplication)return c.json({error:"Election positions are locked after candidate applications have been submitted",code:"ELECTION_POSITIONS_LOCKED"},409);
-  const body=await c.req.json<any>(); const title=text(body.title); if(!title)return c.json({error:"Position title is required"},400);
+  const body=await c.req.json<any>();
+  const role=await resolveElectionAdminRole(c.env,body.role_key,body.title);
+  if(!role)return c.json({error:"Choose an active Admin Role for this election position. Super Admin cannot be an election position."},400);
+  const title=role.name;
+  const duplicate=await c.env.DB.prepare("SELECT id FROM election_positions WHERE election_id=? AND lower(trim(title))=lower(trim(?)) LIMIT 1").bind(id,title).first<any>();
+  if(duplicate)return c.json({error:`${title} is already included in this election`},409);
   const seats=Math.max(1,Math.min(20,Number(body.seats)||1)); const maxSelections=Math.max(1,Math.min(seats,Number(body.max_selections)||seats));
   const minSelections=Math.max(0,Math.min(maxSelections,Number(body.min_selections ?? 1)));
   const r=await c.env.DB.prepare("INSERT INTO election_positions(election_id,title,seats,max_selections,min_selections,sort_order) VALUES(?,?,?,?,?,?)")
     .bind(id,title,seats,maxSelections,minSelections,Number(body.sort_order)||0).run();
-  await auditEntity(c.env,admin.id,"election_position_added","election_position",Number(r.meta.last_row_id),null,{election_id:id,title,seats,max_selections:maxSelections,min_selections:minSelections});
+  const positionId=Number(r.meta.last_row_id);
+  await linkElectionPositionAdminRole(c.env,id,positionId,role);
+  await auditEntity(c.env,admin.id,"election_position_added","election_position",positionId,null,{election_id:id,title,seats,max_selections:maxSelections,min_selections:minSelections,admin_role:{kind:role.kind,builtin_role:role.builtin_role||null,custom_role_id:role.custom_role_id||null}});
   return c.json(await electionDetail(c.env,id),201);
 });
 

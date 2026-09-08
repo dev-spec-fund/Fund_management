@@ -10,7 +10,8 @@ import {
   iso, text, localNow, applicationPhase, notifyEligible, recordElectionNotification, claimElectionNotification, finishClaimedElectionNotification,
   electionSetupLocked, synchronizeElectionApplications, evaluateElectionReadiness, processElectionLifecycle,
   calculateElectionResults, ensureExcoTerms, createExcoTermHandover, assignCertifiedExcoRoles,
-  buildElectionSummary, memberForUser, electionDeleteEligibility, electionDetail
+  buildElectionSummary, memberForUser, electionDeleteEligibility, electionDetail,
+  ensureElectionAdminRoleSchema, activateElectionAdminRolesForHandover
 } from "../../elections/core";
 
 export function registerElectionExcoRoutes(electionsRoute: Hono<AppEnv>) {
@@ -52,8 +53,15 @@ electionsRoute.get("/exco/handover/current", requireElectionsManage, async c=>{
     JOIN elections e ON e.id=t.election_id WHERE t.id=?`).bind(handover.outgoing_term_id).first<any>():null;
   const items=handover?await c.env.DB.prepare(`SELECT i.*,a.name completed_by_name FROM exco_handover_items i
     LEFT JOIN admins a ON a.id=i.completed_by WHERE i.handover_id=? ORDER BY i.sort_order,i.id`).bind(handover.id).all<any>():{results:[]};
-  const incomingRoles=await c.env.DB.prepare(`SELECT x.role_title,m.name,m.member_code FROM exco_role_assignments x
-    JOIN members m ON m.id=x.member_id WHERE x.election_id=? ORDER BY x.position_id,x.id`).bind(term.election_id).all<any>();
+  await ensureElectionAdminRoleSchema(c.env);
+  const incomingRoles=await c.env.DB.prepare(`SELECT x.role_title,m.name,m.member_code,m.id member_id,
+      l.role_kind,l.builtin_role,l.custom_role_id,l.role_name_snapshot,
+      CASE WHEN ea.status='active' THEN 'active' WHEN l.position_id IS NOT NULL THEN 'pending' ELSE 'not_linked' END admin_access_status
+    FROM exco_role_assignments x
+    JOIN members m ON m.id=x.member_id
+    LEFT JOIN election_position_admin_roles l ON l.position_id=x.position_id
+    LEFT JOIN election_admin_assignments ea ON ea.election_id=x.election_id AND ea.position_id=x.position_id AND ea.member_id=x.member_id AND ea.status='active'
+    WHERE x.election_id=? ORDER BY x.position_id,x.id`).bind(term.election_id).all<any>();
   const outgoingRoles=outgoing?await c.env.DB.prepare(`SELECT x.role_title,m.name,m.member_code FROM exco_role_assignments x
     JOIN members m ON m.id=x.member_id WHERE x.election_id=? ORDER BY x.position_id,x.id`).bind(outgoing.election_id).all<any>():{results:[]};
   const complete=(items.results as any[]).filter((x:any)=>Number(x.completed)===1).length;
@@ -62,7 +70,9 @@ electionsRoute.get("/exco/handover/current", requireElectionsManage, async c=>{
     items:items.results,
     progress:{completed:complete,total:items.results.length,percent:items.results.length?Math.round((complete/items.results.length)*100):0},
     incoming_roles:incomingRoles.results,outgoing_roles:outgoingRoles.results,
-    permissions_note:"EXCO organizational roles do not grant Admin, Treasurer, Viewer or Super Admin system permissions."
+    permissions_note:handover?.status==="completed"
+      ? "Election-linked Admin Roles are active. Super Admin access is never assigned by elections."
+      : "Election-linked Admin Roles activate only when the EXCO handover is completed. Super Admin is excluded."
   });
 });
 
@@ -116,9 +126,17 @@ electionsRoute.post("/exco/handover/:handoverId/complete", requireElectionsManag
     if(current?.status==="completed")return c.json({error:"Handover is already completed"},409);
     return c.json({error:"Handover checklist changed while finalizing. Refresh and verify every item",code:"HANDOVER_CHANGED"},409);
   }
+  let adminAccess:any={activated:0,ended:0,retained_super_admins:0,linked_positions:0};
+  try{
+    adminAccess=await activateElectionAdminRolesForHandover(c.env,handoverId,admin.id);
+  }catch(e:any){
+    // Reopen the handover if Admin Role activation could not be completed safely.
+    await c.env.DB.prepare("UPDATE exco_handover_records SET status='in_progress',completed_at=NULL,completed_by=NULL WHERE id=?").bind(handoverId).run();
+    return c.json({error:e?.message||"Admin Role activation failed. Handover was not finalized.",code:"HANDOVER_ADMIN_ACCESS_FAILED"},409);
+  }
   const after=await c.env.DB.prepare("SELECT * FROM exco_handover_records WHERE id=?").bind(handoverId).first<any>();
-  await auditEntity(c.env,admin.id,"exco_handover_completed","exco_handover",handoverId,handover,after);
-  return c.json({ok:true,handover:after});
+  await auditEntity(c.env,admin.id,"exco_handover_completed","exco_handover",handoverId,handover,{...after,admin_access:adminAccess});
+  return c.json({ok:true,handover:after,admin_access:adminAccess});
 });
 
 electionsRoute.get("/exco/workboard", requireElectionsManage, async c=>{

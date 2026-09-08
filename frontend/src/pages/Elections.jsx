@@ -30,7 +30,8 @@ export default function Elections({admin}){
   const [responsibilityForm,setResponsibilityForm]=useState({title:"",description:"",owner_member_id:"",due_date:"",status:"todo"});
   const [form,setForm]=useState({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});
   const [applicationFilter,setApplicationFilter]=useState("all");
-  const [position,setPosition]=useState({title:"",seats:"1",min_selections:"1"});
+  const [position,setPosition]=useState({role_key:"",seats:"1",min_selections:"1"});
+  const [positionRoles,setPositionRoles]=useState([]);
   const [candidate,setCandidate]=useState({position_id:"",member_id:""});
   const {confirm,confirmationDialog}=useConfirmDialog();
 
@@ -71,6 +72,13 @@ export default function Elections({admin}){
     api.elections.readiness(detail.id).then(r=>{if(active)setReadiness(r)}).catch(e=>{if(active){setReadiness(null);setMessage(e.message)}});
     return ()=>{active=false};
   },[detail,canManageElections]);
+  useEffect(()=>{
+    if(!canManageElections||!detail?.id||detail.status!=="draft"){setPositionRoles([]);return;}
+    let active=true;
+    api.elections.positionRoles().then(r=>{if(active)setPositionRoles(r.roles||[])}).catch(e=>{if(active)setMessage(e.message)});
+    return()=>{active=false};
+  },[canManageElections,detail?.id,detail?.status]);
+
   useEffect(()=>{
     if(!canManageElections||!detail?.id||detail.status!=="draft"||members.length)return;
     let active=true;
@@ -152,12 +160,12 @@ export default function Elections({admin}){
   };
   const completeHandover=async()=>{
     if(!handover?.handover?.id)return;
-    if(!await confirm({title:"Complete EXCO handover?",message:"This will finalize the handover record. Completed handovers become read-only.",confirmLabel:"Complete handover",tone:"primary"}))return;
+    if(!await confirm({title:"Complete EXCO handover?",message:"This finalizes the handover and activates the elected members’ linked Admin Roles. Previous election-assigned access is ended. Super Admin access is never changed by elections.",confirmLabel:"Complete handover",tone:"primary"}))return;
     const notes=window.prompt("Final handover note (optional):","") ?? null;
     if(notes===null)return;
     setBusy(true);try{
       await api.elections.completeHandover(handover.handover.id,notes);
-      setHandover(await api.elections.currentHandover());setMessage("EXCO handover completed.");
+      setHandover(await api.elections.currentHandover());setMessage("EXCO handover completed and elected Admin Roles activated.");
     }catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const repairApplicationSync=async()=>{
@@ -180,7 +188,7 @@ export default function Elections({admin}){
     setBusy(true);try{const {exportElectionCsv}=await import("../utils/exports");await exportElectionCsv(summary);setMessage("Election CSV sent to your Telegram chat.")}catch(e){setMessage(e.message||"Could not export election CSV")}finally{setBusy(false)}
   };
   const create=async()=>{if(!form.title.trim())return setMessage("Election title is required.");setBusy(true);try{const e=await api.elections.create(form);setShowCreate(false);setForm({title:"",term:"",applications_open_at:"",applications_close_at:"",opens_at:"",closes_at:""});await open(e)}catch(e){setMessage(e.message)}finally{setBusy(false)}};
-  const addPosition=async()=>{if(!detail||!position.title.trim())return;setBusy(true);try{const seats=Number(position.seats)||1;const d=await api.elections.addPosition(detail.id,{title:position.title,seats,max_selections:seats,min_selections:Math.max(0,Math.min(seats,Number(position.min_selections)||0))});setDetail(d);setPosition({title:"",seats:"1",min_selections:"1"})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
+  const addPosition=async()=>{if(!detail||!position.role_key)return;setBusy(true);try{const seats=Number(position.seats)||1;const d=await api.elections.addPosition(detail.id,{role_key:position.role_key,seats,max_selections:seats,min_selections:Math.max(0,Math.min(seats,Number(position.min_selections)||0))});setDetail(d);setPosition({role_key:"",seats:"1",min_selections:"1"})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addCandidate=async()=>{if(!detail||!candidate.position_id||!candidate.member_id)return;setBusy(true);try{const d=await api.elections.addCandidate(detail.id,candidate);setDetail(d);setCandidate({position_id:"",member_id:""})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const reviewApplication=async(a,decision)=>{
     const reason=decision==="rejected"?(window.prompt(`Reason for rejecting ${a.member_name}:`)??null):"";
@@ -296,11 +304,12 @@ export default function Elections({admin}){
     {excoTerms?.current&&<section className="exco-term-card">
       <div className="sans exco-term-head"><span><b>EXCO TERM</b><small>Current committee term</small></span><strong>{excoTerms.current.term_label||excoTerms.current.election_title}</strong></div>
       <div className="sans exco-term-dates"><span>Started <b>{formatElectionDate(excoTerms.current.started_at)}</b></span>{excoTerms.previous&&<span>Previous <b>{excoTerms.previous.term_label||excoTerms.previous.election_title}</b></span>}</div>
-      <div className="sans exco-permission-note">Organizational EXCO roles are separate from system Admin permissions. Election results never grant Admin access automatically.</div>
+      <div className="sans exco-permission-note">Election-linked Admin Roles activate only after the EXCO handover is completed. Super Admin access is never assigned by an election.</div>
     </section>}
     {handover?.handover&&<section className="exco-handover-card">
       <div className="sans exco-handover-head"><span><b>EXCO HANDOVER</b><small>{handover.outgoing_term?`${handover.outgoing_term.term_label||handover.outgoing_term.election_title} → `:""}{handover.current_term?.term_label||handover.current_term?.election_title}</small></span><strong>{handover.progress?.completed||0}/{handover.progress?.total||0}</strong></div>
       <div className="exco-handover-progress"><i style={{width:`${handover.progress?.percent||0}%`}}/></div>
+      {!!handover.incoming_roles?.length&&<div className="exco-handover-role-access">{handover.incoming_roles.map((r,i)=><div key={`${r.member_code||r.name}-${i}`} className="sans"><span><b>{r.role_title}</b><small>{r.name}</small></span><strong>{r.admin_access_status==="active"?"Active":r.admin_access_status==="pending"?"Activates on handover":"Not linked"}</strong></div>)}</div>}
       {handover.items?.map(item=><label key={item.id} className={`sans exco-handover-item ${item.completed?"done":""}`}>
         <input type="checkbox" checked={!!item.completed} disabled={busy||handover.handover.status==="completed"} onChange={e=>updateHandoverItem(item,e.target.checked)}/>
         <span><b>{item.label}</b>{item.completed_at&&<small>{item.completed_by_name||"Admin"} · {formatElectionDate(item.completed_at)}</small>}</span>
@@ -417,17 +426,20 @@ export default function Elections({admin}){
             </div>
           })}
           <details className="election-admin-more election-setup-details" open={!detail.positions.length}>
-            <summary className="sans"><span><b>Election setup</b><small>Positions and manual candidate management</small></span><strong>{detail.positions.length} position{detail.positions.length===1?"":"s"}</strong></summary>
+            <summary className="sans"><span><b>Election setup</b><small>Positions come from Admin Roles; Super Admin is excluded</small></span><strong>{detail.positions.length} position{detail.positions.length===1?"":"s"}</strong></summary>
             <div className="election-admin-more-body">
           <div className="sans member-section-title">POSITIONS</div>
           {detail.positions.map(p=><div key={p.id} className="election-admin-position"><b className="sans">{p.title}</b><span className="sans">{p.seats} seat{Number(p.seats)===1?"":"s"} · select {p.min_selections}–{p.max_selections} · {p.candidates.filter(c=>c.status==="active").length} active candidates</span></div>)}
           <div className="election-position-create">
-            <input className="sans" placeholder="Position e.g. President" value={position.title} onChange={e=>setPosition({...position,title:e.target.value})}/>
+            <select className="sans election-select" value={position.role_key} onChange={e=>setPosition({...position,role_key:e.target.value})}>
+              <option value="">Select Admin Role</option>
+              {positionRoles.filter(r=>!detail.positions.some(p=>String(p.admin_role?.kind||"")===String(r.kind||"") && (r.kind==="builtin"?String(p.admin_role?.builtin_role||"")===String(r.builtin_role||""):Number(p.admin_role?.custom_role_id||0)===Number(r.custom_role_id||0)))).map(r=><option key={r.key} value={r.key}>{r.name}</option>)}
+            </select>
             <input className="sans" title="Seats / maximum selections" type="number" min="1" value={position.seats} onChange={e=>setPosition({...position,seats:e.target.value})}/>
             <input className="sans" title="Minimum selections" type="number" min="0" value={position.min_selections} onChange={e=>setPosition({...position,min_selections:e.target.value})}/>
-            <button type="button" style={compactBtn} disabled={busy} onClick={addPosition}>Add</button>
+            <button type="button" style={compactBtn} disabled={busy||!position.role_key} onClick={addPosition}>Add</button>
           </div>
-          <div className="sans election-field-help">Fields: position · seats/max selections · minimum selections.</div>
+          <div className="sans election-field-help">Choose an Admin Role · seats/max selections · minimum selections. Super Admin cannot be elected.</div>
           {!!detail.positions.length&&<>
             <div className="sans member-section-title" style={{marginTop:14}}>CANDIDATES</div>
             {detail.positions.flatMap(p=>p.candidates).map(c=><div key={c.id} className="election-candidate-admin-row"><span className="sans"><b>{c.display_name}</b><small>{c.status}</small></span>{c.status==="active"&&<button type="button" disabled={busy} onClick={()=>withdrawCandidate(c)}>Withdraw</button>}</div>)}

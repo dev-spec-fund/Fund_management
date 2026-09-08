@@ -144,6 +144,15 @@ settingsRoute.delete("/roles/:id", requireSuperAdmin, async(c)=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const role=await c.env.DB.prepare("SELECT * FROM admin_roles WHERE id=? AND COALESCE(active,1)=1").bind(id).first<any>();
   if(!role)return c.json({error:"Role not found"},404);
+  const electionRoleTable=await c.env.DB.prepare("SELECT 1 ok FROM sqlite_master WHERE type='table' AND name='election_position_admin_roles'").first<any>();
+  if(electionRoleTable){
+    const pendingElectionUse=await c.env.DB.prepare(`SELECT COUNT(*) n FROM election_position_admin_roles l
+      JOIN elections e ON e.id=l.election_id
+      LEFT JOIN exco_terms t ON t.election_id=e.id
+      LEFT JOIN exco_handover_records h ON h.incoming_term_id=t.id
+      WHERE l.custom_role_id=? AND (e.certified_at IS NULL OR COALESCE(h.status,'pending')<>'completed')`).bind(id).first<any>();
+    if(Number(pendingElectionUse?.n||0)>0)return c.json({error:"This role is linked to an election that has not completed handover. Finish or remove that election first."},409);
+  }
   const used=await c.env.DB.prepare("SELECT COUNT(*) n FROM admins WHERE custom_role_id=? AND COALESCE(active,1)=1").bind(id).first<{n:number}>();
   if(Number(used?.n||0)>0)return c.json({error:"This role is assigned to active admins. Reassign them first."},409);
   await c.env.DB.prepare("UPDATE admin_roles SET active=0,updated_at=datetime('now') WHERE id=?").bind(id).run();

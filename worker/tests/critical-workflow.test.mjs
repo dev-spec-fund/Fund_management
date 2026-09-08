@@ -787,13 +787,14 @@ test('tie results require anonymous runoff and block certification until resolve
   assert.doesNotMatch(runoffBallot,/member_id/);
 });
 
-test('certification automatically archives old EXCO and assigns elected roles without admin permissions', () => {
+test('certification archives old EXCO while Admin Roles wait for completed handover', () => {
   const route=electionSource();
   assert.match(route,/assignCertifiedExcoRoles/);
   assert.match(route,/UPDATE exco_role_assignments SET ended_at/);
   assert.match(route,/INSERT OR IGNORE INTO exco_role_assignments/);
   assert.match(route,/officially assigned as/);
-  assert.doesNotMatch(route,/INSERT INTO admins/);
+  assert.match(route,/activateElectionAdminRolesForHandover/);
+  assert.match(route,/INSERT INTO admins/);
   assert.match(route,/Results are already certified and locked/);
 });
 
@@ -1231,7 +1232,7 @@ test('v63 EXCO term and handover schema is migration controlled', () => {
   assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
 });
 
-test('v63 certification starts EXCO term and creates structured handover without granting admin permissions', () => {
+test('v63 certification starts EXCO term and handover gates Admin Role activation', () => {
   const route=electionSource();
   assert.match(route,/createExcoTermHandover/);
   assert.match(route,/HANDOVER_CHECKLIST/);
@@ -1240,9 +1241,10 @@ test('v63 certification starts EXCO term and creates structured handover without
   assert.match(route,/Pending contributions reviewed/);
   assert.match(route,/Outstanding expenses and donations checked/);
   assert.match(route,/Governance and finance documents handed over/);
-  assert.match(route,/System Admin access reviewed separately from EXCO roles/);
-  assert.doesNotMatch(route,/INSERT INTO admins/);
-  assert.doesNotMatch(route,/UPDATE admins SET role/);
+  assert.match(route,/Incoming Admin Role access reviewed before activation/);
+  assert.match(route,/activateElectionAdminRolesForHandover/);
+  assert.match(route,/INSERT INTO admins/);
+  assert.match(route,/UPDATE admins SET name=\?,role=\?,custom_role_id=\?/);
 });
 
 test('v63 handover checklist is admin-managed, auditable and completion-gated', () => {
@@ -1280,7 +1282,7 @@ test('v63 admin and member UIs show term history and handover governance', () =>
   assert.match(api,/timeline/);
   assert.match(admin,/EXCO HANDOVER/);
   assert.match(admin,/ELECTION TIMELINE/);
-  assert.match(admin,/Organizational EXCO roles are separate from system Admin permissions/);
+  assert.match(admin,/Election-linked Admin Roles activate only after the EXCO handover is completed/);
   assert.match(member,/CURRENT EXCO TERM/);
   assert.match(member,/Previous term/);
 });
@@ -1320,12 +1322,12 @@ test('v64 workboard exposes overdue upcoming active and completed responsibility
   assert.match(route,/remaining/);
 });
 
-test('v64 responsibility history records status transitions without granting admin permissions', () => {
+test('v64 responsibility history records status transitions independently of role activation', () => {
   const route=electionSource();
   assert.match(route,/exco_responsibility_history/);
   assert.match(route,/from_status/);
   assert.match(route,/to_status/);
-  assert.doesNotMatch(route,/INSERT INTO admins/);
+  assert.match(route,/exco\/responsibilities/);
 });
 
 test('v64 Admin UI renders EXCO workboard and responsibility controls', () => {
@@ -1880,4 +1882,25 @@ test('v76 workflow refreshes stay targeted after governance, meeting, and electi
   assert.match(client, /\"\/api\/governance\/analytics\/\"/);
   assert.doesNotMatch(meetings, /setShowCreate\(false\);setForm\(emptyForm\);await load\(\)/);
   assert.doesNotMatch(elections, /setDetail\(d\);await load\(\);await refreshNotificationStatus/);
+});
+
+
+test('election positions are sourced from Admin Roles except Super Admin and activate on completed handover', () => {
+  const route=electionSource();
+  const admin=fs.readFileSync(path.resolve(root,'../frontend/src/pages/Elections.jsx'),'utf8');
+  const api=frontendApiSource();
+  const schema=fs.readFileSync(path.join(root,'schema.sql'),'utf8');
+  assert.match(route,/ELECTION_BUILTIN_ADMIN_ROLES/);
+  assert.match(route,/builtin:president/);
+  assert.doesNotMatch(route,/builtin:super_admin/);
+  assert.match(route,/election_position_admin_roles/);
+  assert.match(route,/election_admin_assignments/);
+  assert.match(route,/activateElectionAdminRolesForHandover/);
+  assert.match(route,/retained_super_admins/);
+  assert.match(api,/positionRoles/);
+  assert.match(admin,/Select Admin Role/);
+  assert.match(admin,/Super Admin cannot be elected/);
+  assert.match(admin,/Activates on handover/);
+  assert.match(schema,/CREATE TABLE IF NOT EXISTS election_position_admin_roles/);
+  assert.match(schema,/CREATE TABLE IF NOT EXISTS election_admin_assignments/);
 });

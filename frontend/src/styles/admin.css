@@ -1934,3 +1934,11 @@ button:not(:disabled):active {
   .settings-role-builder-group-head{padding:9px 10px 7px}
   .settings-role-builder-group .settings-permission-list>label{min-height:42px;padding:7px 10px}
 }
+
+/* Election handover · linked Admin Role activation */
+.exco-handover-role-access{display:grid;gap:7px;margin:10px 0 12px}
+.exco-handover-role-access>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;border:1px solid var(--line,#e7e9ee);border-radius:12px;background:rgba(255,255,255,.55)}
+.exco-handover-role-access span{display:grid;gap:2px;min-width:0}
+.exco-handover-role-access b{font-size:13px;line-height:1.2}
+.exco-handover-role-access small{font-size:11px;color:var(--muted,#6b7280);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.exco-handover-role-access strong{font-size:11px;line-height:1.2;text-align:right;color:var(--text-secondary,#4b5563);max-width:42%}

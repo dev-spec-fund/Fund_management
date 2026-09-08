@@ -9,6 +9,7 @@ export const electionsApi = {
   notifications: (id) => request(`/api/elections/${id}/notifications`),
   dashboard: () => request("/api/elections/dashboard"),
   archive: () => request("/api/elections/archive"),
+  positionRoles: () => request("/api/elections/setup/position-roles"),
   create: (data) => request("/api/elections", { method:"POST", body:JSON.stringify(data) }),
   update: (id,data) => request(`/api/elections/${id}`, { method:"PATCH", body:JSON.stringify(data) }),
   extendApplications: (id,applications_close_at) => request(`/api/elections/${id}/extend-applications`, { method:"POST", body:JSON.stringify({applications_close_at}) }),

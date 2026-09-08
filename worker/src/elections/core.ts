@@ -3,6 +3,148 @@ import { sendMessage } from "../telegram";
 import { getBranding } from "../db";
 
 export const iso = (v:any) => String(v||"").trim().slice(0,19);
+
+const ELECTION_BUILTIN_ADMIN_ROLES = [
+  {key:"builtin:president",kind:"builtin",builtin_role:"president",name:"President"},
+  {key:"builtin:treasurer",kind:"builtin",builtin_role:"treasurer",name:"Treasurer"},
+  {key:"builtin:secretary",kind:"builtin",builtin_role:"secretary",name:"Secretary"},
+  {key:"builtin:viewer",kind:"builtin",builtin_role:"viewer",name:"Viewer"},
+] as const;
+
+export async function ensureElectionAdminRoleSchema(env:any){
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS election_position_admin_roles (
+    position_id INTEGER PRIMARY KEY REFERENCES election_positions(id) ON DELETE CASCADE,
+    election_id INTEGER NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
+    role_kind TEXT NOT NULL CHECK(role_kind IN ('builtin','custom')),
+    builtin_role TEXT,
+    custom_role_id INTEGER REFERENCES admin_roles(id),
+    role_name_snapshot TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`).run();
+  await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_election_position_admin_roles_election
+    ON election_position_admin_roles(election_id,position_id)`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS election_admin_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    election_id INTEGER NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
+    position_id INTEGER NOT NULL REFERENCES election_positions(id),
+    member_id INTEGER NOT NULL REFERENCES members(id),
+    role_kind TEXT NOT NULL CHECK(role_kind IN ('builtin','custom')),
+    builtin_role TEXT,
+    custom_role_id INTEGER REFERENCES admin_roles(id),
+    role_name_snapshot TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','ended')),
+    activated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    ended_at TEXT,
+    UNIQUE(election_id,position_id,member_id)
+  )`).run();
+  await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_election_admin_assignments_status
+    ON election_admin_assignments(status,election_id)`).run();
+  // Backfill legacy text-only positions when their title exactly matches a current role.
+  for(const role of ELECTION_BUILTIN_ADMIN_ROLES){
+    await env.DB.prepare(`INSERT OR IGNORE INTO election_position_admin_roles
+      (position_id,election_id,role_kind,builtin_role,custom_role_id,role_name_snapshot)
+      SELECT p.id,p.election_id,'builtin',?,NULL,p.title FROM election_positions p
+      WHERE lower(trim(p.title))=lower(trim(?))`).bind(role.builtin_role,role.name).run();
+  }
+  await env.DB.prepare(`INSERT OR IGNORE INTO election_position_admin_roles
+    (position_id,election_id,role_kind,builtin_role,custom_role_id,role_name_snapshot)
+    SELECT p.id,p.election_id,'custom',NULL,r.id,p.title
+    FROM election_positions p JOIN admin_roles r ON lower(trim(r.name))=lower(trim(p.title))
+    WHERE COALESCE(r.active,1)=1`).run();
+}
+
+export async function electionAdminRoleOptions(env:any){
+  await ensureElectionAdminRoleSchema(env);
+  const custom=await env.DB.prepare(`SELECT id,name,description FROM admin_roles WHERE COALESCE(active,1)=1 ORDER BY name`).all<any>();
+  return [
+    ...ELECTION_BUILTIN_ADMIN_ROLES.map(r=>({...r,description:null})),
+    ...(custom.results as any[]).map(r=>({key:`custom:${r.id}`,kind:"custom",custom_role_id:Number(r.id),name:r.name,description:r.description||null}))
+  ];
+}
+
+export async function resolveElectionAdminRole(env:any,value:any,titleFallback:any=null){
+  const options=await electionAdminRoleOptions(env);
+  const key=String(value||"").trim();
+  if(key){
+    const exact=options.find((r:any)=>r.key===key);
+    if(exact)return exact;
+  }
+  const title=String(titleFallback||"").trim().toLowerCase();
+  if(title){
+    const exact=options.find((r:any)=>String(r.name||"").trim().toLowerCase()===title);
+    if(exact)return exact;
+  }
+  return null;
+}
+
+export async function linkElectionPositionAdminRole(env:any,electionId:number,positionId:number,role:any){
+  await ensureElectionAdminRoleSchema(env);
+  await env.DB.prepare(`INSERT INTO election_position_admin_roles
+    (position_id,election_id,role_kind,builtin_role,custom_role_id,role_name_snapshot) VALUES(?,?,?,?,?,?)
+    ON CONFLICT(position_id) DO UPDATE SET role_kind=excluded.role_kind,builtin_role=excluded.builtin_role,
+      custom_role_id=excluded.custom_role_id,role_name_snapshot=excluded.role_name_snapshot`)
+    .bind(positionId,electionId,role.kind,role.builtin_role||null,role.custom_role_id||null,role.name).run();
+}
+
+export async function activateElectionAdminRolesForHandover(env:any,handoverId:number,completedBy:number){
+  await ensureElectionAdminRoleSchema(env);
+  const handover=await env.DB.prepare(`SELECT h.*,t.election_id FROM exco_handover_records h
+    JOIN exco_terms t ON t.id=h.incoming_term_id WHERE h.id=?`).bind(handoverId).first<any>();
+  if(!handover)return {activated:0,ended:0,retained_super_admins:0};
+  const incoming=await env.DB.prepare(`SELECT x.member_id,x.position_id,m.name,m.telegram_id,
+      l.role_kind,l.builtin_role,l.custom_role_id,l.role_name_snapshot,COALESCE(r.active,1) custom_role_active
+    FROM exco_role_assignments x
+    JOIN members m ON m.id=x.member_id
+    LEFT JOIN election_position_admin_roles l ON l.position_id=x.position_id
+    LEFT JOIN admin_roles r ON r.id=l.custom_role_id
+    WHERE x.election_id=? AND x.ended_at IS NULL ORDER BY x.position_id,x.id`).bind(handover.election_id).all<any>();
+  const linked=(incoming.results as any[]).filter((x:any)=>x.role_kind);
+  for(const row of linked){
+    if(!row.telegram_id)throw new Error(`${row.name} must link Telegram before EXCO handover can be completed`);
+    if(row.role_kind==="custom" && (!row.custom_role_id || Number(row.custom_role_active)===0))
+      throw new Error(`The Admin Role for ${row.role_name_snapshot} is no longer active. Restore or replace it before completing handover`);
+  }
+
+  let ended=0,activated=0,retainedSuper=0;
+  const previous=await env.DB.prepare(`SELECT ea.*,m.telegram_id FROM election_admin_assignments ea
+    JOIN members m ON m.id=ea.member_id WHERE ea.status='active' AND ea.election_id<>?`).bind(handover.election_id).all<any>();
+  for(const old of previous.results as any[]){
+    const existing=old.telegram_id?await env.DB.prepare("SELECT * FROM admins WHERE telegram_id=? AND COALESCE(active,1)=1").bind(old.telegram_id).first<any>():null;
+    const matches=existing && !['owner','super_admin'].includes(String(existing.role)) &&
+      ((old.role_kind==='builtin' && String(existing.role)===String(old.builtin_role) && !existing.custom_role_id) ||
+       (old.role_kind==='custom' && Number(existing.custom_role_id||0)===Number(old.custom_role_id||0)));
+    if(matches){
+      await env.DB.prepare("UPDATE admins SET active=0,deactivated_at=datetime('now'),deactivated_by=? WHERE id=?").bind(completedBy,existing.id).run();
+    }
+    await env.DB.prepare("UPDATE election_admin_assignments SET status='ended',ended_at=datetime('now') WHERE id=? AND status='active'").bind(old.id).run();
+    ended++;
+  }
+
+  for(const row of linked){
+    const existing=await env.DB.prepare("SELECT * FROM admins WHERE telegram_id=?").bind(row.telegram_id).first<any>();
+    const isSuper=existing && ['owner','super_admin'].includes(String(existing.role));
+    if(isSuper){ retainedSuper++; }
+    else {
+      const role=row.role_kind==='custom'?'viewer':String(row.builtin_role);
+      const customRoleId=row.role_kind==='custom'?Number(row.custom_role_id):null;
+      if(existing){
+        await env.DB.prepare(`UPDATE admins SET name=?,role=?,custom_role_id=?,active=1,deactivated_at=NULL,deactivated_by=NULL WHERE id=?`)
+          .bind(row.name,role,customRoleId,existing.id).run();
+      }else{
+        await env.DB.prepare(`INSERT INTO admins(telegram_id,name,role,custom_role_id,active) VALUES(?,?,?,?,1)`)
+          .bind(String(row.telegram_id),row.name,role,customRoleId).run();
+      }
+      activated++;
+    }
+    await env.DB.prepare(`INSERT INTO election_admin_assignments
+      (election_id,position_id,member_id,role_kind,builtin_role,custom_role_id,role_name_snapshot,status,activated_at)
+      VALUES(?,?,?,?,?,?,?,'active',datetime('now'))
+      ON CONFLICT(election_id,position_id,member_id) DO UPDATE SET status='active',ended_at=NULL,activated_at=datetime('now'),
+        role_kind=excluded.role_kind,builtin_role=excluded.builtin_role,custom_role_id=excluded.custom_role_id,role_name_snapshot=excluded.role_name_snapshot`)
+      .bind(handover.election_id,row.position_id,row.member_id,row.role_kind,row.builtin_role||null,row.custom_role_id||null,row.role_name_snapshot).run();
+  }
+  return {activated,ended,retained_super_admins:retainedSuper,linked_positions:linked.length};
+}
 export const text = (v:any,n=120) => String(v||"").trim().slice(0,n);
 
 export function localNow(timeZone="Indian/Maldives"){
@@ -383,7 +525,7 @@ const HANDOVER_CHECKLIST=[
   {key:"pending_contributions",label:"Pending contributions reviewed",sort:30},
   {key:"expenses_donations",label:"Outstanding expenses and donations checked",sort:40},
   {key:"documents_handed_over",label:"Governance and finance documents handed over",sort:50},
-  {key:"admin_access_reviewed",label:"System Admin access reviewed separately from EXCO roles",sort:60},
+  {key:"admin_access_reviewed",label:"Incoming Admin Role access reviewed before activation",sort:60},
 ];
 
 export async function ensureExcoTerms(env:any){
@@ -599,7 +741,13 @@ export async function electionDetail(env:any,id:number){
   const eligible=Number(voters?.eligible||0),voted=Number(voters?.voted||0);
   const setupLocked=election.status!=="draft"||eligible>0;
   const deletion=await electionDeleteEligibility(env,election);
-  return {...election,setup_locked:setupLocked,deletion,positions:positions.results.map((p:any)=>({...p,candidates:candidates.results.filter((x:any)=>Number(x.position_id)===Number(p.id))})),
+  await ensureElectionAdminRoleSchema(env);
+  const roleLinks=await env.DB.prepare(`SELECT * FROM election_position_admin_roles WHERE election_id=?`).bind(id).all<any>();
+  return {...election,setup_locked:setupLocked,deletion,positions:positions.results.map((p:any)=>{
+      const role=(roleLinks.results as any[]).find((x:any)=>Number(x.position_id)===Number(p.id));
+      return {...p,admin_role:role?{kind:role.role_kind,builtin_role:role.builtin_role,custom_role_id:role.custom_role_id,name:role.role_name_snapshot}:null,
+        candidates:candidates.results.filter((x:any)=>Number(x.position_id)===Number(p.id))};
+    }),
     turnout:{eligible,voted,percent:eligible>0?Math.round((voted/eligible)*1000)/10:0},
     audit_history:audit.results,certified_by_name:certifier?.name||null,applications:applications.results,
     application_phase:applicationPhase(election,localNow(env.FUND_TIMEZONE || "Indian/Maldives"))};
