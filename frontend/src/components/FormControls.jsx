@@ -2,6 +2,36 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
+let activeModalLocks = 0;
+let lockedAppRoot = null;
+let lockedOverflowY = "";
+let lockedScrollTop = 0;
+
+function acquireModalLock() {
+  const appRoot = document.querySelector(".app-page-content");
+  if (activeModalLocks === 0) {
+    lockedAppRoot = appRoot;
+    lockedOverflowY = appRoot?.style.overflowY || "";
+    lockedScrollTop = appRoot?.scrollTop || 0;
+    if (appRoot) appRoot.style.overflowY = "hidden";
+    document.body.classList.add("app-modal-open");
+  }
+  activeModalLocks += 1;
+}
+
+function releaseModalLock() {
+  activeModalLocks = Math.max(0, activeModalLocks - 1);
+  if (activeModalLocks !== 0) return;
+  if (lockedAppRoot) {
+    lockedAppRoot.style.overflowY = lockedOverflowY;
+    lockedAppRoot.scrollTop = lockedScrollTop;
+  }
+  lockedAppRoot = null;
+  lockedOverflowY = "";
+  lockedScrollTop = 0;
+  document.body.classList.remove("app-modal-open");
+}
+
 export function Modal({ title, onClose, action, children, closeDisabled = false }) {
   const readViewport = () => ({
     height: Math.round(window.visualViewport?.height || window.innerHeight || 700),
@@ -11,16 +41,10 @@ export function Modal({ title, onClose, action, children, closeDisabled = false 
 
   useEffect(() => {
     const vv = window.visualViewport;
-    const appRoot = document.querySelector(".app-page-content");
-    document.body.classList.add("app-modal-open");
-    const previousOverflowY = appRoot?.style.overflowY || "";
-    const previousScrollTop = appRoot?.scrollTop || 0;
-
-    // Lock only the normal page scroller. The modal body remains the single active
-    // vertical scroller, which avoids gesture transfer to the page behind it.
-    if (appRoot) {
-      appRoot.style.overflowY = "hidden";
-    }
+    // A modal may open another modal (for example an edit sheet followed by a
+    // confirmation). Use one shared lock so closing the top dialog cannot restore
+    // the bottom navigation or page scrolling while the parent dialog is still open.
+    acquireModalLock();
 
     const update = () => setViewport(readViewport());
     update();
@@ -34,11 +58,7 @@ export function Modal({ title, onClose, action, children, closeDisabled = false 
       vv?.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
       window.removeEventListener("keydown", onKeyDown);
-      if (appRoot) {
-        appRoot.style.overflowY = previousOverflowY;
-        appRoot.scrollTop = previousScrollTop;
-      }
-      document.body.classList.remove("app-modal-open");
+      releaseModalLock();
     };
   }, [closeDisabled, onClose]);
 
@@ -69,7 +89,9 @@ export function Modal({ title, onClose, action, children, closeDisabled = false 
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
-        zIndex: 50,
+        // Must sit above bespoke app sheets (settings access uses z-index 1200).
+        // This keeps nested confirmations visible and interactive.
+        zIndex: 2000,
         boxSizing: "border-box",
         paddingTop: "max(10px, env(safe-area-inset-top))"
       }}

@@ -466,6 +466,17 @@ export function AuditSettingsSection(ctx) {
   const [dateTo,setDateTo]=useState("");
   const [showFilters,setShowFilters]=useState(false);
 
+  useEffect(()=>{
+    if(!showFilters)return undefined;
+    document.body.classList.add("audit-filter-sheet-open");
+    const onKey=e=>{if(e.key==="Escape")setShowFilters(false)};
+    window.addEventListener("keydown",onKey);
+    return ()=>{
+      document.body.classList.remove("audit-filter-sheet-open");
+      window.removeEventListener("keydown",onKey);
+    };
+  },[showFilters]);
+
   const actions=useMemo(()=>[...new Set((audit||[]).map(a=>a.action).filter(Boolean))].sort(),[audit]);
   const actors=useMemo(()=>[...new Set((audit||[]).map(a=>a.admin_name || "system"))].sort(),[audit]);
   const filtered=useMemo(()=>{

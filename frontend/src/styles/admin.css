@@ -1946,7 +1946,8 @@ button:not(:disabled):active {
 /* v96 — modal / bottom-sheet navigation safety.
    Persistent app navigation must never sit above an active sheet on Telegram/iOS. */
 body.app-modal-open .admin-tab-strip.app-icon-nav,
-body.settings-access-sheet-open .admin-tab-strip.app-icon-nav{
+body.settings-access-sheet-open .admin-tab-strip.app-icon-nav,
+body.audit-filter-sheet-open .admin-tab-strip.app-icon-nav{
   opacity:0 !important;
   visibility:hidden !important;
   pointer-events:none !important;
