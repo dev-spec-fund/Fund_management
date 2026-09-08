@@ -93,6 +93,9 @@ export function DonationModal({ onClose, onSaved, row = null }) {
   const [documents, setDocuments] = useState([]);
   const [documentType, setDocumentType] = useState("Payment Slip");
   const [uploadStatus, setUploadStatus] = useState(null);
+  const savedRecordIdRef = useRef(row?.id || null);
+  const failedUploadIndexRef = useRef(0);
+  const [recordCommitted, setRecordCommitted] = useState(Boolean(row));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const createRequestIdRef = useRef(row ? null : (globalThis.crypto?.randomUUID?.() || `donation-${Date.now()}-${Math.random().toString(36).slice(2)}`));
@@ -109,8 +112,48 @@ export function DonationModal({ onClose, onSaved, row = null }) {
       .catch(() => {});
   }, [row?.project_id]);
 
+  const uploadPendingDocuments = async (donationId, startIndex = 0) => {
+    if (!documents.length) return true;
+    for (let index = startIndex; index < documents.length; index += 1) {
+      const file = documents[index];
+      try {
+        setUploadStatus({ phase: "uploading", name: file.name || "Document", current: index + 1, total: documents.length });
+        await api.donations.uploadDocument(donationId, file, documentType);
+        failedUploadIndexRef.current = index + 1;
+      } catch (uploadError) {
+        failedUploadIndexRef.current = index;
+        setUploadStatus({ phase: "error", name: file.name || "Document", current: index + 1, total: documents.length, error: uploadError.message || "Upload failed" });
+        setError(`Donation saved, but ${documents.length - index} document${documents.length - index === 1 ? "" : "s"} still need uploading. Retry below; the donation will not be created again.`);
+        return false;
+      }
+    }
+    setUploadStatus({ phase: "processing", name: documents[documents.length - 1]?.name || "Document", current: documents.length, total: documents.length });
+    setUploadStatus({ phase: "success", name: documents.length === 1 ? documents[0].name : `${documents.length} documents`, current: documents.length, total: documents.length });
+    return true;
+  };
+
+  const finishSavedFlow = async () => {
+    setError("");
+    await onSaved?.(row ? "Donation updated" : documents.length ? `Donation logged · ${documents.length} document${documents.length === 1 ? "" : "s"} saved` : "Donation logged");
+    onClose();
+  };
+
+  const retryUploads = async () => {
+    const donationId = savedRecordIdRef.current;
+    if (!donationId || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const uploaded = await uploadPendingDocuments(donationId, failedUploadIndexRef.current);
+      if (uploaded) await finishSavedFlow();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const save = async () => {
     if (!form.donor_name.trim() || Number(form.amount) <= 0 || !form.donation_date) return setError("Donor name, amount and donation date are required.");
+    if (!row && savedRecordIdRef.current) return retryUploads();
     setBusy(true);
     setError("");
     try {
@@ -124,24 +167,13 @@ export function DonationModal({ onClose, onSaved, row = null }) {
       };
       const result = row ? await api.donations.update(row.id, payload) : await api.donations.create(payload);
       const donationId = row?.id || result?.id;
-      if (!row && documents.length && donationId) {
-        try {
-          for (let index = 0; index < documents.length; index += 1) {
-            const file = documents[index];
-            setUploadStatus({ phase: "uploading", name: file.name || "Document", current: index + 1, total: documents.length });
-            await api.donations.uploadDocument(donationId, file, documentType);
-          }
-          setUploadStatus({ phase: "processing", name: documents[documents.length - 1]?.name || "Document", current: documents.length, total: documents.length });
-        } catch (uploadError) {
-          const message = `Donation saved, but a document could not be saved to Telegram: ${uploadError.message || "Upload failed"}. Open the donation and retry.`;
-          setError(message);
-          setUploadStatus({ phase: "error", name: documents[0]?.name || "Document", error: uploadError.message || "Upload failed" });
-          return;
-        }
-      }
-      if (documents.length) setUploadStatus({ phase: "success", name: documents.length === 1 ? documents[0].name : `${documents.length} documents`, current: documents.length, total: documents.length });
-      await onSaved?.(row ? "Donation updated" : documents.length ? `Donation logged · ${documents.length} document${documents.length === 1 ? "" : "s"} saved` : "Donation logged");
-      onClose();
+      if (!donationId) throw new Error("Donation was saved but its record ID was not returned.");
+      savedRecordIdRef.current = donationId;
+      setRecordCommitted(true);
+      failedUploadIndexRef.current = 0;
+      const uploaded = !row ? await uploadPendingDocuments(donationId, 0) : true;
+      if (!uploaded) return;
+      await finishSavedFlow();
     } catch (e) {
       setError(e.message || "Could not save donation");
     } finally {
@@ -152,27 +184,27 @@ export function DonationModal({ onClose, onSaved, row = null }) {
   return (
     <Modal onClose={onClose} closeDisabled={busy} title={row ? `Edit ${row.txn_id || "donation"}` : "Log donation"}>
       <MessageBanner tone="error">{error}</MessageBanner>
-      <Field label="Donor name" value={form.donor_name} onChange={(v) => setForm({ ...form, donor_name: v })} />
-      <Field label="Amount" type="number" prefix="MVR" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} />
-      <Field label="Donation date" type="date" value={form.donation_date} onChange={(v) => setForm({ ...form, donation_date: v })} />
+      <Field label="Donor name" value={form.donor_name} disabled={!row && recordCommitted} onChange={(v) => setForm({ ...form, donor_name: v })} />
+      <Field label="Amount" type="number" prefix="MVR" value={form.amount} disabled={!row && recordCommitted} onChange={(v) => setForm({ ...form, amount: v })} />
+      <Field label="Donation date" type="date" value={form.donation_date} disabled={!row && recordCommitted} onChange={(v) => setForm({ ...form, donation_date: v })} />
       <div className="sans" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Project (optional)</div>
-      <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} className="sans"
+      <select disabled={!row && recordCommitted} value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} className="sans"
         style={{ width: "100%", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px", fontSize: 14, marginBottom: 12, background: "var(--card)", color: "var(--text)" }}>
         <option value="">None / General donation</option>
         {projects.map((p) => <option key={p.id} value={p.id}>{p.project_code} · {p.name}{!["planned","active"].includes(p.status) ? ` · ${p.status}` : ""}</option>)}
       </select>
-      <Field label="Note (optional)" value={form.note} onChange={(v) => setForm({ ...form, note: v })} />
+      <Field label="Note (optional)" value={form.note} disabled={!row && recordCommitted} onChange={(v) => setForm({ ...form, note: v })} />
       {!row && <div className="sans" style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 5 }}>Supporting documents (optional)</div>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 7 }}>
-          <select value={documentType} onChange={(e) => setDocumentType(e.target.value)} style={{ border: "1px solid var(--border-strong)", borderRadius: 9, padding: "8px 9px", background: "var(--card)", color: "var(--text)" }}>{["Payment Slip","Receipt","Donor Letter","Agreement","Other"].map((type) => <option key={type}>{type}</option>)}</select>
-          <label className="sans" style={{ border: "1px solid var(--border-strong)", borderRadius: 9, padding: "8px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Choose files<input type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => { setDocuments(Array.from(e.target.files || []).slice(0, 10)); }} /></label>
+          <select disabled={busy || recordCommitted} value={documentType} onChange={(e) => setDocumentType(e.target.value)} style={{ border: "1px solid var(--border-strong)", borderRadius: 9, padding: "8px 9px", background: "var(--card)", color: "var(--text)" }}>{["Payment Slip","Receipt","Donor Letter","Agreement","Other"].map((type) => <option key={type}>{type}</option>)}</select>
+          <label className="sans" style={{ border: "1px solid var(--border-strong)", borderRadius: 9, padding: "8px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Choose files<input disabled={busy || recordCommitted} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => { const next = Array.from(e.target.files || []).slice(0, 10); setDocuments(next); failedUploadIndexRef.current = 0; setUploadStatus(next.length ? { phase: "pending", name: next.length === 1 ? next[0].name : `${next.length} documents`, current: 0, total: next.length } : null); }} /></label>
         </div>
         {documents.length > 0 && <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 6 }}>{documents.length} document{documents.length === 1 ? "" : "s"} selected</div>}
-        <DocumentUploadStatus status={uploadStatus} />
+        <DocumentUploadStatus status={uploadStatus} onRetry={uploadStatus?.phase === "error" ? retryUploads : undefined} />
       </div>}
       {row && <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginBottom: 12 }}>Supporting documents are managed from Donation Details. Financial edits are blocked automatically when the donation month is closed.</div>}
-      <PrimaryButton onClick={busy ? undefined : save}>{busy ? "Saving…" : row ? "Save changes" : "Save donation"}</PrimaryButton>
+      <PrimaryButton onClick={busy ? undefined : save}>{busy ? (savedRecordIdRef.current && documents.length ? "Uploading documents…" : "Saving donation…") : row ? "Save changes" : savedRecordIdRef.current && uploadStatus?.phase === "error" ? "Retry document upload" : "Save donation"}</PrimaryButton>
     </Modal>
   );
 }

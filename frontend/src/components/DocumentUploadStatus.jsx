@@ -1,25 +1,26 @@
 import React from "react";
-import { AlertCircle, CheckCircle2, LoaderCircle, RotateCcw } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock3, LoaderCircle, RotateCcw } from "lucide-react";
 
 export default function DocumentUploadStatus({ status, onRetry }) {
   if (!status) return null;
   const phase = status.phase || "uploading";
   const failed = phase === "error";
   const done = phase === "success";
+  const pending = phase === "pending";
   const processing = phase === "processing";
-  const title = failed ? "Document upload failed" : done ? "Uploaded" : processing ? "Processing document…" : "Uploading document…";
+  const title = failed ? "Document upload failed" : done ? "Uploaded" : pending ? "Ready to upload" : processing ? "Processing document…" : "Uploading document…";
   const detail = failed
     ? (status.error || "Could not upload this document.")
     : status.name
       ? `${status.name}${status.total > 1 ? ` · ${status.current || 1} of ${status.total}` : ""}`
-      : (processing ? "Finishing document…" : "Please wait");
-  const Icon = failed ? AlertCircle : done ? CheckCircle2 : LoaderCircle;
+      : (pending ? "Will upload when you save" : processing ? "Finishing document…" : "Please wait");
+  const Icon = failed ? AlertCircle : done ? CheckCircle2 : pending ? Clock3 : LoaderCircle;
 
   return <div className="sans" role={failed ? "alert" : "status"} aria-live="polite" style={{
     display:"flex",alignItems:"center",gap:9,padding:"9px 10px",margin:"8px 0",
     border:"1px solid var(--border)",borderRadius:10,background:"var(--bg)"
   }}>
-    <Icon size={16} className={!failed && !done ? "document-upload-spinner" : undefined} style={{flex:"0 0 auto",color:failed?"var(--danger)":done?"var(--success)":"var(--primary-text)"}} />
+    <Icon size={16} className={!failed && !done && !pending ? "document-upload-spinner" : undefined} style={{flex:"0 0 auto",color:failed?"var(--danger)":done?"var(--success)":"var(--primary-text)"}} />
     <div style={{minWidth:0,flex:1}}>
       <div style={{fontSize:11,fontWeight:700,color:"var(--text)"}}>{title}</div>
       <div style={{fontSize:9,color:"var(--soft)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{detail}</div>

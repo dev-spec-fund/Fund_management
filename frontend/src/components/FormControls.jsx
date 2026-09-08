@@ -175,7 +175,7 @@ export function useConfirmDialog() {
   return { confirm: askConfirm, confirmationDialog };
 }
 
-export function Field({ label, value, onChange, type = "text", prefix = null, placeholder = "" }) {
+export function Field({ label, value, onChange, type = "text", prefix = null, placeholder = "", disabled = false }) {
   const external = value === null || value === undefined ? "" : String(value);
   const [draft, setDraft] = useState(external);
   const [focused, setFocused] = useState(false);
@@ -187,15 +187,17 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
   const input = (
     <input
       value={draft}
-      onFocus={() => setFocused(true)}
+      disabled={disabled}
+      onFocus={() => { if (!disabled) setFocused(true); }}
       onChange={(e) => {
+        if (disabled) return;
         const next = e.target.value;
         setDraft(next);
         onChange(next);
       }}
       onBlur={() => {
         setFocused(false);
-        onChange(draft);
+        if (!disabled) onChange(draft);
       }}
       type={type}
       inputMode={type === "number" ? "decimal" : undefined}
@@ -210,7 +212,10 @@ export function Field({ label, value, onChange, type = "text", prefix = null, pl
         padding: "10px 12px",
         fontSize: 16,
         boxSizing: "border-box",
-        background: focused ? "var(--focus-bg)" : "var(--card)",
+        background: disabled ? "var(--bg)" : focused ? "var(--focus-bg)" : "var(--card)",
+        color: disabled ? "var(--soft)" : "var(--text)",
+        opacity: disabled ? 0.78 : 1,
+        cursor: disabled ? "not-allowed" : undefined,
         boxShadow: focused ? "0 0 0 2px var(--focus-ring)" : "none",
         transition: "border-color .15s ease, background .15s ease, box-shadow .15s ease"
       }}
