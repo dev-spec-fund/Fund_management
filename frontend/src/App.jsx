@@ -172,26 +172,36 @@ export default function App() {
   const isMember = !!me?.member;
   const adminView = isAdmin && mode === "admin";
   const memberView = isMember && mode === "member";
-  const canFinance = adminView && adminCan(me?.admin, "finance");
+  const canMembers = adminView && adminCan(me?.admin, "members_view");
+  const canApprovals = adminView && adminCan(me?.admin, "approvals_manage");
+  const canExpenses = adminView && adminCan(me?.admin, "expenses_view");
+  const canDonations = adminView && adminCan(me?.admin, "donations_view");
+  const canReports = adminView && adminCan(me?.admin, "reports_view");
+  const canProjects = adminView && adminCan(me?.admin, "projects_view");
+  const canMeetings = adminView && adminCan(me?.admin, "meetings_view");
+  const canElections = adminView && adminCan(me?.admin, "elections_view");
+  const canSettings = adminView && adminCan(me?.admin, "settings_view");
+  const canAudit = adminView && adminCan(me?.admin, "audit_view");
+  const canFinance = adminView && (canApprovals || adminCan(me?.admin, "expenses_manage") || adminCan(me?.admin, "donations_manage"));
   const canManageAdmins = adminView && adminCan(me?.admin, "manage_admins");
   const memberProjectsEnabled = me?.member_features?.projects !== false;
 
   const sections = useMemo(() => adminView ? {
-    finance: [...(canFinance ? ["pending", "expenses", "donations"] : []), "reports"],
-    governance: [...(canFinance ? ["projects"] : []), "meetings", ...(canManageAdmins ? ["elections"] : [])],
-    more: ["settings", ...(canFinance ? ["audit"] : [])],
+    finance: [...(canApprovals ? ["pending"] : []), ...(canExpenses ? ["expenses"] : []), ...(canDonations ? ["donations"] : []), ...(canReports ? ["reports"] : [])],
+    governance: [...(canProjects ? ["projects"] : []), ...(canMeetings ? ["meetings"] : []), ...(canElections ? ["elections"] : [])],
+    more: [...(canSettings ? ["settings"] : []), ...(canAudit ? ["audit"] : [])],
   } : {
     fundGroup: ["fund", "history"],
     community: [...(memberProjectsEnabled ? ["projects"] : []), "meetings", "elections", "actions"],
-  }, [adminView, canFinance, canManageAdmins, memberProjectsEnabled]);
+  }, [adminView, canApprovals, canExpenses, canDonations, canReports, canProjects, canMeetings, canElections, canSettings, canAudit, memberProjectsEnabled]);
 
   const primaryTabs = useMemo(() => adminView
-    ? ["overview", "members", "finance", "governance", "more"]
-    : ["home", "fundGroup", "community", "activity", "profile"], [adminView]);
+    ? ["overview", ...(canMembers ? ["members"] : []), ...(sections.finance.length ? ["finance"] : []), ...(sections.governance.length ? ["governance"] : []), ...(sections.more.length ? ["more"] : [])]
+    : ["home", "fundGroup", "community", "activity", "profile"], [adminView, canMembers, canReports, sections]);
 
   const tabs = useMemo(() => adminView
-    ? ["overview", "members", "activity", ...sections.finance, ...sections.governance, ...sections.more]
-    : ["overview", "activity", "profile", ...sections.fundGroup, ...sections.community], [adminView, sections]);
+    ? ["overview", ...(canMembers ? ["members"] : []), ...(canReports ? ["activity"] : []), ...sections.finance, ...sections.governance, ...sections.more]
+    : ["overview", "activity", "profile", ...sections.fundGroup, ...sections.community], [adminView, canMembers, sections]);
 
   const primaryForTab = (leaf) => {
     if (adminView) {
@@ -241,7 +251,7 @@ export default function App() {
         setMe(data);
         setMode(data?.admin ? "admin" : "member");
         const initialSummary = data?.admin
-          ? api.reports.overview(adminMonth)
+          ? (adminCan(data.admin, "reports_view") ? api.reports.overview(adminMonth) : Promise.resolve(null))
           : api.reports.publicSummary();
         initialSummary.then(setBootstrapSummary).catch(() => {});
         if (import.meta.env.DEV && bootStartedAt.current && typeof performance !== "undefined") {
@@ -434,25 +444,25 @@ export default function App() {
   };
 
   const renderPage = (page) => {
-    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canFinance} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} adminMonth={adminView ? adminMonth : null} branding={me?.branding} />;
-    if (page === "pending" && canFinance) return <PendingApprovals />;
-    if (page === "members" && adminView) return <Members isAdmin admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} />;
+    if (page === "overview") return <Overview isAdmin={adminView} canFinance={canApprovals} canReports={canReports} setTab={openTab} bootstrapSummary={bootstrapSummary} member={memberView ? me.member : null} adminMonth={adminView ? adminMonth : null} branding={me?.branding} />;
+    if (page === "pending" && canApprovals) return <PendingApprovals />;
+    if (page === "members" && canMembers) return <Members isAdmin admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} />;
     if (page === "history" && memberView) return <MyHistory member={me.member} />;
     if (page === "fund" && memberView) return <FundView />;
-    if (page === "activity") return <Activity isAdmin={adminView} canFinance={canFinance} />;
+    if (page === "activity") return <Activity isAdmin={adminView} canManageExpenses={adminView&&adminCan(me?.admin,"expenses_manage")} canReverse={adminView&&adminCan(me?.admin,"financial_reversals")} />;
     if (page === "projects" && memberView) return <MemberProjects />;
     if (page === "meetings" && memberView) return <MemberMeetings />;
     if (page === "elections" && memberView) return <MemberElections />;
     if (page === "actions" && memberView) return <MyActions />;
     if (page === "profile" && memberView) return <MyProfile member={me.member} setTab={openTab} />;
-    if (page === "expenses" && canFinance) return <Expenses admin={me.admin} />;
-    if (page === "projects" && canFinance) return <Projects admin={me.admin} />;
-    if (page === "donations" && canFinance) return <Reports setTab={openTab} admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} view="donations" />;
-    if (page === "reports" && adminView) return <Reports setTab={openTab} admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} view="reports" />;
-    if (page === "meetings" && adminView) return <Meetings admin={me.admin} />;
-    if (page === "elections" && canManageAdmins) return <Elections />;
-    if (page === "settings" && adminView) return <Settings admin={me.admin} adminMonth={adminMonth} onAdminMonthChange={setAdminMonth} />;
-    if (page === "audit" && canFinance) return <Settings admin={me.admin} adminMonth={adminMonth} onAdminMonthChange={setAdminMonth} initialSection="audit" sectionOnly />;
+    if (page === "expenses" && canExpenses) return <Expenses admin={me.admin} />;
+    if (page === "projects" && canProjects) return <Projects admin={me.admin} />;
+    if (page === "donations" && canDonations) return <Reports setTab={openTab} admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} view="donations" />;
+    if (page === "reports" && canReports) return <Reports setTab={openTab} admin={me.admin} month={adminMonth} onMonthChange={setAdminMonth} view="reports" />;
+    if (page === "meetings" && canMeetings) return <Meetings admin={me.admin} />;
+    if (page === "elections" && canElections) return <Elections admin={me.admin} />;
+    if (page === "settings" && canSettings) return <Settings admin={me.admin} adminMonth={adminMonth} onAdminMonthChange={setAdminMonth} />;
+    if (page === "audit" && canAudit) return <Settings admin={me.admin} adminMonth={adminMonth} onAdminMonthChange={setAdminMonth} initialSection="audit" sectionOnly />;
     return null;
   };
 

@@ -20,8 +20,15 @@ export type Member = {
   created_at: string;
 };
 
-export type AdminRole = "owner" | "super_admin" | "treasurer" | "viewer";
-export type AdminPermission = "read" | "finance" | "manage_admins" | "close_month" | "backup";
+export type AdminRole = "owner" | "super_admin" | "president" | "treasurer" | "secretary" | "viewer";
+export type AdminPermission =
+  | "read" | "finance"
+  | "members_view" | "members_manage" | "approvals_manage"
+  | "expenses_view" | "expenses_manage" | "donations_view" | "donations_manage"
+  | "reports_view" | "reports_export" | "projects_view" | "projects_manage"
+  | "meetings_view" | "meetings_manage" | "elections_view" | "elections_manage" | "elections_certify"
+  | "settings_view" | "settings_manage" | "audit_view" | "financial_reversals"
+  | "close_month" | "manage_admins" | "backup";
 export type Admin = {
   id:number;
   telegram_id:string;

@@ -17,7 +17,7 @@ import { currentMonthValue } from "../utils/date";
 import { fmt } from "../utils/format";
 import { ActivityRow } from "../components/ActivityRow";
 
-export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary = null, member = null, adminMonth = null, branding = null }) {
+export default function Overview({ isAdmin, canFinance, canReports = true, setTab, bootstrapSummary = null, member = null, adminMonth = null, branding = null }) {
   const [summary, setSummary] = useState(bootstrapSummary);
   const [activity, setActivity] = useState([]);
   const [pendingCount, setPendingCount] = useState(null);
@@ -32,11 +32,13 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   }, [bootstrapSummary]);
 
   const refreshOverview = () => {
-    const summaryRequest = isAdmin ? api.reports.overview(adminMonth || undefined) : api.reports.publicSummary();
-    summaryRequest.then((data) => {
-      setSummary(data);
-      setActivity(normalizeRecentActivity(data?.recentActivity));
-    }).catch(() => {});
+    if (!isAdmin || canReports) {
+      const summaryRequest = isAdmin ? api.reports.overview(adminMonth || undefined) : api.reports.publicSummary();
+      summaryRequest.then((data) => {
+        setSummary(data);
+        setActivity(normalizeRecentActivity(data?.recentActivity));
+      }).catch(() => {});
+    }
     if (canFinance) {
       api.admin.pendingCounts()
         .then((p) => setPendingCount(Number(p?.total || 0)))
@@ -46,11 +48,15 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
 
   useEffect(() => {
     if (isAdmin) {
-      const path = adminMonth ? `/api/reports/overview?month=${adminMonth}` : "/api/reports/overview";
-      setSummary(api.peekCached(path) || null);
+      if (canReports) {
+        const path = adminMonth ? `/api/reports/overview?month=${adminMonth}` : "/api/reports/overview";
+        setSummary(api.peekCached(path) || null);
+      } else {
+        setSummary(null);
+      }
     }
     refreshOverview();
-  }, [isAdmin, canFinance, adminMonth]);
+  }, [isAdmin, canFinance, canReports, adminMonth]);
 
   useEffect(() => onDataChangeDebounced(({ paths = [] }) => {
     const relevant = paths.some((path) =>
@@ -61,7 +67,7 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
       path?.startsWith("/api/projects")
     );
     if (relevant) refreshOverview();
-  }, 140), [isAdmin, canFinance, adminMonth]);
+  }, 140), [isAdmin, canFinance, canReports, adminMonth]);
 
   const refreshMemberStatus = () => {
     if (isAdmin || !member?.id) return;
@@ -101,6 +107,13 @@ export default function Overview({ isAdmin, canFinance, setTab, bootstrapSummary
   useEffect(() => onDataChangeDebounced(({ paths = [] }) => {
     if (paths.some((path) => path?.startsWith("/api/elections"))) refreshMemberElection();
   }, 120), [isAdmin, member?.id]);
+
+  if (isAdmin && !canReports) return <section className="sans" style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:14,padding:16,margin:"6px 0 14px"}}>
+    <div style={{fontSize:10,fontWeight:800,letterSpacing:.7,color:"var(--soft)",marginBottom:6}}>OVERVIEW</div>
+    <div style={{fontSize:17,fontWeight:800,color:"var(--text)",marginBottom:5}}>Role-based access</div>
+    <div style={{fontSize:11,lineHeight:1.5,color:"var(--muted)"}}>Financial dashboard figures are hidden for this role. Use the available navigation sections for the areas you are allowed to manage.</div>
+    {canFinance&&pendingCount!==null&&<button type="button" onClick={()=>setTab?.("pending")} style={{marginTop:12,width:"100%",border:"1px solid var(--warning-border)",background:"var(--warning-bg)",color:"var(--warning)",borderRadius:10,padding:"10px 12px",fontSize:11,fontWeight:700}}>Pending approvals · {pendingCount}</button>}
+  </section>;
 
   if (!summary) return <OverviewSkeleton memberView={!isAdmin} />;
 

@@ -18,7 +18,9 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const [docPreview, setDocPreview] = useState(null);
   const previewRequestRef = useRef(0);
   const [addDocumentType, setAddDocumentType] = useState("Receipt");
-  const canViewDocuments = adminCan(admin, "finance");
+  const canManageExpenses = adminCan(admin, "expenses_manage");
+  const canViewDocuments = canManageExpenses;
+  const canReverse = adminCan(admin, "financial_reversals");
 
   const loadDocuments = async () => {
     if (!canViewDocuments) return setDocuments([]);
@@ -164,7 +166,7 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
     }
   };
 
-  if (editing) return <ExpenseForm row={row} onClose={onClose} onSaved={onSaved} />;
+  if (editing && canManageExpenses) return <ExpenseForm row={row} onClose={onClose} onSaved={onSaved} />;
 
   return <>
     <Modal onClose={onClose} closeDisabled={busy || docBusy} title={row.txn_id || "Expense details"}>
@@ -207,8 +209,8 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
       {canViewDocuments && documents?.length === 0 && <div className="sans" style={{ fontSize: 10, color: "var(--warning)", marginBottom: 12 }}>No supporting document is attached to this expense. This is only a warning; saving/posting is still allowed.</div>}
       {!canViewDocuments && <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginBottom: 12 }}>Supporting expense documents are restricted to finance admins.</div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        {row.status !== "reversed" && row.status !== "voided" && <button type="button" disabled={busy} onClick={() => setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13} /> Edit</button>}
-        {row.status === "approved" && <button type="button" disabled={busy} onClick={reverse} style={smallBtn("var(--danger)")}><RotateCcw size={13} /> Reverse</button>}
+        {canManageExpenses && row.status !== "reversed" && row.status !== "voided" && <button type="button" disabled={busy} onClick={() => setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13} /> Edit</button>}
+        {canReverse && row.status === "approved" && <button type="button" disabled={busy} onClick={reverse} style={smallBtn("var(--danger)")}><RotateCcw size={13} /> Reverse</button>}
       </div>
     </Modal>
     {docPreview && <Modal onClose={closeDocumentPreview} title={docPreview.name}>

@@ -268,3 +268,22 @@ test("custom admin roles are migration-controlled and permission-backed", () => 
   assert.match(settings, /settingsRoute\.post\("\/roles"/);
   assert.match(settings, /settingsRoute\.patch\("\/roles\/:id"/);
 });
+
+test("Role Builder v2 adds President, granular permissions and protected custom-role boundaries", () => {
+  const ops = read("src/ops.ts");
+  const auth = read("src/auth.ts");
+  const settings = read("src/routes/settings.ts");
+  const app = read("../frontend/src/App.jsx");
+  const ui = read("../frontend/src/pages/settings/SettingsSections.jsx");
+  assert.match(ops, /president: new Set/);
+  assert.match(ops, /members_manage/);
+  assert.match(ops, /elections_certify/);
+  assert.match(auth, /requireElectionsManage/);
+  assert.match(auth, /requireFinancialReversals/);
+  assert.match(settings, /PROTECTED_CUSTOM_PERMISSIONS = new Set\(\["manage_admins","backup"\]\)/);
+  assert.match(settings, /"president","treasurer","secretary","viewer"/);
+  assert.match(ui, /ROLE_PERMISSION_GROUPS/);
+  assert.match(ui, /Finance Assistant/);
+  assert.match(ui, /President/);
+  assert.match(app, /adminCan\(me\?\.admin, "elections_view"\)/);
+});

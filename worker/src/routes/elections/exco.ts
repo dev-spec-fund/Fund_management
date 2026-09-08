@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../../types";
-import { requireSuperAdmin } from "../../auth";
+import { requireElectionsManage } from "../../auth";
 import { auditEntity, ensureOperationalSchema } from "../../ops";
 import { sendMessage } from "../../telegram";
 import { getBranding } from "../../db";
@@ -39,7 +39,7 @@ electionsRoute.get("/exco/terms", async c=>{
   return c.json({terms,current:terms.find((x:any)=>x.status==="current")||null,previous:terms.find((x:any)=>x.status!=="current")||null});
 });
 
-electionsRoute.get("/exco/handover/current", requireSuperAdmin, async c=>{
+electionsRoute.get("/exco/handover/current", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   await ensureExcoTerms(c.env);
   const term=await c.env.DB.prepare(`SELECT t.*,e.title election_title,e.certified_at FROM exco_terms t
@@ -66,7 +66,7 @@ electionsRoute.get("/exco/handover/current", requireSuperAdmin, async c=>{
   });
 });
 
-electionsRoute.patch("/exco/handover/:handoverId/items/:itemId", requireSuperAdmin, async c=>{
+electionsRoute.patch("/exco/handover/:handoverId/items/:itemId", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!,handoverId=Number(c.req.param("handoverId")),itemId=Number(c.req.param("itemId"));
   const handover=await c.env.DB.prepare("SELECT * FROM exco_handover_records WHERE id=?").bind(handoverId).first<any>();
@@ -94,7 +94,7 @@ electionsRoute.patch("/exco/handover/:handoverId/items/:itemId", requireSuperAdm
   return c.json({ok:true,item:after,progress:{completed:Number(counts?.done||0),total:Number(counts?.total||0)}});
 });
 
-electionsRoute.post("/exco/handover/:handoverId/complete", requireSuperAdmin, async c=>{
+electionsRoute.post("/exco/handover/:handoverId/complete", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!,handoverId=Number(c.req.param("handoverId"));
   const handover=await c.env.DB.prepare("SELECT * FROM exco_handover_records WHERE id=?").bind(handoverId).first<any>();
@@ -121,7 +121,7 @@ electionsRoute.post("/exco/handover/:handoverId/complete", requireSuperAdmin, as
   return c.json({ok:true,handover:after});
 });
 
-electionsRoute.get("/exco/workboard", requireSuperAdmin, async c=>{
+electionsRoute.get("/exco/workboard", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   await ensureExcoTerms(c.env);
   const term=await c.env.DB.prepare(`SELECT t.*,e.title election_title FROM exco_terms t
@@ -147,7 +147,7 @@ electionsRoute.get("/exco/workboard", requireSuperAdmin, async c=>{
   }});
 });
 
-electionsRoute.post("/exco/responsibilities", requireSuperAdmin, async c=>{
+electionsRoute.post("/exco/responsibilities", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   await ensureExcoTerms(c.env);
   const admin=c.get("admin")!,body=await c.req.json<any>().catch(()=>({}));
@@ -174,7 +174,7 @@ electionsRoute.post("/exco/responsibilities", requireSuperAdmin, async c=>{
   return c.json({ok:true,id},201);
 });
 
-electionsRoute.patch("/exco/responsibilities/:id", requireSuperAdmin, async c=>{
+electionsRoute.patch("/exco/responsibilities/:id", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!,id=Number(c.req.param("id")),body=await c.req.json<any>().catch(()=>({}));
   const before=await c.env.DB.prepare("SELECT * FROM exco_responsibilities WHERE id=?").bind(id).first<any>();
@@ -207,7 +207,7 @@ electionsRoute.patch("/exco/responsibilities/:id", requireSuperAdmin, async c=>{
   return c.json({ok:true,item:after});
 });
 
-electionsRoute.get("/exco/responsibilities/:id/history", requireSuperAdmin, async c=>{
+electionsRoute.get("/exco/responsibilities/:id/history", requireElectionsManage, async c=>{
   const id=Number(c.req.param("id"));
   const rows=await c.env.DB.prepare(`SELECT h.*,a.name admin_name FROM exco_responsibility_history h
     LEFT JOIN admins a ON a.id=h.admin_id WHERE h.responsibility_id=? ORDER BY h.id DESC`).bind(id).all<any>();

@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { AppEnv } from "../../types";
-import { requireAdmin, requireFinance } from "../../auth";
+import { requireMeetingsManage, requireMeetingsView } from "../../auth";
 import { auditEntity, safeLogError } from "../../ops";
 import { getBranding } from "../../db";
 import { sendInBatches } from "../../telegram";
@@ -133,7 +133,7 @@ async function meetingDetailMembers(env:any,meeting:any){
 }
 
 
-route.get('/meetings', requireAdmin, async c => {
+route.get('/meetings', requireMeetingsView, async c => {
   await ensureMeetingsSchema(c.env);
   const rows=await c.env.DB.prepare(`
     SELECT m.*,a.name created_by_name,
@@ -146,7 +146,7 @@ route.get('/meetings', requireAdmin, async c => {
   return c.json(rows.results);
 });
 
-route.post('/meetings', requireFinance, async c => {
+route.post('/meetings', requireMeetingsManage, async c => {
   const adminUser=c.get('admin')!;
   const b=await c.req.json().catch(()=>({})) as any;
   const title=String(b.title||'').trim().slice(0,120);
@@ -168,7 +168,7 @@ route.post('/meetings', requireFinance, async c => {
 });
 
 
-route.get('/meetings/:id', requireAdmin, async c => {
+route.get('/meetings/:id', requireMeetingsView, async c => {
   const id=Number(c.req.param('id'));
   await ensureMeetingsSchema(c.env);
   const meeting=await c.env.DB.prepare(`
@@ -200,7 +200,7 @@ route.get('/meetings/:id', requireAdmin, async c => {
   return c.json({...meeting,responses,attendance,total_members:members.results.length});
 });
 
-route.patch('/meetings/:id', requireFinance, async c => {
+route.patch('/meetings/:id', requireMeetingsManage, async c => {
   const adminUser=c.get('admin')!;
   const id=Number(c.req.param('id'));
   const before=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
@@ -257,7 +257,7 @@ route.patch('/meetings/:id', requireFinance, async c => {
   });
 });
 
-route.post('/meetings/:id/notify-update', requireFinance, async c => {
+route.post('/meetings/:id/notify-update', requireMeetingsManage, async c => {
   const adminUser=c.get('admin')!;
   const id=Number(c.req.param('id'));
   const body=await c.req.json().catch(()=>({})) as any;
@@ -298,7 +298,7 @@ route.post('/meetings/:id/notify-update', requireFinance, async c => {
   return c.json({ok:true,sent,unlinked,failed,rescheduled});
 });
 
-route.post('/meetings/:id/remind-pending', requireFinance, async c => {
+route.post('/meetings/:id/remind-pending', requireMeetingsManage, async c => {
   const adminUser=c.get('admin')!;
   const id=Number(c.req.param('id'));
   const m=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
@@ -333,7 +333,7 @@ route.post('/meetings/:id/remind-pending', requireFinance, async c => {
   return c.json({ok:true,sent,unlinked,failed,pending:members.results.length});
 });
 
-route.post('/meetings/:id/cancel', requireFinance, async c => {
+route.post('/meetings/:id/cancel', requireMeetingsManage, async c => {
   const adminUser=c.get('admin')!;
   const id=Number(c.req.param('id'));
   const body=await c.req.json().catch(()=>({})) as any;
@@ -364,7 +364,7 @@ route.post('/meetings/:id/cancel', requireFinance, async c => {
   return c.json({ok:true,meeting:after,sent,unlinked,failed});
 });
 
-route.post('/meetings/:id/send', requireFinance, async c => {
+route.post('/meetings/:id/send', requireMeetingsManage, async c => {
   const adminUser=c.get('admin')!;
   const id=Number(c.req.param('id'));
   await ensureMeetingsSchema(c.env);
@@ -392,7 +392,7 @@ route.post('/meetings/:id/send', requireFinance, async c => {
 });
 
 
-route.put('/meetings/:id/attendance', requireFinance, async c=>{
+route.put('/meetings/:id/attendance', requireMeetingsManage, async c=>{
   const adminUser=c.get('admin')!,id=Number(c.req.param('id'));
   const meeting=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   if(!meeting)return c.json({error:'Meeting not found'},404);
@@ -417,7 +417,7 @@ route.put('/meetings/:id/attendance', requireFinance, async c=>{
   return c.json({ok:true,recorded:Number(recorded?.n||0),total:invitees.results.length});
 });
 
-route.post('/meetings/:id/complete', requireFinance, async c=>{
+route.post('/meetings/:id/complete', requireMeetingsManage, async c=>{
   const adminUser=c.get('admin')!,id=Number(c.req.param('id'));
   const before=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(id).first<any>();
   if(!before)return c.json({error:'Meeting not found'},404);

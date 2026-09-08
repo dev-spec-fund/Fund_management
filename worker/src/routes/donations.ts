@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireFinance } from "../auth";
+import { requireDonationsManage, requireDonationsView } from "../auth";
 import { currentDate, generateTxnId } from "../db";
 import { auditEntity, ensureOperationalSchema, requireOpenMonth } from "../ops";
 import { boundedText, money, validDate, validMonth } from "../validation";
@@ -34,7 +34,7 @@ async function donationMember(c:any,memberId:any){
   return c.env.DB.prepare("SELECT id,member_code,name FROM members WHERE id=?").bind(id).first<any>();
 }
 
-donationsRoute.get("/",requireAdmin,async c=>{
+donationsRoute.get("/",requireDonationsView,async c=>{
   await ensureOperationalSchema(c.env);
   const month=String(c.req.query("month")||"").trim();
   const status=String(c.req.query("status")||"").trim();
@@ -62,7 +62,7 @@ donationsRoute.get("/",requireAdmin,async c=>{
   return c.json(rows.results);
 });
 
-donationsRoute.get("/:id",requireAdmin,async c=>{
+donationsRoute.get("/:id",requireDonationsView,async c=>{
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param("id"));
   const row=await c.env.DB.prepare(`SELECT d.*,p.project_code,p.name project_name,m.member_code,m.name member_name,
@@ -74,7 +74,7 @@ donationsRoute.get("/:id",requireAdmin,async c=>{
   return c.json(row);
 });
 
-donationsRoute.post("/",requireFinance,async c=>{
+donationsRoute.post("/",requireDonationsManage,async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!; const b=await c.req.json<any>();
   const donor=boundedText(b.donor_name,120,true); const amount=money(b.amount); const note=boundedText(b.note,1000);
@@ -125,7 +125,7 @@ donationsRoute.post("/",requireFinance,async c=>{
   return c.json({id:r.meta.last_row_id,txn_id:txn,project_id:project?.id??null,status:'active'},201);
 });
 
-donationsRoute.patch("/:id",requireFinance,async c=>{
+donationsRoute.patch("/:id",requireDonationsManage,async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const b=await c.req.json<any>();
   const before=await c.env.DB.prepare("SELECT * FROM donations WHERE id=?").bind(id).first<any>();
@@ -157,7 +157,7 @@ donationsRoute.patch("/:id",requireFinance,async c=>{
 
 // Donation supporting documents are evidence only. They can be attached/viewed even
 // after month close because they do not alter the financial transaction itself.
-donationsRoute.get("/:id/documents",requireFinance,async c=>{
+donationsRoute.get("/:id/documents",requireDonationsManage,async c=>{
   await ensureOperationalSchema(c.env); const id=Number(c.req.param("id"));
   const exists=await c.env.DB.prepare("SELECT id FROM donations WHERE id=?").bind(id).first();if(!exists)return c.json({error:'Donation not found'},404);
   const rows=await c.env.DB.prepare(`SELECT dd.id,dd.donation_id,dd.original_filename,COALESCE(NULLIF(dd.display_name,''),dd.original_filename) display_name,
@@ -167,7 +167,7 @@ donationsRoute.get("/:id/documents",requireFinance,async c=>{
   return c.json(rows.results);
 });
 
-donationsRoute.post("/:id/documents",requireFinance,async c=>{
+donationsRoute.post("/:id/documents",requireDonationsManage,async c=>{
   await ensureOperationalSchema(c.env); const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const donation=await c.env.DB.prepare("SELECT id,txn_id,donor_name,amount FROM donations WHERE id=?").bind(id).first<any>();if(!donation)return c.json({error:'Donation not found'},404);
   const form=await c.req.formData(); const value=form.get('file');
@@ -188,7 +188,7 @@ donationsRoute.post("/:id/documents",requireFinance,async c=>{
   return c.json({id:docId,donation_id:id,original_filename:filename,display_name:filename,mime_type:mime,file_size:Number(tgDoc?.file_size||value.size||0),document_type:documentType,created_at:new Date().toISOString()},201);
 });
 
-donationsRoute.get("/:id/documents/:docId/file",requireFinance,async c=>{
+donationsRoute.get("/:id/documents/:docId/file",requireDonationsManage,async c=>{
   await ensureOperationalSchema(c.env); const id=Number(c.req.param('id')),docId=Number(c.req.param('docId'));
   const doc=await c.env.DB.prepare("SELECT * FROM donation_documents WHERE id=? AND donation_id=? AND removed_at IS NULL").bind(docId,id).first<any>();if(!doc)return c.json({error:'Document not found'},404);
   const file=await downloadTelegramFile(c.env,String(doc.telegram_file_id));if(!file)return c.json({error:'Could not retrieve document from Telegram'},502);
@@ -196,14 +196,14 @@ donationsRoute.get("/:id/documents/:docId/file",requireFinance,async c=>{
   return new Response(file.bytes,{headers:{'Content-Type':responseMime,'Content-Disposition':`inline; filename*=UTF-8''${encodeURIComponent(safeDonationFilename(doc.original_filename||'document'))}`,'Cache-Control':'private, no-store'}});
 });
 
-donationsRoute.post("/:id/documents/:docId/send-to-telegram",requireFinance,async c=>{
+donationsRoute.post("/:id/documents/:docId/send-to-telegram",requireDonationsManage,async c=>{
   await ensureOperationalSchema(c.env); const admin=c.get('admin')!; const id=Number(c.req.param('id')),docId=Number(c.req.param('docId'));
   const doc=await c.env.DB.prepare(`SELECT dd.*,d.txn_id,d.donor_name FROM donation_documents dd JOIN donations d ON d.id=dd.donation_id WHERE dd.id=? AND dd.donation_id=? AND dd.removed_at IS NULL`).bind(docId,id).first<any>();if(!doc)return c.json({error:'Document not found'},404);
   await sendStoredDocument(c.env,admin.telegram_id,String(doc.telegram_file_id),`Donation document · ${doc.txn_id||`#${id}`} · ${String(doc.donor_name||'').slice(0,120)}`);
   return c.json({ok:true});
 });
 
-donationsRoute.patch("/:id/documents/:docId",requireFinance,async c=>{
+donationsRoute.patch("/:id/documents/:docId",requireDonationsManage,async c=>{
   await ensureOperationalSchema(c.env); const admin=c.get('admin')!; const id=Number(c.req.param('id')),docId=Number(c.req.param('docId'));
   const before=await c.env.DB.prepare("SELECT * FROM donation_documents WHERE id=? AND donation_id=? AND removed_at IS NULL").bind(docId,id).first<any>();if(!before)return c.json({error:'Document not found'},404);
   const body=await c.req.json<any>(); const displayName=body.display_name===undefined?(before.display_name||before.original_filename):boundedText(body.display_name,180,true); const requested=body.document_type===undefined?(before.document_type||'Other'):boundedText(body.document_type,60,true);
@@ -213,7 +213,7 @@ donationsRoute.patch("/:id/documents/:docId",requireFinance,async c=>{
   return c.json({ok:true,id:docId,display_name:displayName,document_type:requested});
 });
 
-donationsRoute.delete("/:id/documents/:docId",requireFinance,async c=>{
+donationsRoute.delete("/:id/documents/:docId",requireDonationsManage,async c=>{
   await ensureOperationalSchema(c.env); const admin=c.get('admin')!; const id=Number(c.req.param('id')),docId=Number(c.req.param('docId'));
   const before=await c.env.DB.prepare("SELECT * FROM donation_documents WHERE id=? AND donation_id=? AND removed_at IS NULL").bind(docId,id).first<any>();if(!before)return c.json({error:'Document not found'},404);
   const body=await c.req.json<any>().catch(()=>({}));const reason=boundedText(body.reason,500,true);if(!reason||reason.length<3)return c.json({error:'Removal reason is required'},400);
@@ -222,7 +222,7 @@ donationsRoute.delete("/:id/documents/:docId",requireFinance,async c=>{
   return c.json({ok:true});
 });
 
-donationsRoute.delete("/:id",requireFinance,async c=>{
+donationsRoute.delete("/:id",requireDonationsManage,async c=>{
   const admin=c.get("admin")!;const id=Number(c.req.param("id"));const b=await c.req.json().catch(()=>({})) as any;
   const before=await c.env.DB.prepare("SELECT * FROM donations WHERE id=?").bind(id).first<any>();if(!before)return c.json({error:"Not found"},404);
   if(before.status!=='active')return c.json({error:`Donation is already ${before.status}`},409);

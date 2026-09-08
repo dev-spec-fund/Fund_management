@@ -7,7 +7,7 @@ import { fmt } from "../../utils/format";
 import Pagination, { pageSlice } from "../../components/Pagination";
 import { ActivityRow, activityDayLabel } from "../../components/ActivityRow";
 
-export function Activity({ isAdmin, canFinance = false }) {
+export function Activity({ isAdmin, canManageExpenses = false, canReverse = false }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [rows, setRows] = useState(() => api.peekCached("/api/reports/activity") || null);
   const [filter, setFilter] = useState("all");
@@ -96,7 +96,7 @@ export function Activity({ isAdmin, canFinance = false }) {
   };
 
   const openExpense = (row) => {
-    if (!canFinance || row.kind !== "expense") return;
+    if (!canManageExpenses || row.kind !== "expense") return;
     if (!expenseCategories.length) api.expenses.categories().then(setExpenseCategories).catch(() => {});
     setExpenseError("");
     setEditingExpense({
@@ -142,7 +142,7 @@ export function Activity({ isAdmin, canFinance = false }) {
   };
 
   const reverseActivity = async (row) => {
-    if (!canFinance) return;
+    if (!canReverse) return;
     const reason=window.prompt(`Reason for reversing ${row.txn_id || row._kind || "transaction"}:`);
     if(reason===null) return;
     if(reason.trim().length<3) return setActivityError("Please enter a reversal reason.");
@@ -233,7 +233,7 @@ export function Activity({ isAdmin, canFinance = false }) {
             <div className="sans" style={{ display: "flex", alignItems: "center", gap: 8, margin: "13px 2px 7px", fontSize: 10, fontWeight: 700, letterSpacing: 1.1, textTransform: "uppercase", color: "var(--soft)" }}>
               <span>{group.label}</span><span style={{ height: 1, flex: 1, background: "var(--border)" }} />
             </div>
-            {group.rows.map((a) => <ActivityRow key={`${filter}-${a._kind}-${a.id}`} a={a} isAdmin={isAdmin} canFinance={canFinance} onExpenseClick={openExpense} onActivityClick={setSelectedActivity} onReverse={reverseActivity} />)}
+            {group.rows.map((a) => <ActivityRow key={`${filter}-${a._kind}-${a.id}`} a={a} isAdmin={isAdmin} canEditExpense={canManageExpenses} canReverse={canReverse} onExpenseClick={openExpense} onActivityClick={setSelectedActivity} onReverse={reverseActivity} />)}
           </div>
         ))}
         {filtered.length === 0 && <div className="sans" style={{ fontSize: 13, color: "var(--soft)" }}>Nothing here yet.</div>}

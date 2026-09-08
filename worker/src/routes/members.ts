@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireFinance, requireMemberOrAdmin } from "../auth";
+import { requireApprovalsManage, requireMemberOrAdmin, requireMembersManage, requireMembersView } from "../auth";
 import { logAudit, generateMemberCode, currentMonth, currentDate, getSetting, getBranding } from "../db";
 import { auditEntity, ensureOperationalSchema, findDuplicateMembers, normalizeName, normalizePhone, requireOpenMonth } from "../ops";
 import { boundedText, flag, money, telegramId, validMonth } from "../validation";
@@ -14,7 +14,7 @@ export const membersRoute = new Hono<AppEnv>();
 // requesting /api/members plus the much heavier /api/reports/summary endpoint.
 // One route keeps page entry to a single network round trip and only reads the
 // fields needed by the Members screen.
-membersRoute.get("/overview", requireAdmin, async (c) => {
+membersRoute.get("/overview", requireMembersView, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
   const admin=c.get("admin")!;
@@ -83,7 +83,7 @@ membersRoute.get("/overview", requireAdmin, async (c) => {
   });
 });
 
-membersRoute.get("/", requireAdmin, async (c) => {
+membersRoute.get("/", requireMembersView, async (c) => {
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!;
   const viewer=admin.role==='viewer';
@@ -97,7 +97,7 @@ membersRoute.get("/", requireAdmin, async (c) => {
   return c.json(rows.results);
 });
 
-membersRoute.get("/:id", requireAdmin, async (c) => {
+membersRoute.get("/:id", requireMembersView, async (c) => {
   await ensureOperationalSchema(c.env);
   const id = c.req.param("id");
   const admin=c.get("admin")!;
@@ -119,7 +119,7 @@ membersRoute.get("/:id", requireAdmin, async (c) => {
   return c.json({ ...member, contributions: contributions.results, exco_history:excoHistory.results });
 });
 
-membersRoute.get("/:id/monthly-status", requireAdmin, async (c) => {
+membersRoute.get("/:id/monthly-status", requireMembersView, async (c) => {
   const id = Number(c.req.param("id"));
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
@@ -289,7 +289,7 @@ membersRoute.get("/:id/statement", requireMemberOrAdmin, async (c) => {
   return c.json({organization,member,contributions:contributions.results,allocations:allocations.results,donations:donations.results,monthly_status:statuses,balance_history:balanceHistory,contribution_rates:rates.results,reconciliation});
 });
 
-membersRoute.get("/:id/contributions/:contributionId/slip/file", requireFinance, async (c) => {
+membersRoute.get("/:id/contributions/:contributionId/slip/file", requireApprovalsManage, async (c) => {
   await ensureOperationalSchema(c.env);
   const memberId=Number(c.req.param("id")); const contributionId=Number(c.req.param("contributionId"));
   if(!Number.isInteger(memberId)||memberId<=0||!Number.isInteger(contributionId)||contributionId<=0) return c.json({error:"Invalid contribution"},400);
@@ -303,7 +303,7 @@ membersRoute.get("/:id/contributions/:contributionId/slip/file", requireFinance,
   return new Response(file.bytes,{headers:{"Content-Type":file.mime,"Content-Disposition":`inline; filename="${filename}"`,"Cache-Control":"private, no-store"}});
 });
 
-membersRoute.post("/:id/contributions/:contributionId/slip/send-to-telegram", requireFinance, async (c) => {
+membersRoute.post("/:id/contributions/:contributionId/slip/send-to-telegram", requireApprovalsManage, async (c) => {
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!; const memberId=Number(c.req.param("id")); const contributionId=Number(c.req.param("contributionId"));
   const contribution=await c.env.DB.prepare(`SELECT c.id,c.txn_id,c.amount,c.slip_file_id,m.name member_name FROM contributions c JOIN members m ON m.id=c.member_id WHERE c.id=? AND c.member_id=?`).bind(contributionId,memberId).first<any>();
@@ -315,7 +315,7 @@ membersRoute.post("/:id/contributions/:contributionId/slip/send-to-telegram", re
   return c.json({ok:true});
 });
 
-membersRoute.post("/", requireFinance, async (c) => {
+membersRoute.post("/", requireMembersManage, async (c) => {
   const admin = c.get("admin")!;
   const body = await c.req.json<any>();
   const name=boundedText(body.name,120,true); const phone=boundedText(body.phone,40);
@@ -334,7 +334,7 @@ membersRoute.post("/", requireFinance, async (c) => {
   return c.json({ id: res.meta.last_row_id, member_code: memberCode }, 201);
 });
 
-membersRoute.patch("/:id", requireFinance, async (c) => {
+membersRoute.patch("/:id", requireMembersManage, async (c) => {
   const admin = c.get("admin")!; const id = Number(c.req.param("id"));
   const body = await c.req.json<any>();
   const before = await c.env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(id).first<any>();
@@ -384,7 +384,7 @@ membersRoute.get("/:id/contribution-rates", requireMemberOrAdmin, async (c) => {
   return c.json(rows.results);
 });
 
-membersRoute.post("/:id/contribution-rates", requireFinance, async (c) => {
+membersRoute.post("/:id/contribution-rates", requireMembersManage, async (c) => {
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const body=await c.req.json<any>();
   const amount=money(body.amount,1000000); const effective=String(body.effective_from||"");
   if(!amount || !validMonth(effective)) return c.json({error:"Valid amount and effective month are required"},400);
@@ -396,7 +396,7 @@ membersRoute.post("/:id/contribution-rates", requireFinance, async (c) => {
   return c.json({ok:true,rates:(await c.env.DB.prepare("SELECT id,amount,effective_from,effective_to,created_at FROM member_contribution_rates WHERE member_id=? ORDER BY effective_from DESC").bind(id).all<any>()).results});
 });
 
-membersRoute.post("/:id/exempt", requireFinance, async (c) => {
+membersRoute.post("/:id/exempt", requireMembersManage, async (c) => {
   const admin = c.get("admin")!; const id = Number(c.req.param("id"));
   const body = await c.req.json<{ month: string; reason?: string }>();
   if(!Number.isInteger(id) || id<=0) return c.json({error:"Invalid member"},400);

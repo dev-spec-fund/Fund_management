@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../../types";
-import { requireSuperAdmin } from "../../auth";
+import { requireElectionsCertify, requireElectionsManage } from "../../auth";
 import { auditEntity, ensureOperationalSchema } from "../../ops";
 import { sendMessage } from "../../telegram";
 import { getBranding } from "../../db";
@@ -14,7 +14,7 @@ import {
 } from "../../elections/core";
 
 export function registerElectionVotingRoutes(electionsRoute: Hono<AppEnv>) {
-electionsRoute.post("/:id/remind-nonvoters", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/remind-nonvoters", requireElectionsManage, async c=>{
   await processElectionLifecycle(c.env);
   const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404); if(election.status!=="open")return c.json({error:"Election is not open"},409);
@@ -31,7 +31,7 @@ electionsRoute.post("/:id/remind-nonvoters", requireSuperAdmin, async c=>{
   return c.json({ok:true,...result});
 });
 
-electionsRoute.post("/:id/runoffs", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/runoffs", requireElectionsManage, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
@@ -67,7 +67,7 @@ electionsRoute.post("/:id/runoffs", requireSuperAdmin, async c=>{
   return c.json({ok:true,runoff_id:runoffId,...await electionDetail(c.env,id)});
 });
 
-electionsRoute.post("/:id/runoffs/:runoffId/close", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/runoffs/:runoffId/close", requireElectionsManage, async c=>{
   const admin=c.get("admin")!,id=Number(c.req.param("id")),runoffId=Number(c.req.param("runoffId"));
   const before=await c.env.DB.prepare("SELECT * FROM election_runoffs WHERE id=? AND election_id=?").bind(runoffId,id).first<any>();
   if(!before)return c.json({error:"Runoff not found"},404);
@@ -120,7 +120,7 @@ electionsRoute.post("/:id/runoffs/:runoffId/vote", async c=>{
   return c.json({ok:true,submitted:true});
 });
 
-electionsRoute.post("/:id/certify", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/certify", requireElectionsCertify, async c=>{
   await processElectionLifecycle(c.env);
   const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const before=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();

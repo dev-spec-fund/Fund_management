@@ -3,8 +3,12 @@ import { Plus, Vote, ClipboardCheck, ShieldCheck, ChevronRight, CheckCircle2, Lo
 import { api,onDataChangeDebounced } from "../api";
 import { Modal,Field,useConfirmDialog } from "../components/FormControls";
 import { LoadingState,EmptyState,MessageBanner,approveBtn,compactBtn,rejectBtn } from "../components/Shared";
+import { adminCan } from "../utils/permissions";
 
-export default function Elections(){
+export default function Elections({admin}){
+  const canManageElections=adminCan(admin,"elections_manage");
+  const canCertifyElections=adminCan(admin,"elections_certify");
+  const canExportReports=adminCan(admin,"reports_export");
   const [rows,setRows]=useState(()=>api.peekCached("/api/elections"));
   const [members,setMembers]=useState(()=>api.peekCached("/api/members")||[]);
   const [selected,setSelected]=useState(null);
@@ -31,14 +35,14 @@ export default function Elections(){
   const {confirm,confirmationDialog}=useConfirmDialog();
 
   const loadPrimary=()=>api.elections.list().then(setRows).catch(e=>setMessage(e.message));
-  const loadSecondary=()=>Promise.all([
+  const loadSecondary=()=>canManageElections?Promise.all([
     api.elections.dashboard().then(setDashboard),
     api.elections.currentExco().then(r=>setCurrentExco(r.roles||[])),
     api.elections.archive().then(r=>setArchive(r.archive||[])),
     api.elections.excoTerms().then(setExcoTerms),
     api.elections.currentHandover().then(setHandover),
     api.elections.excoWorkboard().then(setWorkboard),
-  ]).catch(e=>setMessage(e.message));
+  ]).catch(e=>setMessage(e.message)):Promise.resolve();
   const scheduleSecondary=(delay=0)=>new Promise((resolve)=>{
     const run=()=>{
       const warm=()=>loadSecondary().finally(resolve);
@@ -62,19 +66,19 @@ export default function Elections(){
     if(paths.some((path)=>path?.startsWith("/api/elections")))load();
   },180),[]);
   useEffect(()=>{
-    if(!detail?.id||detail.status!=="draft"){setReadiness(null);return;}
+    if(!canManageElections||!detail?.id||detail.status!=="draft"){setReadiness(null);return;}
     let active=true;
     api.elections.readiness(detail.id).then(r=>{if(active)setReadiness(r)}).catch(e=>{if(active){setReadiness(null);setMessage(e.message)}});
     return ()=>{active=false};
-  },[detail]);
+  },[detail,canManageElections]);
   useEffect(()=>{
-    if(!detail?.id||detail.status!=="draft"||members.length)return;
+    if(!canManageElections||!detail?.id||detail.status!=="draft"||members.length)return;
     let active=true;
     const warm=()=>api.members.list().then(r=>{if(active)setMembers(r)}).catch(()=>{});
     if(typeof window.requestIdleCallback==="function")window.requestIdleCallback(warm,{timeout:900});
     else setTimeout(warm,120);
     return()=>{active=false};
-  },[detail?.id,detail?.status,members.length]);
+  },[canManageElections,detail?.id,detail?.status,members.length]);
 
   useEffect(()=>{
     if(!detail?.id||!detail.certified_at){setSummary(null);return;}
@@ -87,23 +91,23 @@ export default function Elections(){
     try{setNotificationStatus(await api.refreshCached(`/api/elections/${id}/notifications`))}catch(e){setNotificationStatus(null)}
   };
   useEffect(()=>{
-    if(!detail?.id){setNotificationStatus(null);return;}
+    if(!canManageElections||!detail?.id){setNotificationStatus(null);return;}
     let active=true;
     const warm=()=>{if(active)refreshNotificationStatus(detail.id)};
     let idleHandle=null,timer=null;
     if(typeof window.requestIdleCallback==="function")idleHandle=window.requestIdleCallback(warm,{timeout:900});
     else timer=setTimeout(warm,160);
     return()=>{active=false;if(idleHandle!==null)window.cancelIdleCallback?.(idleHandle);if(timer!==null)clearTimeout(timer)};
-  },[detail?.id,detail?.status,detail?.certified_at]);
+  },[canManageElections,detail?.id,detail?.status,detail?.certified_at]);
   useEffect(()=>{
-    if(!detail?.id){setTimeline(null);return;}
+    if(!canManageElections||!detail?.id){setTimeline(null);return;}
     let active=true;
     const warm=()=>api.elections.timeline(detail.id).then(r=>{if(active)setTimeline(r)}).catch(()=>{if(active)setTimeline(null)});
     let idleHandle=null,timer=null;
     if(typeof window.requestIdleCallback==="function")idleHandle=window.requestIdleCallback(warm,{timeout:1200});
     else timer=setTimeout(warm,220);
     return ()=>{active=false;if(idleHandle!==null)window.cancelIdleCallback?.(idleHandle);if(timer!==null)clearTimeout(timer)};
-  },[detail?.id,detail?.status,detail?.certified_at]);
+  },[canManageElections,detail?.id,detail?.status,detail?.certified_at]);
 
   const deleteUnusedElection=async()=>{
     if(!detail?.id||!detail?.deletion?.allowed)return;
@@ -251,7 +255,7 @@ export default function Elections(){
     <div className="governance-page-head election-theme">
       <div className="governance-title-row">
         <div><span className="governance-eyebrow sans">GOVERNANCE</span><h2>Elections</h2><p className="sans">Run transparent EXCO elections with secret ballots and certified results.</p></div>
-        <button type="button" className="governance-primary-action sans" onClick={()=>setShowCreate(true)}><Plus size={16}/> New election</button>
+        {canManageElections&&<button type="button" className="governance-primary-action sans" onClick={()=>setShowCreate(true)}><Plus size={16}/> New election</button>}
       </div>
       <div className="governance-kpi-grid">
         <ElectionKpi icon={<Vote size={16}/>} label="Active" value={electionStats.active}/>
@@ -344,7 +348,7 @@ export default function Elections(){
       <button type="button" disabled={busy} onClick={createResponsibility} style={{...approveBtn,width:"100%"}}>Add responsibility</button>
     </Modal>}
 
-    {showCreate&&<Modal title="Create EXCO election" onClose={()=>setShowCreate(false)}>
+    {canManageElections&&showCreate&&<Modal title="Create EXCO election" onClose={()=>setShowCreate(false)}>
       <Field label="Election title" value={form.title} onChange={v=>setForm({...form,title:v})}/>
       <Field label="Term (optional)" value={form.term} onChange={v=>setForm({...form,term:v})}/>
       <Field label="Candidate applications open" type="datetime-local" value={form.applications_open_at} onChange={v=>setForm({...form,applications_open_at:v})}/>
@@ -359,6 +363,7 @@ export default function Elections(){
       {!detail?<LoadingState>Loading election…</LoadingState>:<>
         <div className="election-admin-summary sans"><span>Status <b>{detail.status==="draft"&&detail.application_phase==="open"?"Applications Open":detail.status}</b></span><span>Turnout <b>{detail.turnout?.voted||0}/{detail.turnout?.eligible||0}</b></span></div>
         <ElectionStageStrip detail={detail}/>
+        {!canManageElections?<ReadOnlyElectionAdmin detail={detail}/>:<>
         {(notificationStatus||timeline)&&<details className="election-admin-more">
           <summary className="sans"><span><b>Governance details</b><small>Notifications, timeline and audit context</small></span><strong>View</strong></summary>
           <div className="election-admin-more-body">
@@ -480,10 +485,10 @@ export default function Elections(){
           {detail.certified_at&&<div className="sans election-certification"><ShieldCheck size={14}/> Certified by {detail.certified_by_name||"Super Admin"} · Results locked</div>}
           {detail.certified_at&&summary&&<>
             <ElectionSummary summary={summary} adminView/>
-            <div className="election-export-actions sans">
+            {canExportReports&&<div className="election-export-actions sans">
               <button type="button" disabled={busy} onClick={exportPdf}>PDF Record</button>
               <button type="button" disabled={busy} onClick={exportCsv}>CSV Record</button>
-            </div>
+            </div>}
           </>}
           <ElectionResults detail={detail}/>
           {!detail.certified_at&&detail.unresolved_ties?.map(tie=>{
@@ -493,14 +498,28 @@ export default function Elections(){
               {activeRunoff?<><div className="sans election-runoff-turnout">{activeRunoff.turnout?.voted||0}/{activeRunoff.turnout?.eligible||0} voted · Round {activeRunoff.round_no}</div><button type="button" disabled={busy} onClick={()=>closeRunoff(activeRunoff)}>Close runoff</button></>:<button type="button" disabled={busy} onClick={()=>startRunoff(tie)}>Start runoff round {tie.round_no}</button>}
             </div>
           })}
-          {!detail.certified_at&&<button type="button" disabled={busy||!!detail.unresolved_ties?.length} onClick={certify} style={{...approveBtn,width:"100%",marginTop:10,opacity:detail.unresolved_ties?.length?.55:1}}>{detail.unresolved_ties?.length?"Resolve runoffs before certification":"Certify results & assign EXCO roles"}</button>}
+          {canCertifyElections&&!detail.certified_at&&<button type="button" disabled={busy||!!detail.unresolved_ties?.length} onClick={certify} style={{...approveBtn,width:"100%",marginTop:10,opacity:detail.unresolved_ties?.length?.55:1}}>{detail.unresolved_ties?.length?"Resolve runoffs before certification":"Certify results & assign EXCO roles"}</button>}
           {!!detail.audit_history?.length&&<details className="election-admin-more election-audit-details"><summary className="sans"><span><b>Election audit</b><small>{detail.audit_history.length} governance event{detail.audit_history.length===1?"":"s"}</small></span><strong>View</strong></summary><div className="election-admin-more-body">{detail.audit_history.map(a=><div key={a.id} className="sans election-audit-row"><b>{String(a.action||"").replaceAll("_"," ")}</b><span>{a.admin_name||"system"} · {String(a.created_at||"").replace("T"," ").slice(0,16)}</span></div>)}</div></details>}
         </>}
         {detail.status==="cancelled"&&<div className="sans election-secret-note">This election was cancelled.</div>}
+        </>}
       </>}
     </Modal>}
     {confirmationDialog}
   </>;
+}
+
+
+function ReadOnlyElectionAdmin({detail}){
+  return <div className="election-role-readonly">
+    <div className="sans election-secret-note">Read-only election access. Management actions are hidden for this role.</div>
+    {!!detail.positions?.length&&<>
+      <div className="sans member-section-title">POSITIONS & CANDIDATES</div>
+      {detail.positions.map(p=><div key={p.id} className="election-admin-position"><b className="sans">{p.title}</b><span className="sans">{p.seats} seat{Number(p.seats)===1?"":"s"} · {(p.candidates||[]).filter(c=>c.status==="active").length} active candidate{(p.candidates||[]).filter(c=>c.status==="active").length===1?"":"s"}</span></div>)}
+    </>}
+    {detail.status==="closed"&&<ElectionResults detail={detail}/>}
+    {detail.status==="cancelled"&&<div className="sans election-secret-note">This election was cancelled.</div>}
+  </div>;
 }
 
 function ElectionStageStrip({detail}){

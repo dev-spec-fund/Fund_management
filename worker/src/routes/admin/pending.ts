@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { AppEnv } from "../../types";
-import { requireFinance } from "../../auth";
+import { requireApprovalsManage } from "../../auth";
 import { auditEntity, contributionDuplicateKey, duplicateSlip, ensureOperationalSchema, normalizeName, normalizePhone, requireOpenMonth, requireOpenContributionMonths, safeLogError, findDuplicateMembers } from "../../ops";
 import { currentMonth, currentDate, getSetting, getBranding, generateMemberCode } from "../../db";
 import { ensureInitialContributionRate, contributionDueFromRate, firstMonthContributionRule } from "../../contributionRates";
@@ -10,7 +10,7 @@ import { syncContributionReviewMessages } from "../../contributionReviewMessages
 import { money, validDate, validMonth, boundedText } from "../../validation";
 
 export function registerPendingAdminRoutes(route: Hono<AppEnv>) {
-route.get('/pending/counts', requireFinance, async c => {
+route.get('/pending/counts', requireApprovalsManage, async c => {
   // Overview only needs a badge count. Avoid downloading every pending row
   // (including OCR/slip metadata) just to render that number.
   const row=await c.env.DB.prepare(`
@@ -23,7 +23,7 @@ route.get('/pending/counts', requireFinance, async c => {
   return c.json({registrations,contributions,total:registrations+contributions});
 });
 
-route.get('/pending', requireFinance, async c => {
+route.get('/pending', requireApprovalsManage, async c => {
   // Keep the approvals landing page cheap. Duplicate-member matching and
   // contribution allocation previews are review-only data and are fetched
   // lazily when an admin opens the relevant item.
@@ -35,7 +35,7 @@ route.get('/pending', requireFinance, async c => {
   return c.json({ registrations: registrations.results, contributions: contributions.results, slips: contributions.results });
 });
 
-route.get('/pending/registrations/:id/review', requireFinance, async c => {
+route.get('/pending/registrations/:id/review', requireApprovalsManage, async c => {
   const id=Number(c.req.param('id'));
   const row=await c.env.DB.prepare(`SELECT * FROM member_registration_requests WHERE id=? AND status='pending'`).bind(id).first<any>();
   if(!row)return c.json({error:'Registration request not found'},404);
@@ -43,7 +43,7 @@ route.get('/pending/registrations/:id/review', requireFinance, async c => {
   return c.json({...row,possible_matches});
 });
 
-route.get('/pending/contributions/:id/review', requireFinance, async c => {
+route.get('/pending/contributions/:id/review', requireApprovalsManage, async c => {
   const id=Number(c.req.param('id'));
   const row=await c.env.DB.prepare(`SELECT c.*,m.name member_name,m.member_code FROM contributions c JOIN members m ON m.id=c.member_id WHERE c.id=? AND c.status='pending'`).bind(id).first<any>();
   if(!row)return c.json({error:'Contribution not found'},404);
@@ -52,7 +52,7 @@ route.get('/pending/contributions/:id/review', requireFinance, async c => {
   return c.json({...row,allocation_preview});
 });
 
-route.post('/pending/registrations/:id/approve', requireFinance, async c => {
+route.post('/pending/registrations/:id/approve', requireApprovalsManage, async c => {
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const body=await c.req.json().catch(()=>({})) as any;
   const req=await c.env.DB.prepare("SELECT * FROM member_registration_requests WHERE id=?").bind(id).first<any>();
   if(!req)return c.json({error:'Registration request not found'},404); if(req.status!=='pending')return c.json({error:`Already ${req.status}`},409);
@@ -80,7 +80,7 @@ route.post('/pending/registrations/:id/approve', requireFinance, async c => {
   await sendMessage(c.env, req.telegram_id, `✅ Your membership with <b>${branding.fund_name}</b> has been approved. Member ID: <b>${member.member_code}</b>. You can now submit contribution slips.`);
   return c.json({ok:true,member});
 });
-route.post('/pending/registrations/:id/reject', requireFinance, async c => {
+route.post('/pending/registrations/:id/reject', requireApprovalsManage, async c => {
   const admin=c.get('admin')!;const id=Number(c.req.param('id'));const b=await c.req.json().catch(()=>({})) as any;const req=await c.env.DB.prepare("SELECT * FROM member_registration_requests WHERE id=?").bind(id).first<any>();if(!req)return c.json({error:'Not found'},404);
   const r=await c.env.DB.prepare("UPDATE member_registration_requests SET status='rejected',reviewed_by=?,reviewed_at=datetime('now') WHERE id=? AND status='pending'").bind(admin.id,id).run();if(!r.meta.changes)return c.json({error:'Already reviewed'},409);
   await auditEntity(c.env,admin.id,'member_registration_rejected','registration',id,req,{...req,status:'rejected',reason:b.reason||null});
@@ -88,7 +88,7 @@ route.post('/pending/registrations/:id/reject', requireFinance, async c => {
   return c.json({ok:true});
 });
 
-route.patch('/pending/contributions/:id', requireFinance, async c => {
+route.patch('/pending/contributions/:id', requireApprovalsManage, async c => {
   await ensureOperationalSchema(c.env);
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const body=await c.req.json<{amount?:number;ref_number?:string|null;bank_date?:string|null;month?:string}>();
   const before=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
@@ -117,7 +117,7 @@ route.patch('/pending/contributions/:id', requireFinance, async c => {
   await auditEntity(c.env,admin.id,'contribution_ocr_corrected','contribution',id,before,after); return c.json(after);
 });
 
-route.post('/pending/contributions/:id/approve', requireFinance, async c => {
+route.post('/pending/contributions/:id/approve', requireApprovalsManage, async c => {
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const row=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
   if(!row)return c.json({error:'Not found'},404); if(row.status!=='pending')return c.json({error:`Already ${row.status}`},409); try{await requireOpenMonth(c.env,row.month)}catch(e:any){return c.json({error:e.message},409)}
   const dup=await duplicateSlip(c.env,row.ref_number,Number(row.amount),row.bank_date,id); if(dup)return c.json({error:`Duplicate slip matches ${dup.txn_id}`,duplicate:dup},409);
@@ -133,7 +133,7 @@ route.post('/pending/contributions/:id/approve', requireFinance, async c => {
   return c.json({ok:true,allocations:approved.allocations,review_messages:reviewSync});
 });
 
-route.post('/pending/contributions/:id/reject', requireFinance, async c => {
+route.post('/pending/contributions/:id/reject', requireApprovalsManage, async c => {
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const body=await c.req.json().catch(()=>({})) as any; const row=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
   if(!row)return c.json({error:'Not found'},404); if(row.status!=='pending')return c.json({error:`Already ${row.status}`},409);
   const reason=String(body.reason||'Rejected by admin');
@@ -145,7 +145,7 @@ route.post('/pending/contributions/:id/reject', requireFinance, async c => {
   return c.json({ok:true,review_messages:reviewSync});
 });
 
-route.delete('/contributions/:id', requireFinance, async c => {
+route.delete('/contributions/:id', requireApprovalsManage, async c => {
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const body=await c.req.json().catch(()=>({})) as any;
   const row=await c.env.DB.prepare("SELECT * FROM contributions WHERE id=?").bind(id).first<any>();
   if(!row)return c.json({error:'Not found'},404);
@@ -167,7 +167,7 @@ route.delete('/contributions/:id', requireFinance, async c => {
 
 
 
-route.post('/payment-reminders', requireFinance, async c => {
+route.post('/payment-reminders', requireApprovalsManage, async c => {
   const admin=c.get('admin')!;
   const body=await c.req.json().catch(()=>({})) as any;
   const month=String(body.month || currentMonth(c.env.FUND_TIMEZONE || 'Indian/Maldives'));

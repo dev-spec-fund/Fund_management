@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../../types";
-import { requireSuperAdmin } from "../../auth";
+import { requireElectionsManage } from "../../auth";
 import { auditEntity, ensureOperationalSchema } from "../../ops";
 import { sendMessage } from "../../telegram";
 import { getBranding } from "../../db";
@@ -105,7 +105,7 @@ electionsRoute.post("/:id/applications/:applicationId/withdraw", async c=>{
   return c.json({ok:true});
 });
 
-electionsRoute.post("/:id/applications/:applicationId/review", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/applications/:applicationId/review", requireElectionsManage, async c=>{
   const admin=c.get("admin")!,id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId"));
   const electionState=await c.env.DB.prepare("SELECT status,certified_at FROM elections WHERE id=?").bind(id).first<any>();
   if(!electionState)return c.json({error:"Election not found"},404);
@@ -157,7 +157,7 @@ electionsRoute.post("/:id/applications/:applicationId/review", requireSuperAdmin
   return c.json(await electionDetail(c.env,id));
 });
 
-electionsRoute.post("/:id/applications/:applicationId/reopen", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/applications/:applicationId/reopen", requireElectionsManage, async c=>{
   const admin=c.get("admin")!,id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId"));
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
@@ -182,7 +182,7 @@ electionsRoute.post("/:id/applications/:applicationId/reopen", requireSuperAdmin
   return c.json(await electionDetail(c.env,id));
 });
 
-electionsRoute.post("/:id/applications/:applicationId/reassign", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/applications/:applicationId/reassign", requireElectionsManage, async c=>{
   const admin=c.get("admin")!,id=Number(c.req.param("id")),applicationId=Number(c.req.param("applicationId"));
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
@@ -229,7 +229,7 @@ electionsRoute.post("/:id/applications/:applicationId/reassign", requireSuperAdm
   return c.json(await electionDetail(c.env,id));
 });
 
-electionsRoute.post("/:id/candidates/:candidateId/withdraw", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/candidates/:candidateId/withdraw", requireElectionsManage, async c=>{
   await processElectionLifecycle(c.env);
   const admin=c.get("admin")!; const id=Number(c.req.param("id")),candidateId=Number(c.req.param("candidateId"));
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();

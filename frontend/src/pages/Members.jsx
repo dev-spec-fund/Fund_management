@@ -28,7 +28,8 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
   const [reminderMessage, setReminderMessage] = useState("");
 
   if (!isAdmin) return <Center>Member directory is admin-only in this view.</Center>;
-  const financeAdmin = adminCan(admin, "finance");
+  const canManageMembers = adminCan(admin, "members_manage");
+  const canManageApprovals = adminCan(admin, "approvals_manage");
 
   const addMember = async () => {
     if (!form.name.trim()) return;
@@ -63,7 +64,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
           <div className="sans members-page-title">Members</div>
           <div className="sans members-page-subtitle">{activeMembers.length} active members · contribution overview</div>
         </div>
-        {financeAdmin && <button type="button" onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={primaryBtn}>
+        {canManageMembers && <button type="button" onClick={() => { setForm({name:"",phone:"",monthly_amount:String(defaultMonthly)}); setShowAdd(true); }} className="sans" style={primaryBtn}>
           <Plus size={15} /> Add
         </button>}
       </div>
@@ -91,7 +92,7 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
         </div>
       </section>
 
-      {financeAdmin && (counts.partial + counts.unpaid) > 0 && (
+      {canManageApprovals && (counts.partial + counts.unpaid) > 0 && (
         <button type="button" onClick={sendOutstandingReminders} disabled={reminderBusy}
           className="sans"
           style={{...approveBtn,width:"100%",marginBottom:8}}>
@@ -155,8 +156,8 @@ export default function Members({ isAdmin, admin, month: sharedMonth, onMonthCha
       <Pagination page={memberPage.page} total={filtered.length} onChange={setPage} />
       <div className="members-page-tail-space" aria-hidden="true" />
 
-      {selected && <MemberPopup member={selected} month={month} canEdit={financeAdmin} canRemind={financeAdmin} onClose={() => setSelected(null)} />}
-      {financeAdmin && showAdd && (
+      {selected && <MemberPopup member={selected} month={month} canEdit={canManageMembers} canRemind={canManageApprovals} onClose={() => setSelected(null)} />}
+      {canManageMembers && showAdd && (
         <Modal onClose={() => setShowAdd(false)} title="Add member">
           <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
           <Field label="Phone (optional)" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />

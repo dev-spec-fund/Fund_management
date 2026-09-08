@@ -8,8 +8,10 @@ import ExpenseForm from "./expenses/ExpenseForm";
 import ExpenseDetails from "./expenses/ExpenseDetails";
 import useExpensesData from "./expenses/useExpensesData";
 import { FILTERS, monthLabel, statusLabel, statusTone } from "./expenses/expenseUtils";
+import { adminCan } from "../utils/permissions";
 
 export default function Expenses({ admin }) {
+  const canManageExpenses=adminCan(admin,"expenses_manage");
   const {
     month, setMonth,
     filter, setFilter,
@@ -41,7 +43,7 @@ export default function Expenses({ admin }) {
           <div className="finance-page-title">Expenses</div>
           <div className="finance-page-subtitle">Track fund spending, supporting documents and project expenses.</div>
         </div>
-        <button type="button" onClick={() => setShowAdd(true)} className="finance-primary-button"><Plus size={15} /> Add expense</button>
+        {canManageExpenses&&<button type="button" onClick={() => setShowAdd(true)} className="finance-primary-button"><Plus size={15} /> Add expense</button>}
       </div>
 
       <div className="finance-kpi-grid finance-kpi-grid-3 sans">
@@ -115,7 +117,7 @@ export default function Expenses({ admin }) {
 
     <Pagination page={expensePage.page} total={(rows || []).length} onChange={setPage} />
 
-    {showAdd && <ExpenseForm onClose={() => setShowAdd(false)} onSaved={handleSaved} />}
+    {canManageExpenses && showAdd && <ExpenseForm onClose={() => setShowAdd(false)} onSaved={handleSaved} />}
     {selected && <ExpenseDetails admin={admin} row={selected} onClose={() => setSelected(null)} onSaved={handleSaved} />}
   </>;
 }

@@ -110,7 +110,7 @@ export async function handleCallback(env: Env, callback: any) {
   }
 
   if (action === "member_create" || action === "member_link" || action === "member_reject" || action === "member_approve") {
-    if (!adminCan(admin, "finance")) return answerCallback(env, callback.id, "Treasurer or Super Admin required.");
+    if (!adminCan(admin, "approvals_manage")) return answerCallback(env, callback.id, "Contribution approval access is required.");
     await ensureMemberRegistrationTable(env);
     const requestId = Number(parts[1]);
     const request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE id = ?").bind(requestId).first<any>();
@@ -168,7 +168,7 @@ export async function handleCallback(env: Env, callback: any) {
   }
 
   if (action !== "approve" && action !== "reject") return answerCallback(env, callback.id, "Unknown action.");
-  if (!adminCan(admin, "finance")) return answerCallback(env, callback.id, "Treasurer or Super Admin required.");
+  if (!adminCan(admin, "approvals_manage")) return answerCallback(env, callback.id, "Contribution approval access is required.");
 
   const contributionId = Number(parts[1]);
   const contribution = await env.DB.prepare("SELECT * FROM contributions WHERE id = ?").bind(contributionId).first<any>();

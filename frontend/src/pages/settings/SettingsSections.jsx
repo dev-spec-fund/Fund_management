@@ -81,17 +81,17 @@ export function ContributionSettingsSection(ctx) {
 }
 
 export function ExpenseCategorySettingsSection(ctx) {
-  const {settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,closeBusy,shiftCloseMonth,closeMonthValue,setCloseMonthValue,setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage} = ctx;
+  const {settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,canManageExpenses,confirm,load,setMessage,currentMonth,closeBusy,shiftCloseMonth,closeMonthValue,setCloseMonthValue,setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage} = ctx;
   return <>
       <SectionTitle>EXPENSE CATEGORIES</SectionTitle>
       <div style={cardStyle}>
         {categories.map(cat=><div key={cat.id} className="sans" style={{display:"flex",alignItems:"center",gap:7,padding:"8px 0",borderBottom:"1px solid var(--divider)",opacity:Number(cat.active)===0?.55:1}}>
           <span style={{flex:1,fontSize:12,fontWeight:600}}>{cat.name}{Number(cat.active)===0?" · Inactive":""}</span>
-          {financeAdmin&&<><button type="button" style={compactBtn} onClick={async()=>{const name=prompt("Category name",cat.name);if(!name||name===cat.name)return;try{await api.expenses.updateCategory(cat.id,{name});load()}catch(e){setMessage(e.message)}}}>Edit</button>
+          {canManageExpenses&&<><button type="button" style={compactBtn} onClick={async()=>{const name=prompt("Category name",cat.name);if(!name||name===cat.name)return;try{await api.expenses.updateCategory(cat.id,{name});load()}catch(e){setMessage(e.message)}}}>Edit</button>
           <button type="button" style={compactBtn} onClick={async()=>{try{await api.expenses.updateCategory(cat.id,{active:Number(cat.active)===0});load()}catch(e){setMessage(e.message)}}}>{Number(cat.active)===0?"Activate":"Deactivate"}</button>
           <button type="button" style={{...compactBtn,color:"var(--danger)"}} onClick={async()=>{if(!await confirm({title:"Delete expense category?",message:`Delete ${cat.name}? If it has historical expenses it will be deactivated instead.`,confirmLabel:"Delete"}))return;try{await api.expenses.removeCategory(cat.id);load()}catch(e){setMessage(e.message)}}}>Delete</button></>}
         </div>)}
-        {financeAdmin&&<button type="button" style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=prompt("New expense category name");if(!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}><Plus size={15}/> Add category</button>}
+        {canManageExpenses&&<button type="button" style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=prompt("New expense category name");if(!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}><Plus size={15}/> Add category</button>}
       </div>
 
 
@@ -204,13 +204,66 @@ export function MonthManagementSettingsSection(ctx) {
   </>;
 }
 
+const ROLE_PERMISSION_GROUPS = [
+  {key:"members",label:"Members",note:"Member directory and profile administration",rows:[
+    ["members_view","View members"],["members_manage","Add & edit members"],["approvals_manage","Approve registrations & contributions"],
+  ]},
+  {key:"finance",label:"Finance",note:"Expenses, donations, reports and financial controls",rows:[
+    ["expenses_view","View expenses"],["expenses_manage","Create, edit & void expenses"],
+    ["donations_view","View donations"],["donations_manage","Create, edit & void donations"],
+    ["reports_view","View reports"],["reports_export","Export reports"],
+    ["financial_reversals","Reverse financial records"],["close_month","Close & reopen months"],
+  ]},
+  {key:"governance",label:"Governance",note:"Projects, meetings and election administration",rows:[
+    ["projects_view","View projects"],["projects_manage","Manage projects"],
+    ["meetings_view","View meetings"],["meetings_manage","Manage meetings, minutes & attendance"],
+    ["elections_view","View election administration"],["elections_manage","Manage elections & applications"],["elections_certify","Certify election results"],
+  ]},
+  {key:"settings",label:"Settings & oversight",note:"Operational settings and audit visibility",rows:[
+    ["settings_view","View settings"],["settings_manage","Manage operational settings"],["audit_view","View audit log"],
+  ]},
+];
+
+const ROLE_PRESETS = {
+  finance_assistant:{label:"Finance Assistant",permissions:["members_view","approvals_manage","expenses_view","expenses_manage","donations_view","donations_manage","reports_view","reports_export","audit_view"]},
+  project_manager:{label:"Project Manager",permissions:["members_view","projects_view","projects_manage","meetings_view","reports_view"]},
+  meeting_coordinator:{label:"Meeting Coordinator",permissions:["members_view","meetings_view","meetings_manage","projects_view"]},
+  auditor:{label:"Auditor",permissions:["members_view","expenses_view","donations_view","reports_view","reports_export","projects_view","meetings_view","elections_view","audit_view"]},
+};
+
+const ROLE_DEPENDENCIES = {
+  members_manage:["members_view"], approvals_manage:["members_view"], expenses_manage:["expenses_view"], donations_manage:["donations_view"],
+  reports_export:["reports_view"], projects_manage:["projects_view","members_view"], meetings_manage:["meetings_view","members_view"],
+  elections_manage:["elections_view","members_view"], elections_certify:["elections_view"], settings_manage:["settings_view"],
+};
+const ROLE_RISK_PERMISSIONS = new Set(["financial_reversals","close_month","elections_certify","settings_manage"]);
+function toggleRolePermission(list,key,enabled){
+  const next=new Set((list||[]).filter(x=>x!=="read"&&x!=="finance"&&x!=="manage_admins"&&x!=="backup"));
+  if(enabled){
+    next.add(key);
+    const deps=ROLE_DEPENDENCIES[key]||[]; for(const dep of deps) next.add(dep);
+  } else {
+    next.delete(key);
+    for(const [child,parents] of Object.entries(ROLE_DEPENDENCIES)) if((parents||[]).includes(key)) next.delete(child);
+  }
+  return [...next];
+}
+
 export function AdminSettingsSection(ctx) {
-  const {superAdmin,confirm,load,setMessage,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,loadAdminSupport} = ctx;
+  const {superAdmin,confirm,load,setMessage,newRoleName,setNewRoleName,newRoleDescription,setNewRoleDescription,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,loadAdminSupport} = ctx;
   const [accessSheet,setAccessSheet]=useState(null);
-  const permissionRows=[["read","Read access"],["finance","Finance access"],["manage_admins","Manage admins"],["close_month","Close / reopen month"],["backup","Database backup"]];
-  const roleName=(a)=>a.custom_role_name || ((a.role==="owner"||a.role==="super_admin")?"Super Admin":a.role==="treasurer"?"Treasurer":"Viewer");
+  const [rolePreset,setRolePreset]=useState("custom");
+  const roleName=(a)=>a.custom_role_name || ((a.role==="owner"||a.role==="super_admin")?"Super Admin":a.role==="president"?"President":a.role==="treasurer"?"Treasurer":a.role==="secretary"?"Secretary":"Viewer");
+  const permissionCount=(list)=>(list||[]).filter(x=>x!=="read"&&x!=="finance").length;
   const openPromote=()=>{ loadAdminSupport?.("members"); loadAdminSupport?.("roles"); setAccessSheet("promote"); };
-  const openCreateRole=()=>{ loadAdminSupport?.("roles"); setAccessSheet("role"); };
+  const openCreateRole=()=>{ loadAdminSupport?.("roles"); setRolePreset("custom"); setAccessSheet("role"); };
+  const applyPreset=(key)=>{
+    setRolePreset(key);
+    if(key==="custom") return;
+    const preset=ROLE_PRESETS[key];
+    if(!newRoleName.trim()) setNewRoleName(preset.label);
+    setNewRolePermissions([...preset.permissions]);
+  };
   useEffect(()=>{
     if(!accessSheet)return undefined;
     const previous=document.body.style.overflow;
@@ -228,7 +281,7 @@ export function AdminSettingsSection(ctx) {
 
     <div className="settings-access-section sans">
       <div className="settings-access-heading">
-        <div><h3>Admins</h3><p>People with administrative access.</p></div>
+        <div><h3>Admins</h3><p>Assign a protected built-in role or a custom access profile.</p></div>
         {superAdmin&&<button type="button" className="settings-inline-action-button" onClick={openPromote}><UserPlus size={17}/><span>Promote</span></button>}
       </div>
       <div className="settings-access-list">
@@ -246,7 +299,7 @@ export function AdminSettingsSection(ctx) {
                 const value=e.target.value; const selected=value.startsWith("custom:")?customRoles.find(r=>String(r.id)===value.split(":")[1]):null; const label=selected?.name||e.target.options[e.target.selectedIndex].text;
                 if(!await confirm({title:"Change admin role?",message:`Change ${a.name}'s role to ${label}?`,confirmLabel:"Change role",tone:"primary"}))return;
                 api.settings.updateAdmin(a.id,{role:selected?"viewer":value,custom_role_id:selected?.id||null}).then(load).catch(err=>setMessage(err.message));
-              }}><option value="super_admin">Super Admin</option><option value="treasurer">Treasurer</option><option value="viewer">Viewer</option>{customRoles.map(r=><option key={r.id} value={`custom:${r.id}`}>{r.name}</option>)}</select></label>
+              }}><option value="super_admin">Super Admin</option><option value="president">President</option><option value="treasurer">Treasurer</option><option value="secretary">Secretary</option><option value="viewer">Viewer</option>{customRoles.map(r=><option key={r.id} value={`custom:${r.id}`}>{r.name}</option>)}</select></label>
               {a.member_id&&a.active!==0&&Number(a.id)!==Number(admin?.id)&&<button type="button" className="settings-danger-text" onClick={async()=>{
                 if(!await confirm({title:"Demote admin?",message:`Demote ${a.member_name||a.name} to normal member?\n\nTheir member account, Telegram link, contribution history and payment obligations remain unchanged.`,confirmLabel:"Demote admin"}))return;
                 try{await api.settings.demoteMember(a.id);setMessage(`${a.member_name||a.name} demoted to member`);load()}catch(e){setMessage(e.message)}
@@ -259,30 +312,37 @@ export function AdminSettingsSection(ctx) {
 
     <div className="settings-access-section sans">
       <div className="settings-access-heading">
-        <div><h3>Roles</h3><p>Open a role only when you need to edit permissions.</p></div>
+        <div><h3>Roles</h3><p>Built-in leadership roles are protected. Custom roles can be tailored by module and action.</p></div>
         {superAdmin&&<button type="button" className="settings-inline-action-button" onClick={openCreateRole}><Plus size={17}/><span>Create</span></button>}
       </div>
       <div className="settings-access-list">
-        <div className="settings-role-static"><span><strong>Super Admin</strong><small>Full system access</small></span><ShieldCheck size={18}/></div>
-        <div className="settings-role-static"><span><strong>Treasurer</strong><small>Built-in finance role</small></span><ShieldCheck size={18}/></div>
-        <div className="settings-role-static"><span><strong>Viewer</strong><small>Built-in read-only role</small></span><ShieldCheck size={18}/></div>
+        <div className="settings-role-static"><span><strong>Super Admin</strong><small>Full system ownership, roles and backups</small></span><ShieldCheck size={18}/></div>
+        <div className="settings-role-static"><span><strong>President</strong><small>Broad operational leadership · no role management or backup</small></span><ShieldCheck size={18}/></div>
+        <div className="settings-role-static"><span><strong>Treasurer</strong><small>Finance, approvals, reports and operational records</small></span><ShieldCheck size={18}/></div>
+        <div className="settings-role-static"><span><strong>Secretary</strong><small>Members, projects, meetings and governance records</small></span><ShieldCheck size={18}/></div>
+        <div className="settings-role-static"><span><strong>Viewer</strong><small>Read-only administrative visibility</small></span><ShieldCheck size={18}/></div>
         {customRoles.map(r=><details key={r.id} className="settings-access-item settings-role-item">
-          <summary><span className="settings-access-main"><strong>{r.name}</strong><small>{(r.permissions||[]).length} permissions · {Number(r.assigned_admins||0)} admin{Number(r.assigned_admins||0)===1?"":"s"}</small></span><MoreHorizontal size={18}/></summary>
-          <div className="settings-access-detail settings-permission-list">{permissionRows.map(([key,label])=><label key={key}><span><strong>{label}</strong>{key==="read"&&<small>Always enabled</small>}</span><input type="checkbox" checked={(r.permissions||[]).includes(key)} disabled={key==="read"} onChange={async e=>{const next=e.target.checked?[...new Set([...(r.permissions||[]),key])]:(r.permissions||[]).filter(x=>x!==key);try{await api.settings.updateRole(r.id,{permissions:next});setMessage(`${r.name} permissions updated`);load()}catch(err){setMessage(err.message)}}}/></label>)}
+          <summary><span className="settings-access-main"><strong>{r.name}</strong><small>{r.description?`${r.description} · `:""}{permissionCount(r.permissions)} access rules · {Number(r.assigned_admins||0)} admin{Number(r.assigned_admins||0)===1?"":"s"}</small></span><MoreHorizontal size={18}/></summary>
+          <div className="settings-access-detail settings-role-builder-inline">
+            {ROLE_PERMISSION_GROUPS.map(group=><div key={group.key} className="settings-role-builder-group">
+              <div className="settings-role-builder-group-head"><strong>{group.label}</strong><small>{group.note}</small></div>
+              <div className="settings-permission-list">{group.rows.map(([key,label])=><label key={key}><span><strong>{label}</strong>{ROLE_RISK_PERMISSIONS.has(key)&&<small>High-impact access</small>}</span><input type="checkbox" checked={(r.permissions||[]).includes(key)} onChange={async e=>{const next=toggleRolePermission(r.permissions,key,e.target.checked);try{await api.settings.updateRole(r.id,{permissions:next});setMessage(`${r.name} permissions updated`);load()}catch(err){setMessage(err.message)}}}/></label>)}</div>
+            </div>)}
+            <p className="settings-role-protected-note">Custom roles cannot manage Admin roles or export database backups.</p>
             <button type="button" disabled={Number(r.assigned_admins||0)>0} className="settings-danger-text" onClick={async()=>{if(!await confirm({title:"Delete custom role?",message:`Delete custom role "${r.name}"?`,confirmLabel:"Delete role"}))return;try{await api.settings.removeRole(r.id);setMessage("Custom role removed");load()}catch(e){setMessage(e.message)}}}>{Number(r.assigned_admins||0)>0?"Role is in use":"Delete role"}</button>
           </div>
         </details>)}
       </div>
-      <p className="settings-access-note">Custom roles override Treasurer/Viewer permissions. At least one built-in Super Admin must remain active.</p>
+      <p className="settings-access-note">Super Admin remains the only role that can create Admin roles, grant Super Admin access, or export database backups.</p>
     </div>
 
     {accessSheet&&<div className="settings-access-sheet-layer" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setAccessSheet(null)}}>
-      <section className="settings-access-sheet sans" role="dialog" aria-modal="true" aria-labelledby={`settings-${accessSheet}-title`}>
+      <section className={`settings-access-sheet sans ${accessSheet==="role"?"settings-role-builder-sheet":""}`} role="dialog" aria-modal="true" aria-labelledby={`settings-${accessSheet}-title`}>
         <div className="settings-access-sheet-handle" aria-hidden="true"/>
         <div className="settings-access-sheet-head">
           <div>
-            <h3 id={`settings-${accessSheet}-title`}>{accessSheet==="promote"?"Promote member":"Create role"}</h3>
-            <p>{accessSheet==="promote"?"Give an existing member administrative access.":"Create a reusable role with only the permissions it needs."}</p>
+            <h3 id={`settings-${accessSheet}-title`}>{accessSheet==="promote"?"Promote member":"Create custom role"}</h3>
+            <p>{accessSheet==="promote"?"Give an existing member administrative access.":"Start with a preset or build access module by module."}</p>
           </div>
           <button type="button" className="settings-access-sheet-close" onClick={()=>setAccessSheet(null)} aria-label="Close"><X size={19}/></button>
         </div>
@@ -292,7 +352,7 @@ export function AdminSettingsSection(ctx) {
             <option value="">Select member…</option>{membersForAdmin.filter(m=>m.active!==0).map(m=><option key={m.id} value={m.id}>{m.name} · {m.member_code}{m.telegram_id?"":" · Telegram not linked"}</option>)}
           </select></label>
           <label className="settings-sheet-field"><span>Role</span><select value={promoteRole} onChange={e=>setPromoteRole(e.target.value)}>
-            <option value="super_admin">Super Admin</option><option value="treasurer">Treasurer</option><option value="viewer">Viewer</option>
+            <option value="super_admin">Super Admin</option><option value="president">President</option><option value="treasurer">Treasurer</option><option value="secretary">Secretary</option><option value="viewer">Viewer</option>
             {customRoles.map(r=><option key={r.id} value={`custom:${r.id}`}>{r.name}</option>)}
           </select></label>
           <p className="settings-sheet-note">The member keeps their member account and contribution obligations. Telegram must be linked.</p>
@@ -303,10 +363,21 @@ export function AdminSettingsSection(ctx) {
             if(!await confirm({title:"Promote member?",message:`Promote ${m?.name||"this member"} to ${label}?`,confirmLabel:"Promote",tone:"primary"}))return;
             try{await api.settings.promoteMember(Number(promoteMemberId),selected?"viewer":promoteRole,selected?.id||null);setPromoteMemberId("");setMessage("Member promoted");setAccessSheet(null);load()}catch(e){setMessage(e.message)}
           }}>Promote member</button>
-        </div>:<div className="settings-access-sheet-body">
-          <label className="settings-sheet-field"><span>Role name</span><input value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} placeholder="e.g. Secretary"/></label>
-          <div className="settings-permission-list settings-sheet-permissions">{permissionRows.map(([key,label])=><label key={key}><span><strong>{label}</strong>{key==="read"&&<small>Always enabled</small>}</span><input type="checkbox" checked={newRolePermissions.includes(key)} disabled={key==="read"} onChange={e=>setNewRolePermissions(p=>e.target.checked?[...new Set([...p,key])]:p.filter(x=>x!==key))}/></label>)}</div>
-          <button type="button" disabled={!newRoleName.trim()} className="settings-sheet-primary" onClick={async()=>{try{await api.settings.createRole({name:newRoleName.trim(),permissions:newRolePermissions});setNewRoleName("");setNewRolePermissions(["read"]);setMessage("Custom role created");setAccessSheet(null);load()}catch(e){setMessage(e.message)}}}>Create role</button>
+        </div>:<div className="settings-access-sheet-body settings-role-builder-body">
+          <div className="settings-role-presets">
+            <button type="button" className={rolePreset==="custom"?"active":""} onClick={()=>setRolePreset("custom")}>Custom</button>
+            {Object.entries(ROLE_PRESETS).map(([key,preset])=><button type="button" key={key} className={rolePreset===key?"active":""} onClick={()=>applyPreset(key)}>{preset.label}</button>)}
+          </div>
+          <label className="settings-sheet-field"><span>Role name</span><input maxLength={60} value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} placeholder="e.g. Welfare Coordinator"/></label>
+          <label className="settings-sheet-field"><span>Description</span><input maxLength={240} value={newRoleDescription} onChange={e=>setNewRoleDescription(e.target.value)} placeholder="What is this role responsible for?"/></label>
+
+          <div className="settings-role-builder-groups">{ROLE_PERMISSION_GROUPS.map(group=><div key={group.key} className="settings-role-builder-group">
+            <div className="settings-role-builder-group-head"><strong>{group.label}</strong><small>{group.note}</small></div>
+            <div className="settings-permission-list settings-sheet-permissions">{group.rows.map(([key,label])=><label key={key}><span><strong>{label}</strong>{ROLE_RISK_PERMISSIONS.has(key)&&<small>High-impact access</small>}</span><input type="checkbox" checked={newRolePermissions.includes(key)} onChange={e=>setNewRolePermissions(p=>toggleRolePermission(p,key,e.target.checked))}/></label>)}</div>
+          </div>)}</div>
+          {newRolePermissions.some(x=>ROLE_RISK_PERMISSIONS.has(x))&&<div className="settings-role-risk-note"><AlertTriangle size={15}/><span>This role includes high-impact actions. Review the selected permissions before saving.</span></div>}
+          <div className="settings-role-protected-note">Protected: custom roles cannot manage Admin roles, create Super Admins, or export database backups.</div>
+          <button type="button" disabled={!newRoleName.trim()||newRolePermissions.length===0} className="settings-sheet-primary" onClick={async()=>{try{await api.settings.createRole({name:newRoleName.trim(),description:newRoleDescription.trim(),permissions:newRolePermissions});setNewRoleName("");setNewRoleDescription("");setNewRolePermissions([]);setRolePreset("custom");setMessage("Custom role created");setAccessSheet(null);load()}catch(e){setMessage(e.message)}}}>Create custom role</button>
         </div>}
       </section>
     </div>}
@@ -381,7 +452,7 @@ export function SystemSettingsSection(ctx) {
 }
 
 export function AuditSettingsSection(ctx) {
-  const {financeAdmin,audit,setAuditPage,auditPage} = ctx;
+  const {auditAdmin,audit,setAuditPage,auditPage} = ctx;
   const [query,setQuery]=useState("");
   const [action,setAction]=useState("all");
   const [actor,setActor]=useState("all");
@@ -408,7 +479,7 @@ export function AuditSettingsSection(ctx) {
   const activeFilters=(action!=="all"?1:0)+(actor!=="all"?1:0)+(dateFrom||dateTo?1:0);
   const rows=pageSlice(filtered,auditPage);
 
-  if(!financeAdmin) return <div className="settings-empty-card sans">You do not have permission to view the audit log.</div>;
+  if(!auditAdmin) return <div className="settings-empty-card sans">You do not have permission to view the audit log.</div>;
   return <>
     <div className="settings-page-head audit-page-head sans">
       <div>

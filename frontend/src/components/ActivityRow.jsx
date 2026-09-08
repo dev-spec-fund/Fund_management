@@ -23,7 +23,7 @@ function activityTime(a) {
   return d ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
 }
 
-export function ActivityRow({ a, isAdmin, canFinance = false, onExpenseClick, onActivityClick, onReverse }) {
+export function ActivityRow({ a, isAdmin, canEditExpense = false, canReverse = false, onExpenseClick, onActivityClick, onReverse }) {
   const isIn = a.kind === "contribution" || a.kind === "donation";
   const type = a.kind === "contribution" ? "Contribution" : a.kind === "donation" ? "Donation" : "Expense";
   return (
@@ -31,11 +31,11 @@ export function ActivityRow({ a, isAdmin, canFinance = false, onExpenseClick, on
       className="activity-row-card"
       role="button"
       tabIndex={0}
-      onClick={() => a.kind === "expense" && canFinance ? onExpenseClick?.(a) : onActivityClick?.(a)}
+      onClick={() => a.kind === "expense" && canEditExpense ? onExpenseClick?.(a) : onActivityClick?.(a)}
       onKeyDown={(e) => {
         if (e.key !== "Enter" && e.key !== " ") return;
         e.preventDefault();
-        a.kind === "expense" && canFinance ? onExpenseClick?.(a) : onActivityClick?.(a);
+        a.kind === "expense" && canEditExpense ? onExpenseClick?.(a) : onActivityClick?.(a);
       }}
       style={{ cursor: "pointer" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
@@ -55,8 +55,8 @@ export function ActivityRow({ a, isAdmin, canFinance = false, onExpenseClick, on
       </div>
       <div className="sans" style={{ flex: "0 0 auto", marginLeft: 10, fontSize: 14, fontWeight: 700, color: isIn ? "var(--success)" : "var(--danger)" }}>
         <div>{isIn ? "+" : "−"} MVR {fmt(a.amount)}</div>
-        {a.kind === "expense" && canFinance && <div style={{fontSize:10,fontWeight:500,color:"var(--soft)",marginTop:3,textAlign:"right"}}><Pencil size={10} style={{verticalAlign:"-1px",marginRight:3}}/>Edit</div>}
-        {canFinance && <button type="button" onClick={(e)=>{e.stopPropagation();onReverse?.(a)}} className="sans" style={{display:"block",margin:"4px 0 0 auto",border:0,background:"transparent",padding:0,color:"var(--danger)",fontSize:9,fontWeight:700,cursor:"pointer"}}>Reverse</button>}
+        {a.kind === "expense" && canEditExpense && <div style={{fontSize:10,fontWeight:500,color:"var(--soft)",marginTop:3,textAlign:"right"}}><Pencil size={10} style={{verticalAlign:"-1px",marginRight:3}}/>Edit</div>}
+        {canReverse && <button type="button" onClick={(e)=>{e.stopPropagation();onReverse?.(a)}} className="sans" style={{display:"block",margin:"4px 0 0 auto",border:0,background:"transparent",padding:0,color:"var(--danger)",fontSize:9,fontWeight:700,cursor:"pointer"}}>Reverse</button>}
       </div>
     </div>
   );

@@ -1,12 +1,12 @@
 import type { Hono } from "hono";
 import type { AppEnv } from "../../types";
-import { requireAdmin, requireSuperAdmin, requireBackup } from "../../auth";
+import { requireSettingsView, requireSuperAdmin, requireBackup } from "../../auth";
 import { auditEntity, ensureOperationalSchema, safeLogError } from "../../ops";
 import { currentMonth, getSetting, getBranding } from "../../db";
 import { retryContributionReviewMessage } from "../../contributionReviewMessages";
 
 export function registerSystemAdminRoutes(route: Hono<AppEnv>) {
-route.get('/health', requireAdmin, async c => {
+route.get('/health', requireSettingsView, async c => {
   await ensureOperationalSchema(c.env);
   const admin=c.get('admin')!; const full=admin.role==='owner'||admin.role==='super_admin';
   const out:any={checked_at:new Date().toISOString(),db:{ok:false},telegram:{ok:false},webhook:{ok:false},ai:{ok:!!c.env.AI}};

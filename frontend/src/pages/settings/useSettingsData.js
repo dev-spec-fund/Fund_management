@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, onDataChange } from "../../api";
 import { currentMonthValue } from "../../utils/date";
 
-export function useSettingsData({ admin, role, superAdmin, financeAdmin, initialSection = "general", deferCore = false }) {
+export function useSettingsData({ admin, role, superAdmin, financeAdmin, auditAdmin, initialSection = "general", deferCore = false }) {
   const [settings,setSettings]=useState({});
   const [admins,setAdmins]=useState([]);
   const [audit,setAudit]=useState([]);
@@ -17,7 +17,8 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
   const [promoteRole,setPromoteRole]=useState("treasurer");
   const [customRoles,setCustomRoles]=useState([]);
   const [newRoleName,setNewRoleName]=useState("");
-  const [newRolePermissions,setNewRolePermissions]=useState(["read"]);
+  const [newRoleDescription,setNewRoleDescription]=useState("");
+  const [newRolePermissions,setNewRolePermissions]=useState([]);
   const [closeCheck,setCloseCheck]=useState(null);
   const [closeBusy,setCloseBusy]=useState(false);
   const [closeMonthValue,setCloseMonthValue]=useState(currentMonthValue());
@@ -57,11 +58,11 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
     }
     if(section==="reminders" || section==="system") jobs.push(safe(api.admin.health(),setHealth));
     if(section==="system" && superAdmin) jobs.push(safe(api.admin.errors(),setErrors));
-    if(section==="audit" && financeAdmin) jobs.push(safe(api.settings.auditLog(),setAudit));
+    if(section==="audit" && auditAdmin) jobs.push(safe(api.settings.auditLog(),setAudit));
 
     await Promise.allSettled(jobs);
     loadedSections.current.add(section);
-  },[superAdmin,financeAdmin]);
+  },[superAdmin,auditAdmin]);
 
 
   const loadAdminSupport=useCallback(async(kind,{force=false}={})=>{
@@ -128,7 +129,7 @@ export function useSettingsData({ admin, role, superAdmin, financeAdmin, initial
     settings,setSettings,admins,setAdmins,audit,setAudit,health,setHealth,closures,setClosures,
     errors,setErrors,message,setMessage,settingsSection,setSettingsSection,categories,setCategories,
     membersForAdmin,setMembersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,
-    customRoles,setCustomRoles,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,
+    customRoles,setCustomRoles,newRoleName,setNewRoleName,newRoleDescription,setNewRoleDescription,newRolePermissions,setNewRolePermissions,
     closeCheck,setCloseCheck,closeBusy,setCloseBusy,closeMonthValue,setCloseMonthValue,
     closurePage,setClosurePage,errorPage,setErrorPage,errorFilter,setErrorFilter,auditPage,setAuditPage,
     settingsLoading,settingsError,load,loadSection,loadAdminSupport,

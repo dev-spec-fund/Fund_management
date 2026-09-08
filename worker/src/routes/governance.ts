@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireFinance, requireCloseMonth } from "../auth";
+import { requireCloseMonth, requireFinancialReversals, requireMeetingsManage, requireMeetingsView, requireReportsView } from "../auth";
 import { auditEntity, ensureOperationalSchema, isMonthClosed, requireOpenMonth, requireOpenContributionMonths, safeLogError } from "../ops";
 import { validMonth } from "../validation";
 import { currentMonth, getBranding } from "../db";
@@ -77,7 +77,7 @@ async function laterClosedMonth(env:any, month:string) {
   return env.DB.prepare("SELECT month FROM month_closures WHERE month>? ORDER BY month ASC LIMIT 1").bind(month).first<{month:string}>();
 }
 
-governanceRoute.get('/month-close', requireAdmin, async c=>{
+governanceRoute.get('/month-close', requireReportsView, async c=>{
   await ensureOperationalSchema(c.env);
   const rows=await c.env.DB.prepare("SELECT mc.*,a.name closed_by_name FROM month_closures mc LEFT JOIN admins a ON a.id=mc.closed_by ORDER BY month DESC").all<any>();
   return c.json(rows.results);
@@ -110,7 +110,7 @@ governanceRoute.delete('/month-close/:month', requireCloseMonth, async c=>{
   return c.json({ok:true});
 });
 
-governanceRoute.get('/month-close/:month/check', requireAdmin, async c=>{
+governanceRoute.get('/month-close/:month/check', requireReportsView, async c=>{
   await ensureOperationalSchema(c.env); const month=c.req.param('month');
   if(!validMonth(month)) return c.json({error:'Use YYYY-MM'},400);
   const metrics=await monthMetrics(c.env,month);
@@ -145,14 +145,14 @@ governanceRoute.post('/month-close/:month', requireCloseMonth, async c=>{
   return c.json({ok:true,snapshot:{...m,closed_by:admin.id,note:body.note||null}});
 });
 
-governanceRoute.get('/snapshots', requireAdmin, async c=>{
+governanceRoute.get('/snapshots', requireReportsView, async c=>{
   const year=String(c.req.query('year')||'');
   const where=yearRx.test(year)?"WHERE s.month LIKE ?":""; const vals=yearRx.test(year)?[`${year}-%`]:[];
   const rows=await c.env.DB.prepare(`SELECT s.*,a.name closed_by_name FROM monthly_snapshots s LEFT JOIN admins a ON a.id=s.closed_by ${where} ORDER BY s.month DESC`).bind(...vals).all<any>();
   return c.json(rows.results);
 });
 
-governanceRoute.post('/reverse', requireFinance, async c=>{
+governanceRoute.post('/reverse', requireFinancialReversals, async c=>{
   const admin=c.get('admin')!; const body=await c.req.json().catch(()=>({})) as any;
   const type=String(body.entity_type||''); const id=Number(body.entity_id); const reason=String(body.reason||'').trim();
   if(!['contribution','expense','donation'].includes(type) || !Number.isInteger(id) || id<=0 || reason.length<3) return c.json({error:'Transaction and reversal reason are required'},400);
@@ -198,7 +198,7 @@ governanceRoute.post('/reverse', requireFinance, async c=>{
   return c.json({ok:true,reversal_id:reversalId});
 });
 
-governanceRoute.get('/reversals', requireAdmin, async c=>{
+governanceRoute.get('/reversals', requireReportsView, async c=>{
   const rows=await c.env.DB.prepare("SELECT r.*,a.name reversed_by_name FROM financial_reversals r LEFT JOIN admins a ON a.id=r.reversed_by ORDER BY r.created_at DESC LIMIT 200").all<any>();
   return c.json(rows.results);
 });
@@ -227,7 +227,7 @@ async function nextResolutionNo(env:any,termId:number){
   return `RES-${String(Number(row?.n||0)+1).padStart(3,'0')}`;
 }
 
-governanceRoute.get('/meetings/:id/minutes', requireAdmin, async c=>{
+governanceRoute.get('/meetings/:id/minutes', requireMeetingsView, async c=>{
   const id=Number(c.req.param('id')); const meeting=await c.env.DB.prepare("SELECT id,title,meeting_date,status FROM meetings WHERE id=?").bind(id).first<any>();
   if(!meeting) return c.json({error:'Meeting not found'},404);
   const minutes=await c.env.DB.prepare("SELECT mm.*,a.name recorded_by_name FROM meeting_minutes mm LEFT JOIN admins a ON a.id=mm.recorded_by WHERE meeting_id=?").bind(id).first<any>();
@@ -247,7 +247,7 @@ governanceRoute.get('/meetings/:id/minutes', requireAdmin, async c=>{
   return c.json({meeting,minutes:minutes||null,actions:actions.results,resolutions:resolutions.results,exco_term:term||null});
 });
 
-governanceRoute.put('/meetings/:id/minutes', requireFinance, async c=>{
+governanceRoute.put('/meetings/:id/minutes', requireMeetingsManage, async c=>{
   const admin=c.get('admin')!;
   const id=Number(c.req.param('id'));
   if(!Number.isInteger(id)||id<=0) return c.json({error:'Invalid meeting'},400);
@@ -277,7 +277,7 @@ governanceRoute.put('/meetings/:id/minutes', requireFinance, async c=>{
   return c.json({ok:true,minutes:saved});
 });
 
-governanceRoute.post('/meetings/:id/resolutions', requireFinance, async c=>{
+governanceRoute.post('/meetings/:id/resolutions', requireMeetingsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get('admin')!,meetingId=Number(c.req.param('id'));
   const meeting=await c.env.DB.prepare("SELECT * FROM meetings WHERE id=?").bind(meetingId).first<any>();
@@ -331,7 +331,7 @@ governanceRoute.post('/meetings/:id/resolutions', requireFinance, async c=>{
   return c.json({ok:true,id,resolution_no:resolutionNo,responsibility_id:responsibilityId},201);
 });
 
-governanceRoute.patch('/meeting-resolutions/:id', requireFinance, async c=>{
+governanceRoute.patch('/meeting-resolutions/:id', requireMeetingsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get('admin')!,id=Number(c.req.param('id')),b=await c.req.json().catch(()=>({})) as any;
   const before=await c.env.DB.prepare("SELECT * FROM meeting_resolutions WHERE id=?").bind(id).first<any>();
@@ -353,14 +353,14 @@ governanceRoute.patch('/meeting-resolutions/:id', requireFinance, async c=>{
   return c.json({ok:true,resolution:after});
 });
 
-governanceRoute.get('/meeting-resolutions/:id/history', requireAdmin, async c=>{
+governanceRoute.get('/meeting-resolutions/:id/history', requireMeetingsView, async c=>{
   const id=Number(c.req.param('id'));
   const rows=await c.env.DB.prepare(`SELECT h.*,a.name admin_name FROM meeting_resolution_history h
     LEFT JOIN admins a ON a.id=h.admin_id WHERE h.resolution_id=? ORDER BY h.id DESC`).bind(id).all<any>();
   return c.json({history:rows.results});
 });
 
-governanceRoute.post('/meetings/:id/actions', requireFinance, async c=>{
+governanceRoute.post('/meetings/:id/actions', requireMeetingsManage, async c=>{
   const admin=c.get('admin')!;
   const id=Number(c.req.param('id'));
   if(!Number.isInteger(id)||id<=0) return c.json({error:'Invalid meeting'},400);
@@ -389,7 +389,7 @@ governanceRoute.post('/meetings/:id/actions', requireFinance, async c=>{
   return c.json({ok:true,action:saved});
 });
 
-governanceRoute.patch('/meeting-actions/:id', requireFinance, async c=>{
+governanceRoute.patch('/meeting-actions/:id', requireMeetingsManage, async c=>{
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const b=await c.req.json().catch(()=>({})) as any; const before=await c.env.DB.prepare("SELECT * FROM meeting_action_items WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:'Action item not found'},404);
   const status=['open','done','cancelled'].includes(String(b.status))?String(b.status):String(before.status); const desc=String(b.description??before.description).trim().slice(0,1000); const due=b.due_date===undefined?before.due_date:(String(b.due_date||'').trim()||null);
   await c.env.DB.prepare("UPDATE meeting_action_items SET description=?,due_date=?,status=?,completed_at=CASE WHEN ?='done' THEN datetime('now') ELSE NULL END,completed_by=CASE WHEN ?='done' THEN ? ELSE NULL END WHERE id=?").bind(desc,due,status,status,status,admin.id,id).run();
@@ -581,7 +581,7 @@ async function yearData(env:any, year:string){
   };
 }
 
-governanceRoute.get('/annual/:year', requireAdmin, async c=>{
+governanceRoute.get('/annual/:year', requireReportsView, async c=>{
   const year=c.req.param('year'); if(!yearRx.test(year))return c.json({error:'Use YYYY'},400); const data=await yearData(c.env,year);
   const totals=data.months.reduce((a:any,m:any)=>({contributions:a.contributions+m.contribution_cash,donations:a.donations+m.donation_cash,expenses:a.expenses+m.expenses,collected:a.collected+m.total_collected,due:a.due+m.total_due}),{contributions:0,donations:0,expenses:0,collected:0,due:0});
   const branding=await getBranding(c.env);
@@ -589,7 +589,7 @@ governanceRoute.get('/annual/:year', requireAdmin, async c=>{
   return c.json({...data,months,organization:branding,totals:{...totals,net:totals.contributions+totals.donations-totals.expenses,collection_rate:totals.due>0?totals.collected/totals.due*100:null,opening_balance:data.months[0]?.opening_balance||0,closing_balance:data.months[data.months.length-1]?.closing_balance||0}});
 });
 
-governanceRoute.get('/analytics/:year', requireAdmin, async c=>{
+governanceRoute.get('/analytics/:year', requireReportsView, async c=>{
   const year=c.req.param('year'); if(!yearRx.test(year))return c.json({error:'Use YYYY'},400);
   // Reuse the same historical annual dataset used by the AGM report so
   // analytics cannot drift by looking only at members who are active today.

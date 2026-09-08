@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireFinance } from "../auth";
+import { requireExpensesManage, requireExpensesView } from "../auth";
 import { currentDate, generateTxnId } from "../db";
 import { adminCan, auditEntity, availableFundBalance, ensureOperationalSchema, requireOpenMonth } from "../ops";
 import { boundedText, money, validDate, validMonth } from "../validation";
@@ -8,7 +8,7 @@ import { sendDocument, sendStoredDocument, downloadTelegramFile } from "../teleg
 
 export const expensesRoute = new Hono<AppEnv>();
 
-expensesRoute.get("/", requireAdmin, async (c) => {
+expensesRoute.get("/", requireExpensesView, async (c) => {
   await ensureOperationalSchema(c.env);
   const month=String(c.req.query("month")||"").trim();
   const status=String(c.req.query("status")||"").trim();
@@ -84,7 +84,7 @@ function safeExpenseFilename(name: string) {
   return clean || "document";
 }
 
-expensesRoute.get("/:id/documents", requireFinance, async (c) => {
+expensesRoute.get("/:id/documents", requireExpensesManage, async (c) => {
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param("id")); if(!Number.isInteger(id)||id<=0) return c.json({error:"Invalid expense"},400);
   const exists=await c.env.DB.prepare("SELECT id FROM expenses WHERE id=?").bind(id).first(); if(!exists)return c.json({error:"Expense not found"},404);
@@ -95,7 +95,7 @@ expensesRoute.get("/:id/documents", requireFinance, async (c) => {
   return c.json(rows.results);
 });
 
-expensesRoute.post("/:id/documents", requireFinance, async (c) => {
+expensesRoute.post("/:id/documents", requireExpensesManage, async (c) => {
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const expense=await c.env.DB.prepare("SELECT id,txn_id,description,status FROM expenses WHERE id=?").bind(id).first<any>();
@@ -123,7 +123,7 @@ expensesRoute.post("/:id/documents", requireFinance, async (c) => {
   return c.json({id:docId,expense_id:id,original_filename:filename,display_name:filename,mime_type:mime,file_size:Number(tgDoc?.file_size||value.size||0),document_type:documentType,created_at:new Date().toISOString()},201);
 });
 
-expensesRoute.get("/:id/documents/:docId/file", requireFinance, async (c) => {
+expensesRoute.get("/:id/documents/:docId/file", requireExpensesManage, async (c) => {
   await ensureOperationalSchema(c.env);
   const expenseId=Number(c.req.param("id")); const docId=Number(c.req.param("docId"));
   const doc=await c.env.DB.prepare("SELECT * FROM expense_documents WHERE id=? AND expense_id=? AND removed_at IS NULL").bind(docId,expenseId).first<any>();
@@ -137,7 +137,7 @@ expensesRoute.get("/:id/documents/:docId/file", requireFinance, async (c) => {
   return new Response(file.bytes,{headers:{"Content-Type":responseMime,"Content-Disposition":`inline; filename*=UTF-8''${encodeURIComponent(filename)}`,"Cache-Control":"private, no-store"}});
 });
 
-expensesRoute.post("/:id/documents/:docId/send-to-telegram", requireFinance, async (c) => {
+expensesRoute.post("/:id/documents/:docId/send-to-telegram", requireExpensesManage, async (c) => {
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!; const expenseId=Number(c.req.param("id")); const docId=Number(c.req.param("docId"));
   const doc=await c.env.DB.prepare(`SELECT d.*,e.txn_id,e.description FROM expense_documents d JOIN expenses e ON e.id=d.expense_id WHERE d.id=? AND d.expense_id=? AND d.removed_at IS NULL`).bind(docId,expenseId).first<any>();
@@ -148,7 +148,7 @@ expensesRoute.post("/:id/documents/:docId/send-to-telegram", requireFinance, asy
   return c.json({ok:true});
 });
 
-expensesRoute.patch("/:id/documents/:docId", requireFinance, async (c) => {
+expensesRoute.patch("/:id/documents/:docId", requireExpensesManage, async (c) => {
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!; const expenseId=Number(c.req.param("id")); const docId=Number(c.req.param("docId"));
   const before=await c.env.DB.prepare("SELECT * FROM expense_documents WHERE id=? AND expense_id=? AND removed_at IS NULL").bind(docId,expenseId).first<any>();
@@ -164,7 +164,7 @@ expensesRoute.patch("/:id/documents/:docId", requireFinance, async (c) => {
   return c.json({ok:true,id:docId,display_name:displayName,document_type:documentType});
 });
 
-expensesRoute.delete("/:id/documents/:docId", requireFinance, async (c) => {
+expensesRoute.delete("/:id/documents/:docId", requireExpensesManage, async (c) => {
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!; const expenseId=Number(c.req.param("id")); const docId=Number(c.req.param("docId"));
   const doc=await c.env.DB.prepare("SELECT * FROM expense_documents WHERE id=? AND expense_id=? AND removed_at IS NULL").bind(docId,expenseId).first<any>();
@@ -176,7 +176,7 @@ expensesRoute.delete("/:id/documents/:docId", requireFinance, async (c) => {
   return c.json({ok:true});
 });
 
-expensesRoute.post("/", requireFinance, async (c) => {
+expensesRoute.post("/", requireExpensesManage, async (c) => {
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!;
   const body=await c.req.json<any>();
@@ -229,7 +229,7 @@ expensesRoute.post("/", requireFinance, async (c) => {
 });
 
 
-expensesRoute.patch("/:id", requireFinance, async (c) => {
+expensesRoute.patch("/:id", requireExpensesManage, async (c) => {
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const body=await c.req.json<any>();
   const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>();
   if(!before)return c.json({error:"Not found"},404);
@@ -282,7 +282,7 @@ expensesRoute.patch("/:id", requireFinance, async (c) => {
   await auditEntity(c.env,admin.id,"expense_updated","expense",id,before,after); return c.json({ok:true,status:after.status});
 });
 
-expensesRoute.delete("/:id", requireFinance, async(c)=>{
+expensesRoute.delete("/:id", requireExpensesManage, async(c)=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const body=await c.req.json().catch(()=>({})) as any;
   const before=await c.env.DB.prepare("SELECT * FROM expenses WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:"Not found"},404);
   if(before.status!=="approved") return c.json({error:`Expense is already ${before.status}`},409);
@@ -298,10 +298,10 @@ expensesRoute.delete("/:id", requireFinance, async(c)=>{
   await auditEntity(c.env,admin.id,"expense_voided","expense",id,before,after); return c.json({ok:true});
 });
 
-expensesRoute.get("/categories", requireAdmin, async(c)=>{ await ensureOperationalSchema(c.env); return c.json((await c.env.DB.prepare("SELECT *, COALESCE(active,1) active FROM expense_categories ORDER BY COALESCE(active,1) DESC, name").all()).results); });
-expensesRoute.post("/categories", requireFinance, async(c)=>{const admin=c.get("admin")!;const b=await c.req.json<any>();const name=boundedText(b.name,100,true);if(!name)return c.json({error:'Valid category name required'},400);await c.env.DB.prepare("INSERT OR IGNORE INTO expense_categories(name) VALUES(?)").bind(name).run();await auditEntity(c.env,admin.id,"expense_category_created","expense_category",name,null,{name});return c.json({ok:true},201);});
+expensesRoute.get("/categories", requireExpensesView, async(c)=>{ await ensureOperationalSchema(c.env); return c.json((await c.env.DB.prepare("SELECT *, COALESCE(active,1) active FROM expense_categories ORDER BY COALESCE(active,1) DESC, name").all()).results); });
+expensesRoute.post("/categories", requireExpensesManage, async(c)=>{const admin=c.get("admin")!;const b=await c.req.json<any>();const name=boundedText(b.name,100,true);if(!name)return c.json({error:'Valid category name required'},400);await c.env.DB.prepare("INSERT OR IGNORE INTO expense_categories(name) VALUES(?)").bind(name).run();await auditEntity(c.env,admin.id,"expense_category_created","expense_category",name,null,{name});return c.json({ok:true},201);});
 
-expensesRoute.patch("/categories/:id", requireFinance, async(c)=>{
+expensesRoute.patch("/categories/:id", requireExpensesManage, async(c)=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const b=await c.req.json<any>();
   const before=await c.env.DB.prepare("SELECT * FROM expense_categories WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:"Category not found"},404);
   const name=b.name===undefined?before.name:boundedText(b.name,100,true); if(!name)return c.json({error:"Valid category name required"},400);
@@ -309,7 +309,7 @@ expensesRoute.patch("/categories/:id", requireFinance, async(c)=>{
   try{await c.env.DB.prepare("UPDATE expense_categories SET name=?,active=? WHERE id=?").bind(name,active,id).run();}catch{return c.json({error:"A category with this name already exists"},409);}
   const after=await c.env.DB.prepare("SELECT * FROM expense_categories WHERE id=?").bind(id).first<any>(); await auditEntity(c.env,admin.id,"expense_category_updated","expense_category",id,before,after); return c.json({ok:true});
 });
-expensesRoute.delete("/categories/:id", requireFinance, async(c)=>{
+expensesRoute.delete("/categories/:id", requireExpensesManage, async(c)=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const before=await c.env.DB.prepare("SELECT * FROM expense_categories WHERE id=?").bind(id).first<any>(); if(!before)return c.json({error:"Category not found"},404);
   const used=await c.env.DB.prepare("SELECT COUNT(*) n FROM expenses WHERE category_id=?").bind(id).first<any>();
   if(Number(used?.n||0)>0){ await c.env.DB.prepare("UPDATE expense_categories SET active=0 WHERE id=?").bind(id).run(); await auditEntity(c.env,admin.id,"expense_category_deactivated","expense_category",id,before,{...before,active:0}); return c.json({ok:true,deactivated:true}); }

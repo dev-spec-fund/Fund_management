@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../../types";
-import { requireSuperAdmin } from "../../auth";
+import { requireElectionsManage, requireSuperAdmin } from "../../auth";
 import { auditEntity, ensureOperationalSchema } from "../../ops";
 import { sendMessage } from "../../telegram";
 import { getBranding } from "../../db";
@@ -14,7 +14,7 @@ import {
 } from "../../elections/core";
 
 export function registerElectionManagementRoutes(electionsRoute: Hono<AppEnv>) {
-electionsRoute.post("/", requireSuperAdmin, async c=>{
+electionsRoute.post("/", requireElectionsManage, async c=>{
   const admin=c.get("admin")!; const body=await c.req.json<any>();
   const title=text(body.title); if(!title)return c.json({error:"Election title is required"},400);
   const opensAt=iso(body.opens_at)||null,closesAt=iso(body.closes_at)||null;
@@ -29,7 +29,7 @@ electionsRoute.post("/", requireSuperAdmin, async c=>{
   return c.json(await electionDetail(c.env,id),201);
 });
 
-electionsRoute.patch("/:id", requireSuperAdmin, async c=>{
+electionsRoute.patch("/:id", requireElectionsManage, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const before=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!before)return c.json({error:"Election not found"},404);
   if(await electionSetupLocked(c.env,before))return c.json({error:"Election setup is locked after the voter snapshot is created"},409);
@@ -53,7 +53,7 @@ electionsRoute.patch("/:id", requireSuperAdmin, async c=>{
   return c.json(await electionDetail(c.env,id));
 });
 
-electionsRoute.post("/:id/extend-applications", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/extend-applications", requireElectionsManage, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const before=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!before)return c.json({error:"Election not found"},404);
@@ -86,7 +86,7 @@ electionsRoute.post("/:id/extend-applications", requireSuperAdmin, async c=>{
   return c.json(await electionDetail(c.env,id));
 });
 
-electionsRoute.post("/:id/positions", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/positions", requireElectionsManage, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
   if(await electionSetupLocked(c.env,election))return c.json({error:"Election setup is locked after the voter snapshot is created"},409);
@@ -103,7 +103,7 @@ electionsRoute.post("/:id/positions", requireSuperAdmin, async c=>{
   return c.json(await electionDetail(c.env,id),201);
 });
 
-electionsRoute.post("/:id/candidates", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/candidates", requireElectionsManage, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
   if(await electionSetupLocked(c.env,election))return c.json({error:"Election setup is locked after the voter snapshot is created"},409);
@@ -126,7 +126,7 @@ electionsRoute.post("/:id/candidates", requireSuperAdmin, async c=>{
   return c.json(await electionDetail(c.env,id),201);
 });
 
-electionsRoute.post("/:id/repair-application-sync", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/repair-application-sync", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get("admin")!; const id=Number(c.req.param("id"));
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
@@ -145,7 +145,7 @@ electionsRoute.post("/:id/repair-application-sync", requireSuperAdmin, async c=>
   return c.json({ok:true,repaired,readiness:after,detail:await electionDetail(c.env,id)});
 });
 
-electionsRoute.get("/:id/readiness", requireSuperAdmin, async c=>{
+electionsRoute.get("/:id/readiness", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param("id"));
   const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
@@ -154,7 +154,7 @@ electionsRoute.get("/:id/readiness", requireSuperAdmin, async c=>{
   return c.json(await evaluateElectionReadiness(c.env,election));
 });
 
-electionsRoute.post("/:id/open", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/open", requireElectionsManage, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404); if(election.status!=="draft")return c.json({error:"Election is not draft"},409);
   await synchronizeElectionApplications(c.env,id,admin.id);
@@ -177,7 +177,7 @@ electionsRoute.post("/:id/open", requireSuperAdmin, async c=>{
   return c.json(await electionDetail(c.env,id));
 });
 
-electionsRoute.post("/:id/close", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/close", requireElectionsManage, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404); if(election.status!=="open")return c.json({error:"Election is not open"},409);
   const closeClaim=await c.env.DB.prepare("UPDATE elections SET status='closed',closed_at=datetime('now') WHERE id=? AND status='open'")
@@ -232,7 +232,7 @@ electionsRoute.delete("/:id", requireSuperAdmin, async c=>{
   return c.json({ok:true,id,title:election.title});
 });
 
-electionsRoute.post("/:id/cancel", requireSuperAdmin, async c=>{
+electionsRoute.post("/:id/cancel", requireElectionsManage, async c=>{
   const admin=c.get("admin")!; const id=Number(c.req.param("id")); const election=await c.env.DB.prepare("SELECT * FROM elections WHERE id=?").bind(id).first<any>();
   if(!election)return c.json({error:"Election not found"},404);
   if(await electionSetupLocked(c.env,election))return c.json({error:"An election cannot be cancelled after the voter snapshot is created"},409);

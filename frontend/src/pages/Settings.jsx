@@ -13,13 +13,15 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   const { confirm, confirmationDialog } = useConfirmDialog();
   const role = admin?.role === "owner" ? "super_admin" : admin?.role;
   const superAdmin = adminCan(admin, "manage_admins");
-  const financeAdmin = adminCan(admin, "finance");
+  const financeAdmin = adminCan(admin, "settings_manage");
+  const canManageExpenses = adminCan(admin, "expenses_manage");
+  const auditAdmin = adminCan(admin, "audit_view");
   const canCloseMonth = adminCan(admin, "close_month");
   const canBackup = adminCan(admin, "backup");
   const currentMonth = currentMonthValue();
   const [settingsMenuOpen,setSettingsMenuOpen]=useState(()=>!sectionOnly && initialSection==="general");
 
-  const data=useSettingsData({admin,role,superAdmin,financeAdmin,initialSection,deferCore:!sectionOnly&&initialSection==="general"});
+  const data=useSettingsData({admin,role,superAdmin,financeAdmin,auditAdmin,initialSection,deferCore:!sectionOnly&&initialSection==="general"});
   useEffect(()=>{
     if(adminMonth && adminMonth!==data.closeMonthValue){
       data.setCloseMonthValue(adminMonth);
@@ -29,7 +31,7 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   const {
     settings,setSettings,admins,audit,setAudit,health,setHealth,closures,errors,setErrors,message,setMessage,
     settingsSection,setSettingsSection,categories,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,
-    customRoles,newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,closeCheck,setCloseCheck,closeBusy,
+    customRoles,newRoleName,setNewRoleName,newRoleDescription,setNewRoleDescription,newRolePermissions,setNewRolePermissions,closeCheck,setCloseCheck,closeBusy,
     closeMonthValue,setCloseMonthValue,closurePage,setClosurePage,errorPage,setErrorPage,errorFilter,setErrorFilter,
     auditPage,setAuditPage,settingsLoading,settingsError,load,loadAdminSupport,
   }=data;
@@ -66,9 +68,9 @@ export default function Settings({ admin, adminMonth, onAdminMonthChange, initia
   };
 
   const sectionProps={
-    settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,confirm,load,setMessage,currentMonth,
+    settings,setSettings,superAdmin,saveSetting,categories,financeAdmin,canManageExpenses,auditAdmin,confirm,load,setMessage,currentMonth,
     closeBusy,shiftCloseMonth:shiftSharedCloseMonth,closeMonthValue,setCloseMonthValue:(value)=>{setCloseMonthValue(value);onAdminMonthChange?.(value);},setCloseCheck,monthLabel,monthClosed,reviewMonthClose,canCloseMonth,closeCheck,closeMonth,closures,closurePage,setClosurePage,
-    newRoleName,setNewRoleName,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,loadAdminSupport,
+    newRoleName,setNewRoleName,newRoleDescription,setNewRoleDescription,newRolePermissions,setNewRolePermissions,customRoles,membersForAdmin,promoteMemberId,setPromoteMemberId,promoteRole,setPromoteRole,admins,admin,loadAdminSupport,
     health,setHealth,canBackup,backup,errors,errorFilter,setErrorFilter,setErrorPage,errorRows,setErrors,filteredErrors,auditRows,audit,setAuditPage
   };
 

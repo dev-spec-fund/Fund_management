@@ -679,11 +679,11 @@ test('election integrity migration advances schema to 30', () => {
 });
 
 
-test('election voting rechecks lifecycle before accepting ballots and reminders require super admin', () => {
+test('election voting rechecks lifecycle before accepting ballots and election managers handle reminders and withdrawals', () => {
   const elections=electionSource();
   assert.match(elections,/post\("\/:id\/vote", async c=>\{\n  await processElectionLifecycle\(c\.env\)/);
-  assert.match(elections,/remind-nonvoters", requireSuperAdmin/);
-  assert.match(elections,/candidates\/:candidateId\/withdraw", requireSuperAdmin/);
+  assert.match(elections,/remind-nonvoters", requireElectionsManage/);
+  assert.match(elections,/candidates\/:candidateId\/withdraw", requireElectionsManage/);
 });
 
 

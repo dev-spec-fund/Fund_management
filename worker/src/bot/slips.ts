@@ -17,7 +17,7 @@ export async function handleSlipPhoto(env: Env, message: any, chatId: number, te
 
   if (caption.startsWith("/expense")) {
     const admin = await getAdminByTelegramId(env, telegramId);
-    if (!admin || !adminCan(admin, "finance")) return sendMessage(env, chatId, "Treasurer or Super Admin access is required to log expenses.");
+    if (!admin || !adminCan(admin, "expenses_manage")) return sendMessage(env, chatId, "Expense management access is required to log expenses.");
     const rest = caption.replace("/expense", "").trim();
     const monthMatch = rest.match(/\d{4}-(0[1-9]|1[0-2])/);
     const month = monthMatch?.[0] || currentMonth(env.FUND_TIMEZONE || "Indian/Maldives");

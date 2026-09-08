@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireFinance, requireSuperAdmin } from "../auth";
+import { requireAuditView, requireSettingsManage, requireSettingsView, requireSuperAdmin } from "../auth";
 import { logAudit, setSetting } from "../db";
 import { adminCan, auditEntity, ensureOperationalSchema, sanitizeAuditDetailForRole } from "../ops";
 import { boundedText, telegramId } from "../validation";
@@ -9,12 +9,28 @@ export const settingsRoute = new Hono<AppEnv>();
 
 const FINANCE_SETTINGS = new Set(["reminder_day","notify_new_slip","notify_member_deactivated","notify_budget_exceeded","notify_monthly_report"]);
 const SUPER_SETTINGS = new Set(["fund_name","short_name","default_monthly_amount","first_month_contribution_rule","mini_app_url","show_projects_to_members"]);
-const ROLE_PERMISSIONS = ["read","finance","manage_admins","close_month","backup"] as const;
-const BUILTIN_ROLES = new Set(["super_admin","treasurer","viewer"]);
+const ROLE_PERMISSIONS = [
+  "read","finance",
+  "members_view","members_manage","approvals_manage",
+  "expenses_view","expenses_manage","donations_view","donations_manage",
+  "reports_view","reports_export","projects_view","projects_manage",
+  "meetings_view","meetings_manage","elections_view","elections_manage","elections_certify",
+  "settings_view","settings_manage","audit_view","financial_reversals","close_month","manage_admins","backup"
+] as const;
+const BUILTIN_ROLES = new Set(["super_admin","president","treasurer","secretary","viewer"]);
 
+const PROTECTED_CUSTOM_PERMISSIONS = new Set(["manage_admins","backup"]);
+const RESERVED_ROLE_NAMES = new Set(["super admin","president","treasurer","secretary","viewer"]);
+const CUSTOM_PERMISSION_DEPENDENCIES: Record<string,string[]> = {
+  members_manage:["members_view"], approvals_manage:["members_view"], expenses_manage:["expenses_view"], donations_manage:["donations_view"],
+  reports_export:["reports_view"], projects_manage:["projects_view","members_view"], meetings_manage:["meetings_view","members_view"],
+  elections_manage:["elections_view","members_view"], elections_certify:["elections_view"], settings_manage:["settings_view"],
+};
 function normalizeRolePermissions(value:any): string[] {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.map((x:any)=>String(x||"").trim()).filter((x:string)=>ROLE_PERMISSIONS.includes(x as any)))];
+  const permissions=new Set(value.map((x:any)=>String(x||"").trim()).filter((x:string)=>ROLE_PERMISSIONS.includes(x as any) && !PROTECTED_CUSTOM_PERMISSIONS.has(x)));
+  for(const permission of [...permissions]) for(const dependency of CUSTOM_PERMISSION_DEPENDENCIES[permission]||[]) permissions.add(dependency);
+  return [...permissions];
 }
 
 async function validCustomRole(env:any, id:any) {
@@ -23,13 +39,13 @@ async function validCustomRole(env:any, id:any) {
   return await env.DB.prepare("SELECT id,name,description,active FROM admin_roles WHERE id=? AND COALESCE(active,1)=1").bind(roleId).first<any>();
 }
 
-settingsRoute.get("/", requireAdmin, async (c) => {
+settingsRoute.get("/", requireSettingsView, async (c) => {
   await ensureOperationalSchema(c.env);
   const rows = await c.env.DB.prepare("SELECT * FROM settings").all<{key:string;value:string}>();
   const obj:Record<string,string>={}; for(const r of rows.results)obj[r.key]=r.value; return c.json(obj);
 });
 
-settingsRoute.patch("/", requireFinance, async (c) => {
+settingsRoute.patch("/", requireSettingsManage, async (c) => {
   const admin=c.get("admin")!; const body=await c.req.json<Record<string,unknown>>();
   const isSuper=adminCan(admin,'manage_admins');
   for(const [key,raw] of Object.entries(body)) {
@@ -48,9 +64,9 @@ settingsRoute.patch("/", requireFinance, async (c) => {
   await logAudit(c.env,admin.id,"settings_updated",JSON.stringify({keys:Object.keys(body)})); return c.json({ok:true});
 });
 
-settingsRoute.get("/admins", requireAdmin, async(c)=>{
+settingsRoute.get("/admins", requireSettingsView, async(c)=>{
   const caller=c.get("admin")!;
-  const viewer=!adminCan(caller,"finance");
+  const viewer=!adminCan(caller,"manage_admins");
   const rows=await c.env.DB.prepare(`
     SELECT a.id,${viewer ? "NULL" : "a.telegram_id"} telegram_id,a.name,a.role,a.custom_role_id,
            r.name custom_role_name,COALESCE(a.active,1) active,a.created_at,a.deactivated_at,
@@ -63,7 +79,7 @@ settingsRoute.get("/admins", requireAdmin, async(c)=>{
   return c.json(rows.results);
 });
 
-settingsRoute.get("/roles", requireAdmin, async(c)=>{
+settingsRoute.get("/roles", requireSettingsView, async(c)=>{
   const roles=await c.env.DB.prepare(`
     SELECT r.id,r.name,r.description,COALESCE(r.active,1) active,r.created_at,r.updated_at,
            GROUP_CONCAT(p.permission) permissions_csv,
@@ -88,6 +104,7 @@ settingsRoute.post("/roles", requireSuperAdmin, async(c)=>{
   const description=boundedText(b.description,240);
   const permissions=normalizeRolePermissions(b.permissions);
   if(!name)return c.json({error:"Role name is required"},400);
+  if(RESERVED_ROLE_NAMES.has(name.toLowerCase())) return c.json({error:"That name is reserved for a built-in role"},409);
   if(!permissions.includes("read")) permissions.unshift("read");
   try{
     const r=await c.env.DB.prepare("INSERT INTO admin_roles(name,description,created_by) VALUES(?,?,?)").bind(name,description||null,admin.id).run();
@@ -112,6 +129,7 @@ settingsRoute.patch("/roles/:id", requireSuperAdmin, async(c)=>{
     ? (await c.env.DB.prepare("SELECT permission FROM admin_role_permissions WHERE role_id=?").bind(id).all<any>()).results.map((x:any)=>x.permission)
     : normalizeRolePermissions(b.permissions);
   if(!name)return c.json({error:"Role name is required"},400);
+  if(RESERVED_ROLE_NAMES.has(String(name).toLowerCase())) return c.json({error:"That name is reserved for a built-in role"},409);
   if(!permissions.includes("read")) permissions.unshift("read");
   await c.env.DB.prepare("UPDATE admin_roles SET name=?,description=?,updated_at=datetime('now') WHERE id=?").bind(name,description||null,id).run();
   await c.env.DB.batch([
@@ -225,7 +243,7 @@ settingsRoute.delete("/admins/:id", requireSuperAdmin, async(c)=>{
   await c.env.DB.prepare("UPDATE admins SET active=0,deactivated_at=datetime('now'),deactivated_by=? WHERE id=?").bind(admin.id,id).run();
   const after=await c.env.DB.prepare("SELECT * FROM admins WHERE id=?").bind(id).first<any>();await auditEntity(c.env,admin.id,"admin_deactivated","admin",id,before,after);return c.json({ok:true});
 });
-settingsRoute.get("/audit-log", requireFinance, async(c)=>{
+settingsRoute.get("/audit-log", requireAuditView, async(c)=>{
   const rows=await c.env.DB.prepare(`SELECT al.id,al.admin_id,al.action,al.detail,al.created_at,a.name admin_name,a.role admin_role FROM audit_log al LEFT JOIN admins a ON a.id=al.admin_id ORDER BY al.created_at DESC LIMIT 500`).all<any>();
   return c.json(rows.results.map((row:any)=>({...row,detail:sanitizeAuditDetailForRole(row.detail, c.get("admin")?.role)})));
 });

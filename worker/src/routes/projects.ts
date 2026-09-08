@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireFinance } from "../auth";
+import { requireProjectsManage, requireProjectsView } from "../auth";
 import { adminCan, auditEntity, ensureOperationalSchema } from "../ops";
 import { boundedText, money, validDate } from "../validation";
 
@@ -38,7 +38,7 @@ function withProjectMetrics(project:any){
   };
 }
 
-projectsRoute.get('/', requireAdmin, async c=>{
+projectsRoute.get('/', requireProjectsView, async c=>{
   await ensureOperationalSchema(c.env);
   const status=String(c.req.query('status')||'').trim();
   const q=String(c.req.query('q')||'').trim().slice(0,100);
@@ -58,7 +58,7 @@ projectsRoute.get('/', requireAdmin, async c=>{
   return c.json(rows.results.map(withProjectMetrics));
 });
 
-projectsRoute.get('/:id', requireAdmin, async c=>{
+projectsRoute.get('/:id', requireProjectsView, async c=>{
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param('id')); const project=await projectRow(c,id);
   if(!project)return c.json({error:'Project not found'},404);
@@ -88,7 +88,7 @@ projectsRoute.get('/:id', requireAdmin, async c=>{
   return c.json({...withProjectMetrics(project),expenses:expenses.results,donations:donations.results,audit_history:auditHistory});
 });
 
-projectsRoute.post('/', requireFinance, async c=>{
+projectsRoute.post('/', requireProjectsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get('admin')!; const b=await c.req.json<any>();
   const name=boundedText(b.name,160,true); const description=boundedText(b.description,1500)||null; const budget=normalizeBudget(b.budget);
@@ -109,7 +109,7 @@ projectsRoute.post('/', requireFinance, async c=>{
   return c.json(withProjectMetrics(after),201);
 });
 
-projectsRoute.patch('/:id', requireFinance, async c=>{
+projectsRoute.patch('/:id', requireProjectsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const admin=c.get('admin')!; const id=Number(c.req.param('id')); const b=await c.req.json<any>();
   const before=await projectRow(c,id); if(!before)return c.json({error:'Project not found'},404);

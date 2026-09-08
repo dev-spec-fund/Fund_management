@@ -1909,3 +1909,28 @@ button:not(:disabled):active {
   .settings-access-sheet{padding-left:14px;padding-right:14px;border-radius:20px 20px 0 0}
 }
 @media(prefers-reduced-motion:reduce){.settings-access-sheet{animation:none}}
+
+/* Role Builder v2 */
+.settings-role-builder-sheet{max-height:min(88vh,780px)}
+.settings-role-builder-body{overflow-y:auto;overscroll-behavior:contain;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+.settings-role-presets{display:flex;gap:7px;overflow-x:auto;padding:1px 0 10px;scrollbar-width:none}
+.settings-role-presets::-webkit-scrollbar{display:none}
+.settings-role-presets button{flex:0 0 auto;border:1px solid var(--border-strong);background:var(--card);color:var(--muted);border-radius:999px;padding:7px 10px;font-size:10px;font-weight:700;white-space:nowrap}
+.settings-role-presets button.active{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-text)}
+.settings-role-builder-groups{display:grid;gap:10px;margin:4px 0 12px}
+.settings-role-builder-group{border:1px solid var(--divider);border-radius:12px;background:var(--card);overflow:hidden}
+.settings-role-builder-group-head{padding:10px 11px 8px;border-bottom:1px solid var(--divider)}
+.settings-role-builder-group-head strong{display:block;font-size:11px;color:var(--text)}
+.settings-role-builder-group-head small{display:block;margin-top:2px;font-size:9px;line-height:1.35;color:var(--soft)}
+.settings-role-builder-group .settings-permission-list{border-top:0;margin:0}
+.settings-role-builder-group .settings-permission-list>label{min-height:44px;padding:8px 11px}
+.settings-role-builder-inline{display:grid;gap:10px}
+.settings-role-builder-inline .settings-role-builder-group{background:var(--bg)}
+.settings-role-risk-note{display:flex;align-items:flex-start;gap:8px;border:1px solid var(--warning-border);background:var(--warning-bg);color:var(--warning);border-radius:10px;padding:9px 10px;font-size:10px;line-height:1.4;margin:4px 0 10px}
+.settings-role-risk-note svg{flex:0 0 auto;margin-top:1px}
+.settings-role-protected-note{font-size:9px;line-height:1.45;color:var(--soft);padding:8px 9px;border-radius:9px;background:var(--surface-soft);border:1px solid var(--divider);margin:4px 0 10px}
+@media (max-width:420px){
+  .settings-role-builder-sheet{max-height:91vh}
+  .settings-role-builder-group-head{padding:9px 10px 7px}
+  .settings-role-builder-group .settings-permission-list>label{min-height:42px;padding:7px 10px}
+}

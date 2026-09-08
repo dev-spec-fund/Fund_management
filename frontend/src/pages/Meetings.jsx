@@ -26,7 +26,7 @@ export default function Meetings({admin}){
   const [excoOptions,setExcoOptions]=useState([]);
   const [page,setPage]=useState(1);
   const [showMeetingActions,setShowMeetingActions]=useState(false);
-  const canFinance=adminCan(admin, "finance");
+  const canFinance=adminCan(admin, "meetings_manage");
   const { confirm, confirmationDialog } = useConfirmDialog();
 
   const load=()=>api.admin.meetings().then(setRows).catch(e=>setMessage(e.message));

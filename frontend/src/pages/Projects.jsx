@@ -8,6 +8,7 @@ import { formatLocalDateTime, todayValue } from "../utils/date";
 import Pagination, { pageSlice } from "../components/Pagination";
 import DonationDetails from "./reports/DonationDetails";
 import ExpenseDetails from "./expenses/ExpenseDetails";
+import { adminCan } from "../utils/permissions";
 
 const FILTERS = [["all","All"],["active","Active"],["planned","Planned"],["completed","Completed"],["cancelled","Cancelled"]];
 const isSuper = (admin) => ["owner","super_admin"].includes(admin?.role);
@@ -15,6 +16,7 @@ const tone = (status) => status === "active" ? "var(--success-strong)" : status 
 const adjustmentStatuses = new Set(["voided","reversed","rejected","cancelled"]);
 
 export default function Projects({ admin }) {
+  const canManageProjects=adminCan(admin,"projects_manage");
   const [filter,setFilter]=useState("all"), [query,setQuery]=useState(""), [rows,setRows]=useState(()=>api.peekCached("/api/projects"));
   const [selected,setSelected]=useState(null), [showAdd,setShowAdd]=useState(false), [message,setMessage]=useState(""), [error,setError]=useState("");
   const [page,setPage]=useState(1);
@@ -31,7 +33,7 @@ export default function Projects({ admin }) {
     <div className="governance-page-head project-theme">
       <div className="governance-title-row">
         <div><span className="governance-eyebrow sans">GOVERNANCE</span><h2>Projects</h2><p className="sans">Track community work, budgets and project activity.</p></div>
-        <button type="button" className="governance-primary-action sans" onClick={()=>setShowAdd(true)}><Plus size={16}/> New project</button>
+        {canManageProjects&&<button type="button" className="governance-primary-action sans" onClick={()=>setShowAdd(true)}><Plus size={16}/> New project</button>}
       </div>
       <div className="governance-kpi-grid">
         <GovKpi icon={<Activity size={16}/>} label="Active" value={activeCount}/><GovKpi icon={<CircleDollarSign size={16}/>} label="Budget" value={`MVR ${fmt(totalBudget)}`}/><GovKpi icon={<WalletCards size={16}/>} label="Spent" value={`MVR ${fmt(totalSpent)}`}/><GovKpi icon={<HandCoins size={16}/>} label="Donations" value={donationCount}/>
@@ -52,8 +54,8 @@ export default function Projects({ admin }) {
       <div className="sans" style={{textAlign:"right",whiteSpace:"nowrap"}}><div style={{fontSize:9,color:"var(--soft)",textTransform:"uppercase"}}>Spent</div><strong style={{fontSize:13}}>MVR {fmt(p.spent)}</strong>{p.budget!=null&&<div style={{fontSize:9,color:Number(p.remaining_budget)<0?"var(--danger)":"var(--soft)",marginTop:3}}>{Number(p.remaining_budget)<0?`Over MVR ${fmt(Math.abs(p.remaining_budget))}`:`MVR ${fmt(p.remaining_budget)} left`}</div>}</div>
     </button>)}
     <Pagination page={projectPage.page} total={(rows||[]).length} onChange={setPage}/>
-    {showAdd&&<ProjectForm admin={admin} onClose={()=>setShowAdd(false)} onSaved={()=>saved("Project created")}/>} 
-    {selected&&<ProjectDetails project={selected} admin={admin} onClose={()=>setSelected(null)} onSaved={saved}/>} 
+    {canManageProjects&&showAdd&&<ProjectForm admin={admin} onClose={()=>setShowAdd(false)} onSaved={()=>saved("Project created")}/>} 
+    {selected&&<ProjectDetails project={selected} admin={admin} canManageProjects={canManageProjects} onClose={()=>setSelected(null)} onSaved={saved}/>} 
   </>;
 }
 
@@ -88,7 +90,7 @@ function projectStatusOptions(current){
   return (allowed[current]||[current]).map(value=>[value,labels[value]||value]);
 }
 
-function ProjectDetails({project,admin,onClose,onSaved}){
+function ProjectDetails({project,admin,canManageProjects,onClose,onSaved}){
   const [data,setData]=useState(()=>api.peekCached(`/api/projects/${project.id}`)),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[selectedDonation,setSelectedDonation]=useState(null),[selectedExpense,setSelectedExpense]=useState(null);
   const [showDonations,setShowDonations]=useState(false),[showExpenses,setShowExpenses]=useState(false),[showAdjustments,setShowAdjustments]=useState(false),[showHistory,setShowHistory]=useState(false);
   const load=()=>api.projects.get(project.id).then(setData).catch(e=>setError(e.message));
@@ -102,7 +104,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
   const donations=p.donations||[];
   const donationTotal=donations.reduce((sum,d)=>sum+Number(d.amount||0),0);
   const expenseTotal=currentExpenses.reduce((sum,e)=>sum+Number(e.amount||0),0);
-  const canEdit=!["completed","cancelled"].includes(p.status)||isSuper(admin);
+  const canEdit=canManageProjects && (!(["completed","cancelled"].includes(p.status))||isSuper(admin));
   const changeStatus=async(status)=>{let cancel_reason=null;if(status==="cancelled"){cancel_reason=prompt("Reason for cancelling this project:")||"";if(cancel_reason.trim().length<3)return;}setBusy(true);setError("");try{await api.projects.update(p.id,{status,cancel_reason});await onSaved(status==="active"?"Project reopened/activated":status==="completed"?"Project completed":"Project cancelled");}catch(e){setError(e.message);}finally{setBusy(false);}};
   return <Modal onClose={onClose} closeDisabled={busy} title={`${p.project_code} · ${p.name}`}><MessageBanner tone="error">{error}</MessageBanner>
     <div className="project-detail-summary">
@@ -160,7 +162,7 @@ function ProjectDetails({project,admin,onClose,onSaved}){
       {showHistory&&p.audit_history.map(a=><div key={a.id} className="project-history-row"><div className="sans">{auditLabel(a.action)}</div><div className="sans">{formatLocalDateTime(a.created_at)} · {a.admin_name}{a.before_status&&a.after_status&&a.before_status!==a.after_status?` · ${a.before_status} → ${a.after_status}`:""}</div></div>)}
     </>}
 
-    <div className="project-detail-actions">{canEdit&&<button type="button" disabled={busy} onClick={()=>setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13}/> Edit</button>}{["planned"].includes(p.status)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Activate</button>}{p.status==="active"&&<button type="button" disabled={busy} onClick={()=>changeStatus("completed")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Complete</button>}{!["cancelled"].includes(p.status)&&p.status!=="completed"&&<button type="button" disabled={busy} onClick={()=>changeStatus("cancelled")} style={smallBtn("var(--danger)")}><X size={13}/> Cancel</button>}{["completed","cancelled"].includes(p.status)&&isSuper(admin)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--primary-text)")}><RotateCcw size={13}/> Reopen</button>}</div>
+    <div className="project-detail-actions">{canEdit&&<button type="button" disabled={busy} onClick={()=>setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13}/> Edit</button>}{canManageProjects&&["planned"].includes(p.status)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Activate</button>}{canManageProjects&&p.status==="active"&&<button type="button" disabled={busy} onClick={()=>changeStatus("completed")} style={smallBtn("var(--success-strong)")}><CheckCircle2 size={13}/> Complete</button>}{canManageProjects&&!["cancelled"].includes(p.status)&&p.status!=="completed"&&<button type="button" disabled={busy} onClick={()=>changeStatus("cancelled")} style={smallBtn("var(--danger)")}><X size={13}/> Cancel</button>}{canManageProjects&&["completed","cancelled"].includes(p.status)&&isSuper(admin)&&<button type="button" disabled={busy} onClick={()=>changeStatus("active")} style={smallBtn("var(--primary-text)")}><RotateCcw size={13}/> Reopen</button>}</div>
     {!canEdit&&<div className="sans" style={{fontSize:10,color:"var(--soft)",marginTop:10,textAlign:"center"}}>Completed/cancelled projects are read-only. Super Admin can reopen them.</div>}
     {selectedDonation&&<DonationDetails admin={admin} row={selectedDonation} onClose={()=>setSelectedDonation(null)} onSaved={async(message)=>{setSelectedDonation(null);await onSaved(message||"Donation updated");}}/>}
     {selectedExpense&&<ExpenseDetails admin={admin} row={selectedExpense} onClose={()=>setSelectedExpense(null)} onSaved={async()=>{setSelectedExpense(null);}}/>}

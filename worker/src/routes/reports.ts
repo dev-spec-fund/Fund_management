@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAdmin, requireMemberOrAdmin } from "../auth";
+import { requireMemberOrAdmin, requireReportsView } from "../auth";
 import { currentMonth, getBranding } from "../db";
 import { validMonth } from "../validation";
 import { sendDocument } from "../telegram";
@@ -330,7 +330,7 @@ reportsRoute.get("/public-expenses", requireMemberOrAdmin, async (c) => {
 });
 
 /** Lightweight dashboard summary. Avoids loading report-only expense/project detail rows. */
-reportsRoute.get("/overview", requireAdmin, async (c) => {
+reportsRoute.get("/overview", requireReportsView, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
 
@@ -426,7 +426,7 @@ reportsRoute.get("/overview", requireAdmin, async (c) => {
 });
 
 /** Summary for a given month (YYYY-MM), or 'ytd' for year-to-date. */
-reportsRoute.get("/summary", requireAdmin, async (c) => {
+reportsRoute.get("/summary", requireReportsView, async (c) => {
   const month = c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(month)) return c.json({error:"Month must use YYYY-MM"},400);
 
@@ -572,7 +572,7 @@ reportsRoute.get("/summary", requireAdmin, async (c) => {
 });
 
 /** 6-month trend for charts. */
-reportsRoute.get("/trend", requireAdmin, async (c) => {
+reportsRoute.get("/trend", requireReportsView, async (c) => {
   const base=c.req.query("month") || currentMonth(c.env.FUND_TIMEZONE || "Indian/Maldives");
   if (!validMonth(base)) return c.json({error:"Month must use YYYY-MM"},400);
   const [by,bm]=base.split('-').map(Number);

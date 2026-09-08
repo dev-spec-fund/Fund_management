@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../../types";
-import { requireSuperAdmin } from "../../auth";
+import { requireElectionsManage } from "../../auth";
 import { auditEntity, ensureOperationalSchema } from "../../ops";
 import { sendMessage } from "../../telegram";
 import { getBranding } from "../../db";
@@ -64,7 +64,7 @@ electionsRoute.get("/", async c=>{
 });
 
 
-electionsRoute.get("/dashboard", requireSuperAdmin, async c=>{
+electionsRoute.get("/dashboard", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   await processElectionLifecycle(c.env);
   const now=localNow(c.env.FUND_TIMEZONE || "Indian/Maldives");
@@ -182,7 +182,7 @@ electionsRoute.get("/archive", async c=>{
   return c.json({archive});
 });
 
-electionsRoute.get("/:id/notifications", requireSuperAdmin, async c=>{
+electionsRoute.get("/:id/notifications", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param("id"));
   const election=await c.env.DB.prepare("SELECT id FROM elections WHERE id=?").bind(id).first<any>();
@@ -202,7 +202,7 @@ electionsRoute.get("/:id/notifications", requireSuperAdmin, async c=>{
   return c.json({items,totals});
 });
 
-electionsRoute.get("/:id/timeline", requireSuperAdmin, async c=>{
+electionsRoute.get("/:id/timeline", requireElectionsManage, async c=>{
   await ensureOperationalSchema(c.env);
   const id=Number(c.req.param("id"));
   const election=await c.env.DB.prepare(`SELECT e.*,creator.name created_by_name,certifier.name certified_by_name

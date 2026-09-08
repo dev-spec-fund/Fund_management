@@ -145,11 +145,34 @@ export function requireAdmin(c: Context<AppEnv>, next: Next) {
   return next();
 }
 
-export function requireFinance(c: Context<AppEnv>, next: Next) {
-  const admin = c.get("admin");
-  if (!adminCan(admin, "finance")) return c.json({ error: "Treasurer or Super Admin access required" }, 403);
-  return next();
+export function requirePermission(permission: Parameters<typeof adminCan>[1], message = "Permission required") {
+  return (c: Context<AppEnv>, next: Next) => {
+    const admin = c.get("admin");
+    if (!adminCan(admin, permission)) return c.json({ error: message }, 403);
+    return next();
+  };
 }
+
+export const requireFinance = requirePermission("finance", "Treasurer or Super Admin access required");
+export const requireMembersView = requirePermission("members_view", "Member access permission required");
+export const requireMembersManage = requirePermission("members_manage", "Member management permission required");
+export const requireApprovalsManage = requirePermission("approvals_manage", "Approval permission required");
+export const requireExpensesView = requirePermission("expenses_view", "Expense view permission required");
+export const requireExpensesManage = requirePermission("expenses_manage", "Expense management permission required");
+export const requireDonationsView = requirePermission("donations_view", "Donation view permission required");
+export const requireDonationsManage = requirePermission("donations_manage", "Donation management permission required");
+export const requireReportsView = requirePermission("reports_view", "Report access permission required");
+export const requireProjectsView = requirePermission("projects_view", "Project access permission required");
+export const requireProjectsManage = requirePermission("projects_manage", "Project management permission required");
+export const requireMeetingsView = requirePermission("meetings_view", "Meeting access permission required");
+export const requireMeetingsManage = requirePermission("meetings_manage", "Meeting management permission required");
+export const requireElectionsView = requirePermission("elections_view", "Election access permission required");
+export const requireElectionsManage = requirePermission("elections_manage", "Election management permission required");
+export const requireElectionsCertify = requirePermission("elections_certify", "Election certification permission required");
+export const requireSettingsView = requirePermission("settings_view", "Settings access permission required");
+export const requireSettingsManage = requirePermission("settings_manage", "Settings management permission required");
+export const requireAuditView = requirePermission("audit_view", "Audit log permission required");
+export const requireFinancialReversals = requirePermission("financial_reversals", "Financial reversal permission required");
 
 export function requireSuperAdmin(c: Context<AppEnv>, next: Next) {
   const admin = c.get("admin");
