@@ -2,7 +2,7 @@ import type { Env } from "../types";
 import { paidForMonth } from "../allocations";
 import { contributionDueForMonth } from "../contributionRates";
 import { sendMessage } from "../telegram";
-import { currentMonth, ensureMemberLinked, getAdminByTelegramId, getBranding, createMemberRegistrationRequest, ensureMemberRegistrationTable } from "../db";
+import { currentMonth, ensureMemberLinked, getAdminByTelegramId, getBranding, createMemberRegistrationRequest } from "../db";
 import { consumeRateLimit, normalizePhone } from "../ops";
 import { esc, miniAppUrl, notifyRegistrationRequest, sharePhoneKeyboard } from "../botSupport";
 import { handleSlipPhoto } from "./slips";
@@ -23,7 +23,6 @@ export async function handleMessage(env: Env, message: any) {
     const phone = normalizePhone(contact.phone_number);
     if (!phone) return sendMessage(env, chatId, "I could not read that phone number. Please try sharing it again.");
 
-    await ensureMemberRegistrationTable(env);
     const username = message.from.username ? String(message.from.username) : null;
     let request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE telegram_id = ?")
       .bind(telegramId).first<any>();

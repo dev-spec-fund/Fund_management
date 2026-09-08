@@ -2,7 +2,7 @@ import type { Env } from "../types";
 import { approveWithAllocations, allocationReceipt } from "../allocations";
 import { ensureInitialContributionRate } from "../contributionRates";
 import { sendMessage, answerCallback, editMessageText, editMessageCaption } from "../telegram";
-import { currentMonth, currentDate, getAdminByTelegramId, logAudit, generateMemberCode, getSetting, getBranding, ensureMemberRegistrationTable } from "../db";
+import { currentMonth, currentDate, getAdminByTelegramId, logAudit, generateMemberCode, getSetting, getBranding } from "../db";
 import { adminCan, consumeRateLimit, duplicateSlip, normalizeName, normalizePhone, requireOpenMonth } from "../ops";
 import { esc, miniAppUrl } from "../botSupport";
 import { recordContributionReviewMessage, syncContributionReviewMessages } from "../contributionReviewMessages";
@@ -111,7 +111,6 @@ export async function handleCallback(env: Env, callback: any) {
 
   if (action === "member_create" || action === "member_link" || action === "member_reject" || action === "member_approve") {
     if (!adminCan(admin, "approvals_manage")) return answerCallback(env, callback.id, "Contribution approval access is required.");
-    await ensureMemberRegistrationTable(env);
     const requestId = Number(parts[1]);
     const request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE id = ?").bind(requestId).first<any>();
     if (!request) return answerCallback(env, callback.id, "Registration request not found.");
