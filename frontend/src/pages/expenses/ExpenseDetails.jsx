@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { Modal } from "../../components/FormControls";
 import { MessageBanner, PreviewLoadState, smallBtn } from "../../components/Shared";
 import PdfPreview from "../../components/PdfPreview";
+import DocumentUploadStatus from "../../components/DocumentUploadStatus";
 import { fmt } from "../../utils/format";
 import { adminCan } from "../../utils/permissions";
 import ExpenseForm from "./ExpenseForm";
@@ -16,6 +17,8 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const [error, setError] = useState("");
   const [documents, setDocuments] = useState(null);
   const [docBusy, setDocBusy] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState(null);
+  const retryFilesRef = useRef(null);
   const [docPreview, setDocPreview] = useState(null);
   const previewRequestRef = useRef(0);
   const [addDocumentType, setAddDocumentType] = useState("Receipt");
@@ -41,13 +44,24 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const addDocuments = async (files) => {
     const selected = Array.from(files || []).slice(0, 10);
     if (!selected.length) return;
+    retryFilesRef.current = selected;
     setDocBusy(true);
     setError("");
     try {
-      for (const file of selected) await api.expenses.uploadDocument(row.id, file, addDocumentType);
+      for (let index = 0; index < selected.length; index += 1) {
+        const file = selected[index];
+        setUploadStatus({ phase: "uploading", name: file.name || "Document", current: index + 1, total: selected.length });
+        await api.expenses.uploadDocument(row.id, file, addDocumentType);
+      }
+      setUploadStatus({ phase: "processing", name: selected[selected.length - 1]?.name || "Document", current: selected.length, total: selected.length });
       await loadDocuments();
+      retryFilesRef.current = null;
+      setUploadStatus({ phase: "success", name: selected.length === 1 ? selected[0].name : `${selected.length} documents`, current: selected.length, total: selected.length });
+      setTimeout(() => setUploadStatus((current) => current?.phase === "success" ? null : current), 1800);
     } catch (e) {
-      setError(e.message || "Could not save document to Telegram");
+      const message = e.message || "Could not save document to Telegram";
+      setError(message);
+      setUploadStatus({ phase: "error", name: selected[0]?.name || "Document", error: message });
     } finally {
       setDocBusy(false);
     }
@@ -195,6 +209,7 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
             </label>
           </div>
         </div>
+        <DocumentUploadStatus status={uploadStatus} onRetry={uploadStatus?.phase === "error" && retryFilesRef.current ? () => addDocuments(retryFilesRef.current) : undefined} />
         {documents === null ? <div style={{ fontSize: 11, color: "var(--soft)" }}>Loading documents…</div> : documents.length === 0 ? <div style={{ fontSize: 11, color: "var(--soft)" }}>No documents attached.</div> : documents.map((document) => <div key={document.id} style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--divider)", padding: "8px 0" }}>
           <FileText size={15} style={{ flex: "0 0 auto" }} />
           <div style={{ minWidth: 0, flex: 1 }}>

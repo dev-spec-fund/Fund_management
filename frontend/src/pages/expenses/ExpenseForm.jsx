@@ -3,6 +3,7 @@ import { Paperclip } from "lucide-react";
 import { api } from "../../api";
 import { Modal, Field } from "../../components/FormControls";
 import { MessageBanner, PrimaryButton } from "../../components/Shared";
+import DocumentUploadStatus from "../../components/DocumentUploadStatus";
 import { todayValue } from "../../utils/date";
 import { fmt } from "../../utils/format";
 import { expenseMutationWithOverrides } from "./expenseUtils";
@@ -22,6 +23,7 @@ export default function ExpenseForm({ onClose, onSaved, row = null }) {
   const [error, setError] = useState("");
   const [documents, setDocuments] = useState([]);
   const [documentType, setDocumentType] = useState("Receipt");
+  const [uploadStatus, setUploadStatus] = useState(null);
 
   useEffect(() => {
     api.expenses.categories().then(setCategories).catch(() => {});
@@ -48,12 +50,20 @@ export default function ExpenseForm({ onClose, onSaved, row = null }) {
       const expenseId = row?.id || result?.id;
       if (documents.length && expenseId) {
         try {
-          for (const file of documents) await api.expenses.uploadDocument(expenseId, file, documentType);
+          for (let index = 0; index < documents.length; index += 1) {
+            const file = documents[index];
+            setUploadStatus({ phase: "uploading", name: file.name || "Document", current: index + 1, total: documents.length });
+            await api.expenses.uploadDocument(expenseId, file, documentType);
+          }
+          setUploadStatus({ phase: "processing", name: documents[documents.length - 1]?.name || "Document", current: documents.length, total: documents.length });
         } catch (uploadError) {
-          setError(`Expense saved, but a document could not be saved to Telegram: ${uploadError.message || "Upload failed"}. Open the expense and retry.`);
+          const message = `Expense saved, but a document could not be saved to Telegram: ${uploadError.message || "Upload failed"}. Open the expense and retry.`;
+          setError(message);
+          setUploadStatus({ phase: "error", name: documents[0]?.name || "Document", error: uploadError.message || "Upload failed" });
           return;
         }
       }
+      if (documents.length) setUploadStatus({ phase: "success", name: documents.length === 1 ? documents[0].name : `${documents.length} documents`, current: documents.length, total: documents.length });
       await onSaved(row ? "Expense updated" : documents.length ? `Expense added · ${documents.length} document${documents.length === 1 ? "" : "s"} saved` : "Expense added");
     } catch (e) {
       setError(e.message || "Could not save expense");
@@ -89,6 +99,7 @@ export default function ExpenseForm({ onClose, onSaved, row = null }) {
       </label>
       <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 5 }}>Up to 10 files per save · maximum 20 MB each · stored in Telegram, with references kept in D1.</div>
       {documents.length > 0 && <div style={{ marginTop: 6, fontSize: 10, color: "var(--muted)" }}>{documents.map((file) => file.name).join(" · ")}</div>}
+      <DocumentUploadStatus status={uploadStatus} />
     </div>
     <PrimaryButton onClick={busy ? undefined : save}>{busy ? "Saving…" : row ? "Save changes" : "Save expense"}</PrimaryButton>
   </Modal>;

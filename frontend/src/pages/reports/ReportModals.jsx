@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { Modal, Field } from "../../components/FormControls";
 import { MessageBanner, PrimaryButton } from "../../components/Shared";
+import DocumentUploadStatus from "../../components/DocumentUploadStatus";
 import { fmt } from "../../utils/format";
 import { todayValue } from "../../utils/date";
 import { requestText } from "../../utils/systemDialogs";
@@ -91,6 +92,7 @@ export function DonationModal({ onClose, onSaved, row = null }) {
   const [projects, setProjects] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [documentType, setDocumentType] = useState("Payment Slip");
+  const [uploadStatus, setUploadStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const createRequestIdRef = useRef(row ? null : (globalThis.crypto?.randomUUID?.() || `donation-${Date.now()}-${Math.random().toString(36).slice(2)}`));
@@ -124,12 +126,20 @@ export function DonationModal({ onClose, onSaved, row = null }) {
       const donationId = row?.id || result?.id;
       if (!row && documents.length && donationId) {
         try {
-          for (const file of documents) await api.donations.uploadDocument(donationId, file, documentType);
+          for (let index = 0; index < documents.length; index += 1) {
+            const file = documents[index];
+            setUploadStatus({ phase: "uploading", name: file.name || "Document", current: index + 1, total: documents.length });
+            await api.donations.uploadDocument(donationId, file, documentType);
+          }
+          setUploadStatus({ phase: "processing", name: documents[documents.length - 1]?.name || "Document", current: documents.length, total: documents.length });
         } catch (uploadError) {
-          setError(`Donation saved, but a document could not be saved to Telegram: ${uploadError.message || "Upload failed"}. Open the donation and retry.`);
+          const message = `Donation saved, but a document could not be saved to Telegram: ${uploadError.message || "Upload failed"}. Open the donation and retry.`;
+          setError(message);
+          setUploadStatus({ phase: "error", name: documents[0]?.name || "Document", error: uploadError.message || "Upload failed" });
           return;
         }
       }
+      if (documents.length) setUploadStatus({ phase: "success", name: documents.length === 1 ? documents[0].name : `${documents.length} documents`, current: documents.length, total: documents.length });
       await onSaved?.(row ? "Donation updated" : documents.length ? `Donation logged · ${documents.length} document${documents.length === 1 ? "" : "s"} saved` : "Donation logged");
       onClose();
     } catch (e) {
@@ -159,6 +169,7 @@ export function DonationModal({ onClose, onSaved, row = null }) {
           <label className="sans" style={{ border: "1px solid var(--border-strong)", borderRadius: 9, padding: "8px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Choose files<input type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => { setDocuments(Array.from(e.target.files || []).slice(0, 10)); }} /></label>
         </div>
         {documents.length > 0 && <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 6 }}>{documents.length} document{documents.length === 1 ? "" : "s"} selected</div>}
+        <DocumentUploadStatus status={uploadStatus} />
       </div>}
       {row && <div className="sans" style={{ fontSize: 10, color: "var(--soft)", marginBottom: 12 }}>Supporting documents are managed from Donation Details. Financial edits are blocked automatically when the donation month is closed.</div>}
       <PrimaryButton onClick={busy ? undefined : save}>{busy ? "Saving…" : row ? "Save changes" : "Save donation"}</PrimaryButton>

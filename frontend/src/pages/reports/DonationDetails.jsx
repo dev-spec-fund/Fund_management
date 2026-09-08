@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { Modal } from "../../components/FormControls";
 import { MessageBanner, PreviewLoadState, smallBtn } from "../../components/Shared";
 import PdfPreview from "../../components/PdfPreview";
+import DocumentUploadStatus from "../../components/DocumentUploadStatus";
 import { fmt } from "../../utils/format";
 import { adminCan } from "../../utils/permissions";
 import { DonationModal } from "./ReportModals";
@@ -18,6 +19,8 @@ export default function DonationDetails({ admin, row, onClose, onSaved }) {
   const [error,setError]=useState("");
   const [documents,setDocuments]=useState(null);
   const [docBusy,setDocBusy]=useState(false);
+  const [uploadStatus,setUploadStatus]=useState(null);
+  const retryFilesRef=useRef(null);
   const [docPreview,setDocPreview]=useState(null);
   const previewRequestRef=useRef(0);
   const [addDocumentType,setAddDocumentType]=useState("Payment Slip");
@@ -34,9 +37,10 @@ export default function DonationDetails({ admin, row, onClose, onSaved }) {
 
   const addDocuments=async(files)=>{
     const selected=Array.from(files||[]).slice(0,10);if(!selected.length)return;
-    setDocBusy(true);setError("");
-    try{for(const file of selected)await api.donations.uploadDocument(row.id,file,addDocumentType);await loadDocuments();await refresh();}
-    catch(e){setError(e.message||"Could not save donation document to Telegram");}
+    retryFilesRef.current=selected;setDocBusy(true);setError("");
+    try{for(let index=0;index<selected.length;index+=1){const file=selected[index];setUploadStatus({phase:"uploading",name:file.name||"Document",current:index+1,total:selected.length});await api.donations.uploadDocument(row.id,file,addDocumentType);}
+      setUploadStatus({phase:"processing",name:selected[selected.length-1]?.name||"Document",current:selected.length,total:selected.length});await loadDocuments();await refresh();retryFilesRef.current=null;setUploadStatus({phase:"success",name:selected.length===1?selected[0].name:`${selected.length} documents`,current:selected.length,total:selected.length});setTimeout(()=>setUploadStatus(current=>current?.phase==="success"?null:current),1800);}
+    catch(e){const message=e.message||"Could not save donation document to Telegram";setError(message);setUploadStatus({phase:"error",name:selected[0]?.name||"Document",error:message});}
     finally{setDocBusy(false);}
   };
   const openDocument=async(document)=>{
@@ -73,6 +77,7 @@ export default function DonationDetails({ admin, row, onClose, onSaved }) {
       </div>
       {canFinance&&<div className="sans" style={{border:"1px solid var(--border)",borderRadius:12,padding:12,marginBottom:14,background:"var(--card)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:8}}><div style={{fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:6}}><Paperclip size={14}/> Supporting documents</div><div style={{display:"flex",gap:6,alignItems:"center"}}><select className="sans" value={addDocumentType} onChange={e=>setAddDocumentType(e.target.value)} disabled={docBusy} style={{border:"1px solid var(--border-strong)",borderRadius:8,padding:"6px 7px",background:"var(--card)",color:"var(--text)",fontSize:10}}>{DOC_TYPES.map(type=><option key={type}>{type}</option>)}</select><label style={{...smallBtn("var(--primary-text)"),cursor:docBusy?"wait":"pointer",padding:"6px 9px"}}><Plus size={12}/> Add<input disabled={docBusy} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{display:"none"}} onChange={e=>{addDocuments(e.target.files);e.target.value="";}}/></label></div></div>
+        <DocumentUploadStatus status={uploadStatus} onRetry={uploadStatus?.phase==="error"&&retryFilesRef.current?()=>addDocuments(retryFilesRef.current):undefined}/>
         {documents===null?<div style={{fontSize:11,color:"var(--soft)"}}>Loading documents…</div>:documents.length===0?<div style={{fontSize:11,color:"var(--soft)"}}>No documents attached.</div>:documents.map(document=><div key={document.id} style={{display:"flex",alignItems:"center",gap:8,borderTop:"1px solid var(--divider)",padding:"8px 0"}}><FileText size={15}/><div style={{minWidth:0,flex:1}}><div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{document.display_name||document.original_filename}</div><div style={{fontSize:9,color:"var(--soft)",marginTop:2}}>{document.document_type||"Other"} · {document.uploaded_by_name||"Admin"}{document.file_size?` · ${(Number(document.file_size)/1024/1024).toFixed(Number(document.file_size)>1048576?1:2)} MB`:""}</div></div><button type="button" disabled={docBusy} onClick={()=>openDocument(document)} style={{...smallBtn("var(--primary-text)"),padding:6}}><Eye size={13}/></button><button type="button" disabled={docBusy} onClick={()=>sendDocument(document)} style={{...smallBtn("var(--primary-text)"),padding:6}}><Send size={13}/></button><button type="button" disabled={docBusy} onClick={()=>editDocument(document)} style={{...smallBtn("var(--primary-text)"),padding:6}}><Tag size={13}/></button><button type="button" disabled={docBusy} onClick={()=>removeDocument(document)} style={{...smallBtn("var(--danger)"),padding:6}}><Trash2 size={13}/></button></div>)}
       </div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{canFinance&&d.status==='active'&&<button type="button" disabled={busy} onClick={()=>setEditing(true)} style={smallBtn("var(--primary-text)")}><Pencil size={13}/> Edit</button>}{canReverse&&d.status==='active'&&<button type="button" disabled={busy} onClick={reverse} style={smallBtn("var(--danger)")}><RotateCcw size={13}/> Reverse</button>}</div>
