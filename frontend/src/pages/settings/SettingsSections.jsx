@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { SectionTitle, EmptyLine, cardStyle, compactBtn, approveBtn, rejectBtn } from "../../components/Shared";
 import Pagination, { pageSlice } from "../../components/Pagination";
 import { formatLocalDateTime } from "../../utils/date";
+import { requestText } from "../../utils/systemDialogs";
 
 const AUDIT_HIDDEN_KEYS = new Set(["ocr_raw","slip_file_id","file_id","telegram_file_id","photo_file_id","raw","ai_response","model_response","prompt"]);
 const auditLabel = (s="") => s.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
@@ -87,11 +88,11 @@ export function ExpenseCategorySettingsSection(ctx) {
       <div style={cardStyle}>
         {categories.map(cat=><div key={cat.id} className="sans" style={{display:"flex",alignItems:"center",gap:7,padding:"8px 0",borderBottom:"1px solid var(--divider)",opacity:Number(cat.active)===0?.55:1}}>
           <span style={{flex:1,fontSize:12,fontWeight:600}}>{cat.name}{Number(cat.active)===0?" · Inactive":""}</span>
-          {canManageExpenses&&<><button type="button" style={compactBtn} onClick={async()=>{const name=prompt("Category name",cat.name);if(!name||name===cat.name)return;try{await api.expenses.updateCategory(cat.id,{name});load()}catch(e){setMessage(e.message)}}}>Edit</button>
+          {canManageExpenses&&<><button type="button" style={compactBtn} onClick={async()=>{const name=await requestText({title:"Edit expense category",label:"Category name",defaultValue:cat.name,submitLabel:"Save",required:true,trim:true});if(name===null||!name||name===cat.name)return;try{await api.expenses.updateCategory(cat.id,{name});load()}catch(e){setMessage(e.message)}}}>Edit</button>
           <button type="button" style={compactBtn} onClick={async()=>{try{await api.expenses.updateCategory(cat.id,{active:Number(cat.active)===0});load()}catch(e){setMessage(e.message)}}}>{Number(cat.active)===0?"Activate":"Deactivate"}</button>
           <button type="button" style={{...compactBtn,color:"var(--danger)"}} onClick={async()=>{if(!await confirm({title:"Delete expense category?",message:`Delete ${cat.name}? If it has historical expenses it will be deactivated instead.`,confirmLabel:"Delete"}))return;try{await api.expenses.removeCategory(cat.id);load()}catch(e){setMessage(e.message)}}}>Delete</button></>}
         </div>)}
-        {canManageExpenses&&<button type="button" style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=prompt("New expense category name");if(!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}><Plus size={15}/> Add category</button>}
+        {canManageExpenses&&<button type="button" style={{...approveBtn,width:"100%",marginTop:10}} onClick={async()=>{const name=await requestText({title:"Add expense category",label:"Category name",submitLabel:"Add category",required:true,trim:true});if(name===null||!name)return;try{await api.expenses.addCategory(name);load()}catch(e){setMessage(e.message)}}}><Plus size={15}/> Add category</button>}
       </div>
 
 

@@ -9,6 +9,7 @@ import Pagination, { pageSlice } from "../components/Pagination";
 import DonationDetails from "./reports/DonationDetails";
 import ExpenseDetails from "./expenses/ExpenseDetails";
 import { adminCan } from "../utils/permissions";
+import { requestText } from "../utils/systemDialogs";
 
 const FILTERS = [["all","All"],["active","Active"],["planned","Planned"],["completed","Completed"],["cancelled","Cancelled"]];
 const isSuper = (admin) => ["owner","super_admin"].includes(admin?.role);
@@ -105,7 +106,7 @@ function ProjectDetails({project,admin,canManageProjects,onClose,onSaved}){
   const donationTotal=donations.reduce((sum,d)=>sum+Number(d.amount||0),0);
   const expenseTotal=currentExpenses.reduce((sum,e)=>sum+Number(e.amount||0),0);
   const canEdit=canManageProjects && (!(["completed","cancelled"].includes(p.status))||isSuper(admin));
-  const changeStatus=async(status)=>{let cancel_reason=null;if(status==="cancelled"){cancel_reason=prompt("Reason for cancelling this project:")||"";if(cancel_reason.trim().length<3)return;}setBusy(true);setError("");try{await api.projects.update(p.id,{status,cancel_reason});await onSaved(status==="active"?"Project reopened/activated":status==="completed"?"Project completed":"Project cancelled");}catch(e){setError(e.message);}finally{setBusy(false);}};
+  const changeStatus=async(status)=>{let cancel_reason=null;if(status==="cancelled"){cancel_reason=await requestText({title:"Cancel project",message:`Why is ${p.name} being cancelled?`,label:"Cancellation reason",submitLabel:"Continue",required:true,minLength:3,multiline:true,trim:true});if(cancel_reason===null)return;}setBusy(true);setError("");try{await api.projects.update(p.id,{status,cancel_reason});await onSaved(status==="active"?"Project reopened/activated":status==="completed"?"Project completed":"Project cancelled");}catch(e){setError(e.message);}finally{setBusy(false);}};
   return <Modal onClose={onClose} closeDisabled={busy} title={`${p.project_code} · ${p.name}`}><MessageBanner tone="error">{error}</MessageBanner>
     <div className="project-detail-summary">
       <div className="project-detail-topline sans">

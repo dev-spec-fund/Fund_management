@@ -4,6 +4,7 @@ import { api,onDataChangeDebounced } from "../api";
 import { Modal,Field,useConfirmDialog } from "../components/FormControls";
 import { LoadingState,EmptyState,MessageBanner,approveBtn,compactBtn,rejectBtn } from "../components/Shared";
 import { adminCan } from "../utils/permissions";
+import { requestChoice, requestDateTime, requestText } from "../utils/systemDialogs";
 
 export default function Elections({admin}){
   const canManageElections=adminCan(admin,"elections_manage");
@@ -161,7 +162,7 @@ export default function Elections({admin}){
   const completeHandover=async()=>{
     if(!handover?.handover?.id)return;
     if(!await confirm({title:"Complete EXCO handover?",message:"This finalizes the handover and activates the elected members’ linked Admin Roles. Previous election-assigned access is ended. Super Admin access is never changed by elections.",confirmLabel:"Complete handover",tone:"primary"}))return;
-    const notes=window.prompt("Final handover note (optional):","") ?? null;
+    const notes=await requestText({title:"Complete EXCO handover",message:"Add an optional final handover note before activation.",label:"Final handover note (optional)",submitLabel:"Complete handover",multiline:true});
     if(notes===null)return;
     setBusy(true);try{
       await api.elections.completeHandover(handover.handover.id,notes);
@@ -191,7 +192,7 @@ export default function Elections({admin}){
   const addPosition=async()=>{if(!detail||!position.role_key)return;setBusy(true);try{const seats=Number(position.seats)||1;const d=await api.elections.addPosition(detail.id,{role_key:position.role_key,seats,max_selections:seats,min_selections:Math.max(0,Math.min(seats,Number(position.min_selections)||0))});setDetail(d);setPosition({role_key:"",seats:"1",min_selections:"1"})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const addCandidate=async()=>{if(!detail||!candidate.position_id||!candidate.member_id)return;setBusy(true);try{const d=await api.elections.addCandidate(detail.id,candidate);setDetail(d);setCandidate({position_id:"",member_id:""})}catch(e){setMessage(e.message)}finally{setBusy(false)}};
   const reviewApplication=async(a,decision)=>{
-    const reason=decision==="rejected"?(window.prompt(`Reason for rejecting ${a.member_name}:`)??null):"";
+    const reason=decision==="rejected"?await requestText({title:"Reject application",message:`${a.member_name} · ${a.position_title}`,label:"Rejection reason",submitLabel:"Reject application",required:true,minLength:3,multiline:true,trim:true}):"";
     if(reason===null)return;
     setBusy(true);try{setDetail(await api.elections.reviewApplication(detail.id,a.id,decision,reason));setMessage(`Application ${decision}.`)}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
@@ -202,17 +203,16 @@ export default function Elections({admin}){
   const reassignApplication=async(a)=>{
     const options=detail.positions.filter(p=>Number(p.id)!==Number(a.position_id));
     if(!options.length)return setMessage("No other positions are available.");
-    const menu=options.map(p=>`${p.id}: ${p.title}`).join("\n");
-    const value=window.prompt(`Move ${a.member_name}'s application to which position?\n\n${menu}`,"");
+    const value=await requestChoice({title:"Move application",message:`Choose a new position for ${a.member_name}.`,label:"Election position",options:options.map(p=>({value:String(p.id),label:p.title})),submitLabel:"Move application"});
     if(value===null)return;
-    const positionId=Number(String(value).split(":")[0].trim());
-    if(!options.some(p=>Number(p.id)===positionId))return setMessage("Choose a valid position ID.");
+    const positionId=Number(value);
+    if(!options.some(p=>Number(p.id)===positionId))return setMessage("Choose a valid position.");
     setBusy(true);try{await api.elections.reassignApplication(detail.id,a.id,positionId);setDetail(await api.elections.get(detail.id));setMessage("Application position updated.")}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const extendApplications=async()=>{
     if(!detail)return;
     const current=String(detail.applications_close_at||"").slice(0,16);
-    const next=window.prompt("New application deadline (YYYY-MM-DDTHH:MM):",current);
+    const next=await requestDateTime({title:"Extend applications",message:"Choose the new application deadline.",label:"Application deadline",defaultValue:current,submitLabel:"Update deadline"});
     if(next===null)return;
     if(!next.trim())return setMessage("Enter the new application deadline.");
     setBusy(true);try{
@@ -222,7 +222,7 @@ export default function Elections({admin}){
     }catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const withdrawCandidate=async(c)=>{
-    const reason=window.prompt(`Reason for withdrawing ${c.display_name}:`);
+    const reason=await requestText({title:"Withdraw candidate",message:`${c.display_name} will be withdrawn from this election.`,label:"Withdrawal reason",submitLabel:"Withdraw candidate",required:true,minLength:3,multiline:true,trim:true});
     if(reason===null)return;
     setBusy(true);try{
       await api.elections.withdrawCandidate(detail.id,c.id,reason.trim()||"Withdrawn");
@@ -234,7 +234,7 @@ export default function Elections({admin}){
     setBusy(true);try{const r=await api.elections.remindNonVoters(detail.id);setMessage(`Voting reminder sent: ${r.sent||0}${r.failed?` · ${r.failed} failed`:""}`);await refreshNotificationStatus()}catch(e){setMessage(e.message)}finally{setBusy(false)}
   };
   const startRunoff=async(tie)=>{
-    const closesAt=window.prompt("Runoff closing date/time (YYYY-MM-DDTHH:MM), or leave blank to close manually:","") ?? null;
+    const closesAt=await requestDateTime({title:"Start runoff",message:`${tie.position_title} · Runoff voting can close automatically at the selected time, or you can close it manually.`,label:"Runoff closing date & time",submitLabel:"Start runoff",allowEmpty:true,emptyLabel:"Start without closing time"});
     if(closesAt===null)return;
     setBusy(true);try{
       await api.elections.startRunoff(detail.id,{position_id:tie.position_id,closes_at:closesAt||null});

@@ -6,6 +6,7 @@ import { formatLocalDateTime } from "../utils/date";
 import Pagination, { pageSlice } from "../components/Pagination";
 import { adminCan } from "../utils/permissions";
 import { MoreHorizontal, Bell, Pencil, XCircle, Plus, CalendarDays, Users, CheckCircle2, Clock3, ChevronDown } from "lucide-react";
+import { requestText } from "../utils/systemDialogs";
 
 export default function Meetings({admin}){
   const emptyForm={title:"",meeting_date:"",meeting_time:"",venue:"",agenda:"",rsvp_deadline:"",audience:"all_members"};
@@ -141,9 +142,8 @@ export default function Meetings({admin}){
 
   const cancelMeeting=async()=>{
     if(!details)return;
-    const reason=window.prompt("Reason for cancelling this meeting:");
+    const reason=await requestText({title:"Cancel meeting",message:`Why is “${details.title}” being cancelled?`,label:"Cancellation reason",submitLabel:"Continue",required:true,minLength:3,multiline:true,trim:true});
     if(reason===null)return;
-    if(!reason.trim())return setMessage("Cancellation reason is required.");
     if(!await confirm({title:"Cancel meeting?",message:`Cancel "${details.title}"? Telegram-linked members will be notified.`,confirmLabel:"Cancel meeting"}))return;
     setBusy(true);setMessage("");
     try{

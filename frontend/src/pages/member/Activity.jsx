@@ -6,6 +6,7 @@ import { currentMonthValue, shiftMonthValue, todayValue } from "../../utils/date
 import { fmt } from "../../utils/format";
 import Pagination, { pageSlice } from "../../components/Pagination";
 import { ActivityRow, activityDayLabel } from "../../components/ActivityRow";
+import { requestText } from "../../utils/systemDialogs";
 
 export function Activity({ isAdmin, canManageExpenses = false, canReverse = false }) {
   const { confirm, confirmationDialog } = useConfirmDialog();
@@ -128,9 +129,8 @@ export function Activity({ isAdmin, canManageExpenses = false, canReverse = fals
 
   const voidExpense = async () => {
     if (!editingExpense) return;
-    const reason = window.prompt("Reason for voiding this expense:");
+    const reason = await requestText({title:"Void expense",label:"Void reason",submitLabel:"Continue",required:true,minLength:3,multiline:true,trim:true});
     if (reason === null) return;
-    if (!reason.trim()) return setExpenseError("A void reason is required.");
     if (!await confirm({title:"Void expense?",message:`Void ${editingExpense.txn_id || "this expense"}? The record will remain in the audit history.`,confirmLabel:"Void expense"})) return;
     setExpenseBusy(true); setExpenseError("");
     try {
@@ -143,9 +143,8 @@ export function Activity({ isAdmin, canManageExpenses = false, canReverse = fals
 
   const reverseActivity = async (row) => {
     if (!canReverse) return;
-    const reason=window.prompt(`Reason for reversing ${row.txn_id || row._kind || "transaction"}:`);
+    const reason=await requestText({title:"Reverse transaction",message:`${row.txn_id || row._kind || "Transaction"} will remain in the audit history.`,label:"Reversal reason",submitLabel:"Continue",required:true,minLength:3,multiline:true,trim:true});
     if(reason===null) return;
-    if(reason.trim().length<3) return setActivityError("Please enter a reversal reason.");
     if(!await confirm({title:"Reverse transaction?",message:`Reverse ${row.txn_id || "this transaction"}? The original record will remain in the audit/reversal history.`,confirmLabel:"Reverse transaction"})) return;
     try {
       const r=await api.governance.reverse(row._kind || row.kind,row.id,reason.trim());

@@ -4,6 +4,7 @@ import { Modal, Field } from "../../components/FormControls";
 import { MessageBanner, PrimaryButton } from "../../components/Shared";
 import { fmt } from "../../utils/format";
 import { todayValue } from "../../utils/date";
+import { requestText } from "../../utils/systemDialogs";
 
 async function expenseMutationWithOverrides(run, payload = {}) {
   let next = { ...payload };
@@ -12,14 +13,14 @@ async function expenseMutationWithOverrides(run, payload = {}) {
       return await run(next);
     } catch (e) {
       if (e.code === "PROJECT_BUDGET_EXCEEDED" && e.override_allowed && !next.budget_override_reason) {
-        const reason = prompt(`${e.message}\n\nReason for exceeding the project budget:`);
-        if (!reason || reason.trim().length < 3) throw e;
+        const reason = await requestText({title:"Project budget override",message:e.message,label:"Reason for exceeding the project budget",submitLabel:"Use override",required:true,minLength:3,multiline:true,trim:true});
+        if (!reason) throw e;
         next = { ...next, budget_override_reason: reason.trim() };
         continue;
       }
       if (e.code === "INSUFFICIENT_FUND" && e.override_allowed && !next.override_fund_limit) {
-        const reason = prompt(`${e.message}\n\nSuper Admin override reason:`);
-        if (!reason || reason.trim().length < 3) throw e;
+        const reason = await requestText({title:"Fund limit override",message:e.message,label:"Super Admin override reason",submitLabel:"Use override",required:true,minLength:3,multiline:true,trim:true});
+        if (!reason) throw e;
         next = { ...next, override_fund_limit: true, override_reason: reason.trim() };
         continue;
       }

@@ -8,6 +8,7 @@ import { fmt } from "../../utils/format";
 import { adminCan } from "../../utils/permissions";
 import ExpenseForm from "./ExpenseForm";
 import { statusLabel } from "./expenseUtils";
+import { requestChoice, requestText } from "../../utils/systemDialogs";
 
 export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
   const [editing, setEditing] = useState(false);
@@ -117,12 +118,12 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
   };
 
   const editDocument = async (document) => {
-    const label = prompt("Document label:", document.display_name || document.original_filename || "");
+    const label = await requestText({title:"Edit expense document",label:"Document label",defaultValue:document.display_name || document.original_filename || "",submitLabel:"Next",required:true,trim:true});
     if (label === null || !label.trim()) return;
-    const type = prompt("Document type: Invoice, Receipt, Payment Slip, Quotation or Other", document.document_type || "Other");
-    if (type === null) return;
     const valid = ['Invoice', 'Receipt', 'Payment Slip', 'Quotation', 'Other'];
-    const normalized = valid.find((value) => value.toLowerCase() === type.trim().toLowerCase());
+    const type = await requestChoice({title:"Document type",label:"Type",options:valid.map((value)=>({value,label:value})),defaultValue:document.document_type || "Other",submitLabel:"Save document"});
+    if (type === null) return;
+    const normalized = valid.find((value) => value === type);
     if (!normalized) return setError("Choose a valid document type: Invoice, Receipt, Payment Slip, Quotation or Other.");
     setDocBusy(true);
     setError("");
@@ -137,12 +138,12 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
   };
 
   const removeDocument = async (document) => {
-    const reason = prompt("Reason for removing this document from the expense:");
-    if (!reason || reason.trim().length < 3) return;
+    const reason = await requestText({title:"Remove expense document",label:"Removal reason",submitLabel:"Remove document",required:true,minLength:3,multiline:true,trim:true});
+    if (!reason) return;
     setDocBusy(true);
     setError("");
     try {
-      await api.expenses.removeDocument(row.id, document.id, reason.trim());
+      await api.expenses.removeDocument(row.id, document.id, reason);
       await loadDocuments();
     } catch (e) {
       setError(e.message || "Could not remove document");
@@ -152,12 +153,12 @@ export default function ExpenseDetails({ admin, row, onClose, onSaved }) {
   };
 
   const reverse = async () => {
-    const reason = prompt("Reason for reversing this posted expense:");
-    if (!reason || reason.trim().length < 3) return;
+    const reason = await requestText({title:"Reverse posted expense",label:"Reversal reason",submitLabel:"Continue",required:true,minLength:3,multiline:true,trim:true});
+    if (!reason) return;
     setBusy(true);
     setError("");
     try {
-      const result = await api.governance.reverse("expense", row.id, reason.trim());
+      const result = await api.governance.reverse("expense", row.id, reason);
       await onSaved(`Expense reversed · ${result.reversal_id}`);
     } catch (e) {
       setError(e.message);

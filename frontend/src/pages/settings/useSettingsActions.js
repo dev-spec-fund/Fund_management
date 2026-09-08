@@ -1,6 +1,7 @@
 import { api } from "../../api";
 import { todayValue } from "../../utils/date";
 import { sendExportToTelegram } from "../../utils/exports";
+import { requestText } from "../../utils/systemDialogs";
 
 export function useSettingsActions({
   settings,setSettings,setMessage,closeCheck,setCloseCheck,setCloseBusy,closeMonthValue,
@@ -29,7 +30,7 @@ export function useSettingsActions({
     if((check.blockers||[]).length) return setMessage(`Cannot close month: ${check.blockers.join(", ")}`);
     const label = monthLabel(closeMonthValue);
     const pastNote = closeMonthValue < currentMonth ? "\n\nThis is a past open month. September/current-month transactions will not be changed." : "";
-    const note=window.prompt(`Close ${label}?${pastNote}\n\nA permanent monthly balance snapshot will be created. Optional closing note:`,"Closed from Fund App");
+    const note=await requestText({title:`Close ${label}`,message:`A permanent monthly balance snapshot will be created.${pastNote}`,label:"Closing note (optional)",defaultValue:"Closed from Fund App",submitLabel:"Close month",multiline:true});
     if(note===null) return;
     setCloseBusy(true);
     try{

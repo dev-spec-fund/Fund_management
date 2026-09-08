@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { Center } from "./components/Shared";
+import SystemDialogHost from "./components/SystemDialogHost";
 import Overview from "./pages/Overview";
 import { adminCan } from "./utils/permissions";
 import { getAdminReportMonth, saveAdminReportMonth } from "./utils/adminReportMonth";
@@ -468,6 +469,7 @@ export default function App() {
 
   return (
     <Shell>
+      <SystemDialogHost />
       {isAdmin && isMember && (
         <div className="app-mode-wrap">
           <div className="sans app-mode-switch">
