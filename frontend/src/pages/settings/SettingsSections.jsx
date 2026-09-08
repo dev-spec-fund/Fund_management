@@ -269,9 +269,14 @@ export function AdminSettingsSection(ctx) {
     if(!accessSheet)return undefined;
     const previous=document.body.style.overflow;
     document.body.style.overflow="hidden";
+    document.body.classList.add("settings-access-sheet-open");
     const onKey=e=>{if(e.key==="Escape")setAccessSheet(null)};
     window.addEventListener("keydown",onKey);
-    return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)};
+    return ()=>{
+      document.body.style.overflow=previous;
+      document.body.classList.remove("settings-access-sheet-open");
+      window.removeEventListener("keydown",onKey);
+    };
   },[accessSheet]);
   return <>
     <SectionTitle>ADMINS & ROLES</SectionTitle>

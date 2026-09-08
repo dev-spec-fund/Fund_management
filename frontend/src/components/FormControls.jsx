@@ -12,6 +12,7 @@ export function Modal({ title, onClose, action, children, closeDisabled = false 
   useEffect(() => {
     const vv = window.visualViewport;
     const appRoot = document.querySelector(".app-page-content");
+    document.body.classList.add("app-modal-open");
     const previousOverflowY = appRoot?.style.overflowY || "";
     const previousScrollTop = appRoot?.scrollTop || 0;
 
@@ -37,6 +38,7 @@ export function Modal({ title, onClose, action, children, closeDisabled = false 
         appRoot.style.overflowY = previousOverflowY;
         appRoot.scrollTop = previousScrollTop;
       }
+      document.body.classList.remove("app-modal-open");
     };
   }, [closeDisabled, onClose]);
 
