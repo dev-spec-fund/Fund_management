@@ -26,6 +26,7 @@ export async function handleMessage(env: Env, message: any) {
     const username = message.from.username ? String(message.from.username) : null;
     let request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE telegram_id = ?")
       .bind(telegramId).first<any>();
+    const wasPendingWithSamePhone = request?.status === "pending" && normalizePhone(request?.phone) === phone;
     if (!request || request.status === "rejected") {
       await createMemberRegistrationRequest(env, telegramId, displayName || "Telegram User", username);
       request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE telegram_id = ?")
@@ -43,7 +44,10 @@ export async function handleMessage(env: Env, message: any) {
     request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE telegram_id = ?")
       .bind(telegramId).first<any>();
 
-    await notifyRegistrationRequest(env, request);
+    // Re-sharing the same phone while the request is already pending should not
+    // create another set of admin approval buttons. This keeps one user action
+    // from generating duplicate Telegram review messages.
+    if (!wasPendingWithSamePhone) await notifyRegistrationRequest(env, request);
     return sendMessage(
       env,
       chatId,

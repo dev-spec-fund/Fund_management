@@ -8,10 +8,18 @@ import { esc, miniAppUrl } from "../botSupport";
 import { recordContributionReviewMessage, syncContributionReviewMessages } from "../contributionReviewMessages";
 
 async function finishRegistrationMessage(env: Env, callback: any, text: string) {
+  const extra={reply_markup:{inline_keyboard:[]}};
   if (callback.message?.photo) {
-    return editMessageCaption(env, callback.message.chat.id, callback.message.message_id, text);
+    return editMessageCaption(env, callback.message.chat.id, callback.message.message_id, text, extra);
   }
-  return editMessageText(env, callback.message.chat.id, callback.message.message_id, text);
+  return editMessageText(env, callback.message.chat.id, callback.message.message_id, text, extra);
+}
+
+async function settleStaleRegistrationCallback(env:Env, callback:any, request:any){
+  const original=String(callback.message?.caption || callback.message?.text || "Member registration request");
+  const label=request?.status === "approved" ? "✅ Already approved" : request?.status === "rejected" ? "❌ Already rejected" : `ℹ️ Status: ${esc(request?.status || "reviewed")}`;
+  await finishRegistrationMessage(env,callback,`${original}\n\n${label}`).catch(()=>{});
+  return answerCallback(env,callback.id,`Already ${request?.status || "reviewed"}.`);
 }
 
 async function renderMeetingRsvp(env: Env, callback: any, meeting: any, response: string | null, showOptions = false) {
@@ -114,7 +122,7 @@ export async function handleCallback(env: Env, callback: any) {
     const requestId = Number(parts[1]);
     const request = await env.DB.prepare("SELECT * FROM member_registration_requests WHERE id = ?").bind(requestId).first<any>();
     if (!request) return answerCallback(env, callback.id, "Registration request not found.");
-    if (request.status !== "pending") return answerCallback(env, callback.id, `Already ${request.status}.`);
+    if (request.status !== "pending") return settleStaleRegistrationCallback(env,callback,request);
 
     if (action === "member_reject") {
       const changed = await env.DB.prepare(
@@ -143,11 +151,19 @@ export async function handleCallback(env: Env, callback: any) {
     if (!member) {
       const memberCode = await generateMemberCode(env);
       const defaultMonthly = Number(await getSetting(env, "default_monthly_amount")) || 250;
-      const insert = await env.DB.prepare(
-        "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount, normalized_name, normalized_phone, joined_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(memberCode, request.telegram_id, request.name, request.phone || null, defaultMonthly, normalizeName(request.name), normalizePhone(request.phone) || null, currentDate(env.FUND_TIMEZONE || "Indian/Maldives")).run();
-      member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(insert.meta.last_row_id).first<any>();
-      await ensureInitialContributionRate(env,Number(insert.meta.last_row_id),defaultMonthly,currentMonth(env.FUND_TIMEZONE || "Indian/Maldives"));
+      try {
+        const insert = await env.DB.prepare(
+          "INSERT INTO members (member_code, telegram_id, name, phone, monthly_amount, normalized_name, normalized_phone, joined_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(memberCode, request.telegram_id, request.name, request.phone || null, defaultMonthly, normalizeName(request.name), normalizePhone(request.phone) || null, currentDate(env.FUND_TIMEZONE || "Indian/Maldives")).run();
+        member = await env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(insert.meta.last_row_id).first<any>();
+        await ensureInitialContributionRate(env,Number(insert.meta.last_row_id),defaultMonthly,currentMonth(env.FUND_TIMEZONE || "Indian/Maldives"));
+      } catch (e:any) {
+        // A second admin can tap another copy of the same Telegram approval at
+        // nearly the same time. The unique telegram_id constraint is the final
+        // guard; if the other callback already created the member, reuse it.
+        member = await env.DB.prepare("SELECT * FROM members WHERE telegram_id = ?").bind(request.telegram_id).first<any>();
+        if (!member) throw e;
+      }
     }
 
     const reviewed = await env.DB.prepare(

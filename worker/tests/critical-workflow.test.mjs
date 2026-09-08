@@ -1959,3 +1959,20 @@ test('notification delivery accounting treats Telegram API null responses as fai
   assert.match(pending, /sendInBatches\(c\.env,messages,6\)/);
   assert.match(electionCore, /r\.status==="fulfilled" && r\.value\?\.ok===true/);
 });
+
+test('Telegram approval notifications follow Role Builder approvals_manage permission', () => {
+  const support = fs.readFileSync(path.join(root,'src/botSupport.ts'),'utf8');
+  assert.match(support,/approvalNotificationAdmins/);
+  assert.match(support,/adminCan\(admin,"approvals_manage"\)/);
+  assert.doesNotMatch(support,/lower\(trim\(role\)\) IN \('owner','super_admin','treasurer'\)/);
+});
+
+test('Telegram registration avoids duplicate admin review messages and clears stale callback buttons', () => {
+  const message = fs.readFileSync(path.join(root,'src/bot/message.ts'),'utf8');
+  const callbacks = fs.readFileSync(path.join(root,'src/bot/callbacks.ts'),'utf8');
+  assert.match(message,/wasPendingWithSamePhone/);
+  assert.match(message,/if \(!wasPendingWithSamePhone\) await notifyRegistrationRequest/);
+  assert.match(callbacks,/settleStaleRegistrationCallback/);
+  assert.match(callbacks,/reply_markup:\{inline_keyboard:\[\]\}/);
+  assert.match(callbacks,/SELECT \* FROM members WHERE telegram_id = \?/);
+});

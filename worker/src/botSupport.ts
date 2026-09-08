@@ -1,6 +1,6 @@
 import type { Env } from "./types";
 import { getSetting } from "./db";
-import { findDuplicateMembers } from "./ops";
+import { adminCan, findDuplicateMembers } from "./ops";
 import { sendMessage, sendPhoto } from "./telegram";
 
 const DEFAULT_MINI_APP_URL = "https://fund-management.pages.dev";
@@ -20,14 +20,30 @@ export function esc(value: unknown) {
     .replace(/>/g, "&gt;");
 }
 
+async function approvalNotificationAdmins(env: Env) {
+  const rows = await env.DB.prepare(`
+    SELECT a.*, r.name custom_role_name, GROUP_CONCAT(rp.permission) permissions_csv
+    FROM admins a
+    LEFT JOIN admin_roles r ON r.id=a.custom_role_id AND COALESCE(r.active,1)=1
+    LEFT JOIN admin_role_permissions rp ON rp.role_id=r.id
+    WHERE COALESCE(a.active,1)=1 AND a.telegram_id IS NOT NULL AND trim(a.telegram_id) != ''
+    GROUP BY a.id
+  `).all<any>();
+  return rows.results.map((row:any)=>{
+    const permissions=String(row.permissions_csv||"").split(",").map((x:string)=>x.trim()).filter(Boolean);
+    delete row.permissions_csv;
+    return {...row,permissions};
+  }).filter((admin:any)=>adminCan(admin,"approvals_manage"));
+}
+
 export async function notifyAdmins(env: Env, text: string, extra: Record<string, unknown> = {}) {
-  const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
-  const results=await Promise.allSettled(admins.results.map((a) => sendMessage(env, a.telegram_id, text, extra)));
+  const admins = await approvalNotificationAdmins(env);
+  const results=await Promise.allSettled(admins.map((a:any) => sendMessage(env, a.telegram_id, text, extra)));
   const sent=results.filter((r:any)=>r.status==="fulfilled" && r.value?.ok===true).length;
   return {
     sent,
     failed:results.length-sent,
-    recipients:admins.results.length
+    recipients:admins.length
   };
 }
 
@@ -37,8 +53,8 @@ export async function notifyAdminsWithPhoto(
   caption: string,
   extra: Record<string, unknown> = {}
 ) {
-  const admins = await env.DB.prepare("SELECT telegram_id FROM admins WHERE COALESCE(active,1)=1 AND telegram_id IS NOT NULL AND trim(telegram_id) != '' AND lower(trim(role)) IN ('owner','super_admin','treasurer')").all<{ telegram_id: string }>();
-  const results = await Promise.allSettled(admins.results.map(async (a) => {
+  const admins = await approvalNotificationAdmins(env);
+  const results = await Promise.allSettled(admins.map(async (a:any) => {
     const response:any = await sendPhoto(env, a.telegram_id, photoFileId, caption, extra);
     return { admin_telegram_id:String(a.telegram_id), response };
   }));
