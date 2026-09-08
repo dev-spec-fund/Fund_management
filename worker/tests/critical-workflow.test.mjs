@@ -1904,3 +1904,19 @@ test('election positions are sourced from Admin Roles except Super Admin and act
   assert.match(schema,/CREATE TABLE IF NOT EXISTS election_position_admin_roles/);
   assert.match(schema,/CREATE TABLE IF NOT EXISTS election_admin_assignments/);
 });
+
+
+test('runoff results show the deciding round while preserving the initial vote', () => {
+  const core = fs.readFileSync(path.join(root, 'src/elections/core.ts'), 'utf8');
+  const admin = fs.readFileSync(path.resolve(root, '../frontend/src/pages/Elections.jsx'), 'utf8');
+  const member = fs.readFileSync(path.resolve(root, '../frontend/src/pages/member/MemberElections.jsx'), 'utf8');
+  const exports = fs.readFileSync(path.resolve(root, '../frontend/src/utils/electionExports.js'), 'utf8');
+
+  assert.match(core, /initial_votes:votes,final_votes:finalVotes/);
+  assert.match(core, /deciding_round:inLatestRunoff\?"runoff":"initial"/);
+  assert.match(admin, /Final result · Runoff Round/);
+  assert.match(admin, /Initial vote/);
+  assert.match(member, /Final result · Runoff Round/);
+  assert.match(member, /Initial vote/);
+  assert.match(exports, /"Initial votes","Final votes","Deciding round"/);
+});

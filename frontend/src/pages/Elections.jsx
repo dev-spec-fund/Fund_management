@@ -606,9 +606,23 @@ function ElectionSummary({summary,adminView=false}){
 
 function ElectionResults({detail}){
   return <div><div className="sans member-section-title">RESULTS</div>{detail.positions.map(p=>{
-    const ranked=p.candidates.map(c=>{const result=detail.results?.find(r=>Number(r.candidate_id)===Number(c.id));return {...c,votes:Number(result?.votes||0),outcome:result?.outcome||"not_elected"}}).sort((a,b)=>b.votes-a.votes);
-    const hasTie=ranked.some(c=>c.outcome==="tie");
-    return <div key={p.id} className="election-result-block"><b className="sans">{p.title} · {p.seats} seat{Number(p.seats)===1?"":"s"}</b>{hasTie&&<div className="sans election-tie-note"><AlertTriangle size={13}/> Tie at the seat boundary — no automatic winner assigned for tied candidates.</div>}{ranked.map(c=><div key={c.id} className="sans election-result-row"><span>{c.display_name}{c.outcome==="elected"?" · ELECTED":c.outcome==="tie"?" · TIE":c.outcome==="withdrawn"?" · WITHDRAWN":""}</span><strong>{c.votes}</strong></div>)}</div>
+    const resultMap=new Map((detail.results||[]).filter(r=>Number(r.position_id)===Number(p.id)).map(r=>[Number(r.candidate_id),r]));
+    const initial=p.candidates.map(c=>{const result=resultMap.get(Number(c.id));return {...c,votes:Number(result?.initial_votes??result?.votes||0),outcome:result?.outcome||"not_elected"}}).sort((a,b)=>b.votes-a.votes);
+    const closedRunoffs=(detail.runoffs||[]).filter(r=>Number(r.position_id)===Number(p.id)&&r.status==="closed").sort((a,b)=>Number(a.round_no||0)-Number(b.round_no||0));
+    const finalRunoff=closedRunoffs.at(-1);
+    const finalRows=finalRunoff?(finalRunoff.candidates||[]).map(c=>{const result=resultMap.get(Number(c.id));return {...c,display_name:c.display_name||c.name,votes:Number(c.votes||0),outcome:result?.outcome||"not_elected"}}).sort((a,b)=>b.votes-a.votes):[];
+    const hasTie=(finalRunoff?finalRows:initial).some(c=>c.outcome==="tie");
+    const runoffIds=new Set((finalRunoff?.candidates||[]).map(c=>Number(c.id)));
+    return <div key={p.id} className="election-result-block">
+      <b className="sans">{p.title} · {p.seats} seat{Number(p.seats)===1?"":"s"}</b>
+      {finalRunoff&&<>
+        <div className="sans" style={{fontSize:11,fontWeight:800,opacity:.65,marginTop:8,textTransform:"uppercase",letterSpacing:".04em"}}>Initial vote</div>
+        {initial.map(c=><div key={`initial-${c.id}`} className="sans election-result-row"><span>{c.display_name}{c.outcome==="withdrawn"?" · WITHDRAWN":(!runoffIds.has(Number(c.id))&&c.outcome==="elected")?" · ELECTED":runoffIds.has(Number(c.id))?" · TIE":""}</span><strong>{c.votes}</strong></div>)}
+        <div className="sans" style={{fontSize:11,fontWeight:800,opacity:.8,marginTop:10,textTransform:"uppercase",letterSpacing:".04em"}}>Final result · Runoff Round {finalRunoff.round_no}</div>
+      </>}
+      {hasTie&&<div className="sans election-tie-note"><AlertTriangle size={13}/> Tie at the seat boundary — another runoff is required before certification.</div>}
+      {(finalRunoff?finalRows:initial).map(c=><div key={`${finalRunoff?"final":"initial"}-${c.id}`} className="sans election-result-row"><span>{c.display_name}{c.outcome==="elected"?" · ELECTED":c.outcome==="tie"?" · TIE":c.outcome==="withdrawn"?" · WITHDRAWN":""}</span><strong>{c.votes}</strong></div>)}
+    </div>
   })}</div>
 }
 

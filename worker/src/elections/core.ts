@@ -475,14 +475,18 @@ export async function calculateElectionResults(env:any,electionId:number){
     const tieAtCutoff=cutoff!==null&&tied.length>seatsAtBoundary;
 
     let runoff:any=null; let runoffResolvedIds:number[]=[];
+    let runoffVoteMap=new Map<number,number>(); let runoffCandidateIds=new Set<number>(); let runoffRoundNo:number|null=null;
     if(tieAtCutoff){
       runoff=await latestClosedRunoff(env,electionId,Number(position.id));
       if(runoff){
         const rv=await env.DB.prepare(`SELECT candidate_id,COUNT(*) votes FROM election_runoff_ballots WHERE runoff_id=?
           GROUP BY candidate_id`).bind(runoff.id).all<any>();
         const rmap=new Map(rv.results.map((r:any)=>[Number(r.candidate_id),Number(r.votes||0)]));
+        runoffVoteMap=rmap;
+        runoffRoundNo=Number(runoff.round_no||1);
         const rc=await env.DB.prepare(`SELECT ec.* FROM election_runoff_candidates rc
           JOIN election_candidates ec ON ec.id=rc.candidate_id WHERE rc.runoff_id=?`).bind(runoff.id).all<any>();
+        runoffCandidateIds=new Set((rc.results as any[]).map((c:any)=>Number(c.id)));
         const ranked=(rc.results as any[]).map((c:any)=>({...c,runoff_votes:rmap.get(Number(c.id))||0}))
           .sort((a:any,b:any)=>b.runoff_votes-a.runoff_votes||String(a.display_name).localeCompare(String(b.display_name)));
         const need=Number(runoff.seats_to_fill||seatsAtBoundary||1);
@@ -501,7 +505,8 @@ export async function calculateElectionResults(env:any,electionId:number){
 
     for(const candidate of (candidates.results as any[]).filter((c:any)=>Number(c.position_id)===Number(position.id))){
       if(candidate.status==="withdrawn"){
-        results.push({position_id:position.id,candidate_id:candidate.id,votes:baseMap.get(Number(candidate.id))||0,outcome:"withdrawn"});continue;
+        const initialVotes=baseMap.get(Number(candidate.id))||0;
+        results.push({position_id:position.id,candidate_id:candidate.id,votes:initialVotes,initial_votes:initialVotes,final_votes:initialVotes,deciding_round:"initial",runoff_round_no:null,outcome:"withdrawn"});continue;
       }
       const votes=baseMap.get(Number(candidate.id))||0;
       let outcome="not_elected";
@@ -513,7 +518,14 @@ export async function calculateElectionResults(env:any,electionId:number){
         else if(runoffResolvedIds.includes(Number(candidate.id)))outcome="elected";
         else if(tied.some((c:any)=>Number(c.id)===Number(candidate.id)) && !runoffResolvedIds.length)outcome="tie";
       }
-      results.push({position_id:position.id,candidate_id:candidate.id,votes,outcome});
+      const inLatestRunoff=runoffCandidateIds.has(Number(candidate.id));
+      const finalVotes=inLatestRunoff?(runoffVoteMap.get(Number(candidate.id))||0):votes;
+      results.push({
+        position_id:position.id,candidate_id:candidate.id,
+        votes,initial_votes:votes,final_votes:finalVotes,
+        deciding_round:inLatestRunoff?"runoff":"initial",runoff_round_no:inLatestRunoff?runoffRoundNo:null,
+        outcome
+      });
     }
   }
   return {results,unresolved};
@@ -637,7 +649,7 @@ export async function buildElectionSummary(env:any,electionId:number){
       seats:Number(position.seats||1),
       candidates:rows.map((c:any)=>{
         const result=calculated.results.find((r:any)=>Number(r.candidate_id)===Number(c.id));
-        return {id:c.id,member_id:c.member_id,name:c.display_name,status:c.status,votes:Number(result?.votes||0),outcome:result?.outcome||null};
+        return {id:c.id,member_id:c.member_id,name:c.display_name,status:c.status,votes:Number(result?.votes||0),initial_votes:Number(result?.initial_votes??result?.votes||0),final_votes:Number(result?.final_votes??result?.votes||0),deciding_round:result?.deciding_round||"initial",runoff_round_no:result?.runoff_round_no??null,outcome:result?.outcome||null};
       })
     });
   }

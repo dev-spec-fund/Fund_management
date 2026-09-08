@@ -29,8 +29,12 @@ export async function exportElectionCsv(summary){
     ["Rejected applications",summary.applications?.rejected||0],
     ["Withdrawn applications",summary.applications?.withdrawn||0],
     [],
-    ["Position","Candidate","Votes","Outcome","Candidate status"],
-    ...(summary.positions||[]).flatMap(p=>(p.candidates||[]).map(c=>[p.title,c.name,c.votes,c.outcome||"",c.status||""])),
+    ["Position","Candidate","Initial votes","Final votes","Deciding round","Outcome","Candidate status"],
+    ...(summary.positions||[]).flatMap(p=>(p.candidates||[]).map(c=>[
+      p.title,c.name,c.initial_votes??c.votes,c.final_votes??c.votes,
+      c.deciding_round==="runoff"?`Runoff ${c.runoff_round_no||""}`.trim():"Initial vote",
+      c.outcome||"",c.status||""
+    ])),
     [],
     ["Runoff position","Round","Status","Candidate","Votes","Runoff turnout"],
     ...(summary.runoffs||[]).flatMap(r=>(r.candidates||[]).map(c=>[
@@ -80,8 +84,9 @@ export async function exportElectionPdf(summary){
     sectionTitle(ctx,p.title,`${p.seats} seat${Number(p.seats)===1?"":"s"}`,4);
     table(ctx,[
       {label:"Candidate",key:"name",width:82},
-      {label:"Votes",key:"votes",width:28,align:"right"},
-      {label:"Outcome",key:"outcome",width:44}
+      {label:"Initial",width:24,align:"right",value:r=>r.initial_votes??r.votes},
+      {label:"Final",width:24,align:"right",value:r=>r.final_votes??r.votes},
+      {label:"Outcome",key:"outcome",width:36}
     ],p.candidates||[]);
   }
 
