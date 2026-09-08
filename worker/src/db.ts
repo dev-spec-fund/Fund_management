@@ -32,18 +32,8 @@ export function currentDayOfMonth(timeZone = "Indian/Maldives"): string {
   return parts.find((p) => p.type === "day")?.value || "";
 }
 
-async function ensureSequenceTable(env: Env) {
-  await env.DB.prepare(`
-    CREATE TABLE IF NOT EXISTS id_sequences (
-      kind TEXT PRIMARY KEY,
-      value INTEGER NOT NULL DEFAULT 0
-    )
-  `).run();
-}
-
 /** Generates the next human-readable member code, e.g. M0001, M0002, without reusing deleted IDs. */
 export async function generateMemberCode(env: Env): Promise<string> {
-  await ensureSequenceTable(env);
   await env.DB.prepare(`
     INSERT OR IGNORE INTO id_sequences (kind, value)
     SELECT 'M', COALESCE(MAX(CAST(SUBSTR(member_code, 2) AS INTEGER)), 0)
@@ -57,7 +47,6 @@ export async function generateMemberCode(env: Env): Promise<string> {
 
 /** Generates C0000001 / D0000001 / E0000001 using an atomic persistent sequence. */
 export async function generateTxnId(env: Env, kind: "C" | "D" | "E"): Promise<string> {
-  await ensureSequenceTable(env);
   const table = kind === "C" ? "contributions" : kind === "D" ? "donations" : "expenses";
   await env.DB.prepare(`
     INSERT OR IGNORE INTO id_sequences (kind, value)
@@ -123,23 +112,7 @@ export async function ensureMemberLinked(env: Env, telegramId: string, _displayN
   return existing?.id ?? null;
 }
 
-/** Ensures registration storage exists for old D1 databases too. */
-export async function ensureMemberRegistrationTable(env: Env) {
-  await env.DB.prepare(`
-    CREATE TABLE IF NOT EXISTS member_registration_requests (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      telegram_id TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL,
-      username TEXT,
-      phone TEXT,
-      status TEXT NOT NULL DEFAULT 'pending',
-      requested_at TEXT NOT NULL DEFAULT (datetime('now')),
-      reviewed_by INTEGER REFERENCES admins(id),
-      reviewed_at TEXT
-    )
-  `).run();
-}
-
+/** Registration storage is migration-controlled; request paths never mutate D1 schema. */
 /** Creates a request; a previously rejected user may submit a fresh request later. */
 export async function createMemberRegistrationRequest(
   env: Env,
@@ -147,8 +120,6 @@ export async function createMemberRegistrationRequest(
   displayName: string,
   username?: string | null
 ): Promise<{ id: number; status: string; created: boolean; phone: string | null }> {
-  await ensureMemberRegistrationTable(env);
-
   const existing = await env.DB.prepare(
     "SELECT id, status, phone FROM member_registration_requests WHERE telegram_id = ?"
   ).bind(telegramId).first<{ id: number; status: string; phone: string | null }>();

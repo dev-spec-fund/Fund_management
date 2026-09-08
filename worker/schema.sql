@@ -864,3 +864,6 @@ VALUES(37,'meeting_resolutions_exco_terms');
 
 
 INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(38,'meeting_audience_attendance_manual_completion');
+
+INSERT OR IGNORE INTO schema_migrations(version,name)
+VALUES(39,'election_admin_role_linking');

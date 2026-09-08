@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { AppEnv } from "../../types";
 import { requireMeetingsManage, requireMeetingsView } from "../../auth";
-import { auditEntity, safeLogError } from "../../ops";
+import { auditEntity, ensureOperationalSchema, safeLogError } from "../../ops";
 import { getBranding } from "../../db";
 import { sendInBatches } from "../../telegram";
 
@@ -17,59 +17,10 @@ async function sendMeetingBatch(env:any, items:any[], source:string){
 
 export function registerMeetingAdminRoutes(route: Hono<AppEnv>) {
 async function ensureMeetingsSchema(env:any){
-  await env.DB.batch([
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS meetings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      meeting_date TEXT NOT NULL,
-      meeting_time TEXT NOT NULL,
-      venue TEXT,
-      agenda TEXT,
-      rsvp_deadline TEXT,
-      status TEXT NOT NULL DEFAULT 'draft',
-      created_by INTEGER REFERENCES admins(id),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT,
-      sent_at TEXT,
-      last_notification_at TEXT,
-      cancelled_at TEXT,
-      cancelled_by INTEGER REFERENCES admins(id),
-      cancel_reason TEXT,
-      audience TEXT NOT NULL DEFAULT 'all_members',
-      completed_at TEXT,
-      completed_by INTEGER REFERENCES admins(id)
-    )`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS meeting_rsvps (
-      meeting_id INTEGER NOT NULL REFERENCES meetings(id),
-      member_id INTEGER NOT NULL REFERENCES members(id),
-      response TEXT NOT NULL CHECK(response IN ('yes','maybe','no')),
-      responded_at TEXT NOT NULL DEFAULT (datetime('now')),
-      PRIMARY KEY(meeting_id, member_id)
-    )`),
-    env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(meeting_date,meeting_time)`),
-    env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_meeting_rsvps_meeting ON meeting_rsvps(meeting_id)`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS meeting_invitees (
-      meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
-      member_id INTEGER NOT NULL REFERENCES members(id),
-      invited_at TEXT NOT NULL DEFAULT (datetime('now')),
-      PRIMARY KEY(meeting_id,member_id)
-    )`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS meeting_attendance (
-      meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
-      member_id INTEGER NOT NULL REFERENCES members(id),
-      attendance TEXT NOT NULL CHECK(attendance IN ('present','absent','excused','late')),
-      note TEXT,
-      recorded_by INTEGER NOT NULL REFERENCES admins(id),
-      recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
-      PRIMARY KEY(meeting_id,member_id)
-    )`)
-  ]);
-  const cols=await env.DB.prepare("PRAGMA table_info(meetings)").all<any>();
-  const names=new Set((cols.results as any[]).map((x:any)=>String(x.name)));
-  if(!names.has("audience"))await env.DB.prepare("ALTER TABLE meetings ADD COLUMN audience TEXT NOT NULL DEFAULT 'all_members'").run();
-  if(!names.has("completed_at"))await env.DB.prepare("ALTER TABLE meetings ADD COLUMN completed_at TEXT").run();
-  if(!names.has("completed_by"))await env.DB.prepare("ALTER TABLE meetings ADD COLUMN completed_by INTEGER REFERENCES admins(id)").run();
+  // Meeting tables/columns are migration-controlled (through migration 0038).
+  await ensureOperationalSchema(env);
 }
+
 function meetingEsc(v:any){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 function meetingDisplayDateTime(dateValue:any,timeValue:any){

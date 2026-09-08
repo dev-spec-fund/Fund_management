@@ -502,7 +502,7 @@ test('contribution review Telegram messages are persisted and synchronized from 
   assert.match(pending,/syncContributionReviewMessages\(c\.env,id,"rejected"/);
   assert.match(callbacks,/recordContributionReviewMessage/);
   assert.match(callbacks,/syncContributionReviewMessages/);
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 39/);
 });
 
 test('Telegram callback can self-heal a legacy stale contribution review message', () => {
@@ -626,7 +626,7 @@ test('database backup includes election governance tables and schema version 29'
   for(const table of ['elections','election_positions','election_candidates','election_voters','election_ballots']){
     assert.match(system,new RegExp(table));
   }
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 39/);
 });
 
 
@@ -675,7 +675,7 @@ test('election integrity migration advances schema to 30', () => {
   assert.ok(candidateCols.has("withdrawal_reason"));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 39/);
 });
 
 
@@ -768,7 +768,7 @@ test('v50 runoff tables and EXCO role history are migration controlled', () => {
   for(const col of ['member_id','election_id','position_id','role_title','term','started_at','ended_at']) assert.ok(roleCols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 39/);
 });
 
 test('tie results require anonymous runoff and block certification until resolved', () => {
@@ -1115,7 +1115,7 @@ test('v60 election notification delivery log is migration controlled', () => {
   for(const col of ['election_id','event_key','audience','sent','failed','detail','created_by','created_at']) assert.ok(cols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 39/);
 });
 
 test('v60 logs voting, reminder, runoff, certification and application notification delivery', () => {
@@ -1229,7 +1229,7 @@ test('v63 EXCO term and handover schema is migration controlled', () => {
   for(const col of ['handover_id','item_key','label','completed','completed_at','completed_by','note','sort_order']) assert.ok(itemCols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 39/);
 });
 
 test('v63 certification starts EXCO term and handover gates Admin Role activation', () => {
@@ -1300,7 +1300,7 @@ test('v64 EXCO responsibility workboard schema is migration controlled', () => {
   }
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 39/);
 });
 
 test('v64 EXCO responsibilities are term-linked and owner-restricted to current committee', () => {
@@ -1358,7 +1358,7 @@ test('v65 formal meeting resolution schema is migration controlled', () => {
   for(const col of ['meeting_id','term_id','resolution_no','title','decision_text','proposer_member_id','seconder_member_id','vote_result','status','responsibility_id']) assert.ok(cols.has(col));
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 39/);
 });
 
 test('v65 meeting resolutions are linked to the EXCO term covering the meeting date', () => {
@@ -1734,7 +1734,7 @@ test('v72 meeting audience and attendance schema is migration controlled', () =>
   for(const table of ['meeting_invitees','meeting_attendance']) assert.ok(db.prepare(`PRAGMA table_info(${table})`).all().length>0);
   db.close();
   const ops=fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
-  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 38/);
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 39/);
 });
 
 
@@ -1919,4 +1919,31 @@ test('runoff results show the deciding round while preserving the initial vote',
   assert.match(member, /Final result · Runoff Round/);
   assert.match(member, /Initial vote/);
   assert.match(exports, /"Initial votes","Final votes","Deciding round"/);
+});
+
+test('election admin-role linking is migration-controlled at schema version 39', () => {
+  const core = fs.readFileSync(path.join(root,'src/elections/core.ts'),'utf8');
+  const ops = fs.readFileSync(path.join(root,'src/ops.ts'),'utf8');
+  const migration = fs.readFileSync(path.join(root,'migrations/0039_election_admin_role_linking.sql'),'utf8');
+  assert.match(ops,/REQUIRED_SCHEMA_VERSION = 39/);
+  assert.match(ops,/\["election_position_admin_roles"/);
+  assert.match(ops,/\["election_admin_assignments"/);
+  assert.match(core,/await ensureOperationalSchema\(env\)/);
+  assert.doesNotMatch(core,/CREATE TABLE IF NOT EXISTS election_position_admin_roles/);
+  assert.doesNotMatch(core,/CREATE TABLE IF NOT EXISTS election_admin_assignments/);
+  assert.match(migration,/VALUES\(39,'election_admin_role_linking'\)/);
+  assert.match(migration,/Super Admin is intentionally excluded/);
+});
+
+test('production request paths do not mutate D1 schema at runtime', () => {
+  const files = [
+    'src/db.ts',
+    'src/elections/core.ts',
+    'src/routes/admin/meetings.ts',
+    'src/routes/admin/system.ts'
+  ];
+  for (const rel of files) {
+    const src = fs.readFileSync(path.join(root, rel), 'utf8');
+    assert.doesNotMatch(src, /CREATE\s+(?:TABLE|INDEX)|ALTER\s+TABLE/i, `${rel} contains runtime DDL`);
+  }
 });

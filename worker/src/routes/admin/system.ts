@@ -4,7 +4,6 @@ import { requireSettingsView, requireSuperAdmin, requireBackup } from "../../aut
 import { auditEntity, ensureOperationalSchema, safeLogError } from "../../ops";
 import { currentMonth, getSetting, getBranding } from "../../db";
 import { retryContributionReviewMessage } from "../../contributionReviewMessages";
-import { ensureElectionAdminRoleSchema } from "../../elections/core";
 
 export function registerSystemAdminRoutes(route: Hono<AppEnv>) {
 route.get('/health', requireSettingsView, async c => {
@@ -45,7 +44,6 @@ route.post('/errors/resolve-all', requireSuperAdmin, async c => { const admin=c.
 
 route.get('/backup', requireBackup, async c => {
   await ensureOperationalSchema(c.env);
-  await ensureElectionAdminRoleSchema(c.env);
   const tables=['members','admin_roles','admin_role_permissions','admins','member_registration_requests','contributions','contribution_allocations','member_contribution_rates','contribution_review_messages','telegram_update_receipts','donations','expense_categories','projects','expenses','expense_documents','donation_documents','exemptions','settings','id_sequences','audit_log','month_closures','meetings','meeting_rsvps','meeting_invitees','meeting_attendance','meeting_minutes','meeting_action_items','monthly_snapshots','financial_reversals','error_log','rate_limits','elections','election_positions','election_position_admin_roles','election_admin_assignments','election_candidates','election_voters','election_ballots','election_applications','election_runoffs','election_runoff_candidates','election_runoff_voters','election_runoff_ballots','exco_role_assignments','election_notification_log','exco_terms','exco_handover_records','exco_handover_items','exco_responsibilities','exco_responsibility_history','meeting_resolutions','meeting_resolution_history','schema_migrations'];
   const version=await c.env.DB.prepare("SELECT MAX(version) version FROM schema_migrations").first<any>();
   const branding=await getBranding(c.env); const slug=branding.short_name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'fund';
