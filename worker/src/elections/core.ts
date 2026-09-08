@@ -649,7 +649,7 @@ export async function buildElectionSummary(env:any,electionId:number){
       seats:Number(position.seats||1),
       candidates:rows.map((c:any)=>{
         const result=calculated.results.find((r:any)=>Number(r.candidate_id)===Number(c.id));
-        return {id:c.id,member_id:c.member_id,name:c.display_name,status:c.status,votes:Number(result?.votes||0),initial_votes:Number(result?.initial_votes??result?.votes||0),final_votes:Number(result?.final_votes??result?.votes||0),deciding_round:result?.deciding_round||"initial",runoff_round_no:result?.runoff_round_no??null,outcome:result?.outcome||null};
+        return {id:c.id,member_id:c.member_id,name:c.display_name,status:c.status,votes:Number(result?.votes||0),initial_votes:Number(result?.initial_votes ?? result?.votes ?? 0),final_votes:Number(result?.final_votes ?? result?.votes ?? 0),deciding_round:result?.deciding_round||"initial",runoff_round_no:result?.runoff_round_no??null,outcome:result?.outcome||null};
       })
     });
   }

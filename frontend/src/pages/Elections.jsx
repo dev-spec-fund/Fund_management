@@ -607,7 +607,7 @@ function ElectionSummary({summary,adminView=false}){
 function ElectionResults({detail}){
   return <div><div className="sans member-section-title">RESULTS</div>{detail.positions.map(p=>{
     const resultMap=new Map((detail.results||[]).filter(r=>Number(r.position_id)===Number(p.id)).map(r=>[Number(r.candidate_id),r]));
-    const initial=p.candidates.map(c=>{const result=resultMap.get(Number(c.id));return {...c,votes:Number(result?.initial_votes??result?.votes||0),outcome:result?.outcome||"not_elected"}}).sort((a,b)=>b.votes-a.votes);
+    const initial=p.candidates.map(c=>{const result=resultMap.get(Number(c.id));return {...c,votes:Number(result?.initial_votes ?? result?.votes ?? 0),outcome:result?.outcome||"not_elected"}}).sort((a,b)=>b.votes-a.votes);
     const closedRunoffs=(detail.runoffs||[]).filter(r=>Number(r.position_id)===Number(p.id)&&r.status==="closed").sort((a,b)=>Number(a.round_no||0)-Number(b.round_no||0));
     const finalRunoff=closedRunoffs.at(-1);
     const finalRows=finalRunoff?(finalRunoff.candidates||[]).map(c=>{const result=resultMap.get(Number(c.id));return {...c,display_name:c.display_name||c.name,votes:Number(c.votes||0),outcome:result?.outcome||"not_elected"}}).sort((a,b)=>b.votes-a.votes):[];
