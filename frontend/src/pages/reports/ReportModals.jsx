@@ -198,7 +198,22 @@ export function DonationModal({ onClose, onSaved, row = null }) {
         <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 5 }}>Supporting documents (optional)</div>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 7 }}>
           <select disabled={busy || recordCommitted} value={documentType} onChange={(e) => setDocumentType(e.target.value)} style={{ border: "1px solid var(--border-strong)", borderRadius: 9, padding: "8px 9px", background: "var(--card)", color: "var(--text)" }}>{["Payment Slip","Receipt","Donor Letter","Agreement","Other"].map((type) => <option key={type}>{type}</option>)}</select>
-          <label className="sans" style={{ border: "1px solid var(--border-strong)", borderRadius: 9, padding: "8px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Choose files<input disabled={busy || recordCommitted} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => { const next = Array.from(e.target.files || []).slice(0, 10); setDocuments(next); failedUploadIndexRef.current = 0; setUploadStatus(next.length ? { phase: "pending", name: next.length === 1 ? next[0].name : `${next.length} documents`, current: 0, total: next.length } : null); }} /></label>
+          <label className="sans" style={{ border: "1px solid var(--border-strong)", borderRadius: 9, padding: "8px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>{documents.length ? "Add another" : "Add document"}<input disabled={busy || recordCommitted} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => {
+          const picked = Array.from(e.target.files || []);
+          const seen = new Set(documents.map((file) => `${file.name}::${file.size}::${file.lastModified}`));
+          const appended = [...documents];
+          for (const file of picked) {
+            const key = `${file.name}::${file.size}::${file.lastModified}`;
+            if (!seen.has(key) && appended.length < 10) {
+              seen.add(key);
+              appended.push(file);
+            }
+          }
+          setDocuments(appended);
+          failedUploadIndexRef.current = 0;
+          setUploadStatus(appended.length ? { phase: "pending", name: appended.length === 1 ? appended[0].name : `${appended.length} documents`, current: 0, total: appended.length } : null);
+          e.target.value = "";
+        }} /></label>
         </div>
         {documents.length > 0 && <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 6 }}>{documents.length} document{documents.length === 1 ? "" : "s"} selected</div>}
         <DocumentUploadStatus status={uploadStatus} onRetry={uploadStatus?.phase === "error" ? retryUploads : undefined} />

@@ -126,8 +126,23 @@ export default function ExpenseForm({ onClose, onSaved, row = null }) {
         {['Invoice', 'Receipt', 'Payment Slip', 'Quotation', 'Other'].map((type) => <option key={type} value={type}>{type}</option>)}
       </select>
       <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, border: "1px dashed var(--border-strong)", borderRadius: 10, padding: "10px 12px", cursor: "pointer", background: "var(--card)", fontSize: 12 }}>
-        <Paperclip size={14} /> {documents.length ? `${documents.length} file${documents.length === 1 ? "" : "s"} selected` : "Attach receipt, invoice, slip or PDF"}
-        <input disabled={busy || (!row && recordCommitted)} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => { const next = Array.from(e.target.files || []).slice(0, 10); setDocuments(next); failedUploadIndexRef.current = 0; setUploadStatus(next.length ? { phase: "pending", name: next.length === 1 ? next[0].name : `${next.length} documents`, current: 0, total: next.length } : null); }} />
+        <Paperclip size={14} /> {documents.length ? "Add another document" : "Add document"}
+        <input disabled={busy || (!row && recordCommitted)} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt" style={{ display: "none" }} onChange={(e) => {
+          const picked = Array.from(e.target.files || []);
+          const seen = new Set(documents.map((file) => `${file.name}::${file.size}::${file.lastModified}`));
+          const appended = [...documents];
+          for (const file of picked) {
+            const key = `${file.name}::${file.size}::${file.lastModified}`;
+            if (!seen.has(key) && appended.length < 10) {
+              seen.add(key);
+              appended.push(file);
+            }
+          }
+          setDocuments(appended);
+          failedUploadIndexRef.current = 0;
+          setUploadStatus(appended.length ? { phase: "pending", name: appended.length === 1 ? appended[0].name : `${appended.length} documents`, current: 0, total: appended.length } : null);
+          e.target.value = "";
+        }} />
       </label>
       <div style={{ fontSize: 10, color: "var(--soft)", marginTop: 5 }}>Up to 10 files per save · maximum 20 MB each · stored in Telegram, with references kept in D1.</div>
       {documents.length > 0 && <div style={{ marginTop: 6, fontSize: 10, color: "var(--muted)" }}>{documents.map((file) => file.name).join(" · ")}</div>}
